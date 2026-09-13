@@ -1,0 +1,103 @@
+--!strict
+--[[
+	Aerodynamics.luau
+	Traînée, appui aérodynamique (downforce) et amortissement du lacet.
+
+	Les coefficients sont "groupés" (lumped) : au lieu de 0.5 * rho * Cx * A, on
+	stocke directement un k tel que  F = k * v²  (v en studs/s). Ils sont déduits du
+	poids et de l'inertie réels du véhicule, pas écrits en dur : changer de gabarit
+	ne demande aucun retuning.
+
+	NOTE IMPORTANTE : l'appui ne protège PAS du tonneau. Il augmente la charge
+	normale, donc l'adhérence latérale, donc le couple de renversement, exactement
+	dans la même proportion. La condition de basculement (mu > demi_voie / hauteur)
+	ne contient ni la masse ni l'appui -- c'est de la géométrie pure.
+]]
+
+local Aerodynamics = {}
+Aerodynamics.__index = Aerodynamics
+
+export type Aerodynamics = typeof(setmetatable({}, Aerodynamics)) & {
+	DragCoefficient: number, -- traînée : F = k * v²
+	DownforceFront: number, -- appui avant : F = k * vLongitudinale²
+	DownforceRear: number, -- appui arrière
+	CenterOfPressureFront: number, -- position (studs, axe Z local) du point d'application avant
+	CenterOfPressureRear: number, -- idem à l'arrière
+	YawDamping: number, -- stabilité en ligne droite : couple opposé au lacet, croît avec la vitesse
+	MaxDownforce: number, -- garde-fou : appui total max, pour ne pas écraser la suspension
+}
+
+local REFERENCE_SPEED = 100 -- studs/s : vitesse à laquelle les ratios ci-dessous sont exprimés
+local DOWNFORCE_RATIO = 0.25 -- appui total à REFERENCE_SPEED, en fraction du poids
+local DRAG_RATIO = 0.18 -- traînée à REFERENCE_SPEED, en fraction du poids
+local REAR_BIAS = 0.6 -- plus d'appui à l'arrière = stabilité en appui et à haute vitesse
+local YAW_DAMPING_RATE = 0.015 -- décélération angulaire par (rad/s · stud/s)
+
+function Aerodynamics.new(chassis: BasePart): Aerodynamics
+	local self = (setmetatable({}, Aerodynamics) :: any) :: Aerodynamics
+
+	local mass = chassis.AssemblyMass
+	local weight = mass * workspace.Gravity
+	local referencePressure = REFERENCE_SPEED * REFERENCE_SPEED
+
+	self.DragCoefficient = (weight * DRAG_RATIO) / referencePressure
+
+	local totalDownforce = (weight * DOWNFORCE_RATIO) / referencePressure
+	self.DownforceFront = totalDownforce * (1 - REAR_BIAS)
+	self.DownforceRear = totalDownforce * REAR_BIAS
+
+	local size = chassis.Size
+	self.CenterOfPressureFront = size.Z * 0.35
+	self.CenterOfPressureRear = size.Z * 0.4
+
+	-- Le couple d'amortissement doit suivre l'inertie de lacet, sinon une grosse
+	-- voiture tourne comme une toupie et une petite se fige.
+	local yawInertia = (mass / 12) * (size.X * size.X + size.Z * size.Z)
+	self.YawDamping = yawInertia * YAW_DAMPING_RATE
+
+	-- L'appui ne doit jamais talonner la suspension à lui seul.
+	self.MaxDownforce = weight * 2
+
+	return self
+end
+
+function Aerodynamics:Apply(chassis: BasePart, dt: number)
+	local velocity = chassis.AssemblyLinearVelocity
+	local speed = velocity.Magnitude
+	if speed < 0.1 then
+		return
+	end
+
+	local cframe = chassis.CFrame
+
+	-- 1. TRAÎNÉE : toujours opposée au vecteur vitesse réel, donc active aussi en travers.
+	local dragForce = self.DragCoefficient * speed * speed
+	chassis:ApplyImpulse(-velocity.Unit * dragForce * dt)
+
+	-- 2. APPUI : basé sur la vitesse longitudinale seule (un aileron en crabe ne
+	-- produit quasiment plus d'appui), appliqué vers le bas DU CHÂSSIS.
+	local forwardSpeed = velocity:Dot(cframe.LookVector)
+	local dynamicPressure = forwardSpeed * forwardSpeed
+
+	local frontForce = self.DownforceFront * dynamicPressure
+	local rearForce = self.DownforceRear * dynamicPressure
+
+	local total = frontForce + rearForce
+	if total > self.MaxDownforce and total > 0 then
+		local scale = self.MaxDownforce / total
+		frontForce *= scale
+		rearForce *= scale
+	end
+
+	local down = -cframe.UpVector
+	-- Roblox : LookVector = -Z, donc l'avant du châssis est à Z local négatif.
+	chassis:ApplyImpulseAtPosition(down * frontForce * dt, cframe * Vector3.new(0, 0, -self.CenterOfPressureFront))
+	chassis:ApplyImpulseAtPosition(down * rearForce * dt, cframe * Vector3.new(0, 0, self.CenterOfPressureRear))
+
+	-- 3. AMORTISSEMENT DU LACET : stabilise la voiture en l'air et à haute vitesse.
+	local yawAxis = cframe.UpVector
+	local yawRate = chassis.AssemblyAngularVelocity:Dot(yawAxis)
+	chassis:ApplyAngularImpulse(-yawAxis * yawRate * self.YawDamping * speed * dt)
+end
+
+return Aerodynamics
