@@ -1,8 +1,14 @@
 --!strict
 --[[
 	CarAudio.luau
-	Son de la voiture, piloté par l'état physique (aucun son n'est déclenché
-	"à la main" : tout découle du régime, de la charge et des glissements).
+	Son d'une voiture, piloté par un ÉTAT (AudioState) : régime, charge, vitesse,
+	crissement de chaque roue, part des roues sur le meuble ou le dur. Aucun son
+	n'est déclenché "à la main".
+
+	Le même mixage sert à toutes les voitures :
+		- la sienne : état calculé à partir de la physique (StateFromCar) ;
+		- celles des autres joueurs : état reconstitué à partir de la télémétrie
+		  qu'ils diffusent (RemoteCars.luau).
 
 	MOTEUR : deux familles d'échantillons bouclés (voir SoundBank.luau).
 		- Dans chaque famille, on joue les deux échantillons qui encadrent le
@@ -13,19 +19,16 @@
 		  à 0 pendant un passage et au rupteur (Powertrain.luau), le "trou" de la
 		  montée de rapport et le crépitement du rupteur viennent tout seuls.
 
-	PNEUS, sur surface dure : un crissement PAR ROUE, émis depuis la roue et
-	piloté uniquement par l'état de CE pneu. Une roue qui bloque au freinage
-	crie, à sa place dans l'espace ; les trois autres restent muettes tant
-	qu'elles adhèrent. Par ordre d'intensité :
+	PNEUS, sur surface dure : un crissement PAR ROUE, émis depuis la roue, piloté
+	par l'état de CE pneu. Par ordre d'intensité :
 		blocage  (glissement longitudinal < 0 au-delà du pic) : le plus fort ;
 		travers  (glissement latéral au-delà du pic)          : plus discret ;
 		patinage (glissement longitudinal > 0 au-delà du pic) : idem.
-	Sur surface meuble (Gravel) : un roulement de cailloux global, qui enfle
-	quand ça glisse. Sur glace : rien.
+	Sur surface meuble : un roulement de cailloux qui enfle quand ça glisse.
+	Sur le dur : un roulement de pneus. Sur glace : rien.
+	VENT : seulement pour sa propre voiture (il siffle autour de la caméra).
 
-	Tous les sons passent par un SoundGroup : SoundBank.MasterVolume règle le tout.
-	Ils sont créés côté client : seul le pilote les entend (multijoueur : à
-	reprendre, en jouant la même logique sur la voiture des autres).
+	Tous les sons passent par un SoundGroup commun : SoundBank.MasterVolume règle tout.
 ]]
 
 local ContentProvider = game:GetService("ContentProvider")
@@ -38,6 +41,16 @@ local WheelClass = require(script.Parent.Parent.Physics.Wheel)
 local CarAudio = {}
 CarAudio.__index = CarAudio
 
+export type AudioState = {
+	Rpm: number,
+	Load: number, -- 0..1
+	Speed: number, -- studs/s
+	Screech: { number }, -- par roue (FL, FR, RL, RR), 0..1
+	GravelShare: number, -- part des roues au sol sur surface meuble, 0..1
+	GravelSlide: number, -- glissement sur le meuble, 0..1
+	TarmacShare: number, -- part des roues au sol sur surface dure, 0..1
+}
+
 type Voice = {
 	Sample: SoundBank.EngineSample,
 	Sound: Sound,
@@ -45,21 +58,19 @@ type Voice = {
 }
 
 type TireVoice = {
-	Wheel: WheelClass.Wheel,
 	Sound: Sound,
 	Level: number,
 	PitchOffset: number,
 }
 
 export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
-	Car: CarClass.Car,
-	Group: SoundGroup,
+	IsLocal: boolean,
 	OnLoad: { Voice },
 	OffLoad: { Voice },
 	Screeches: { TireVoice },
 	Gravel: Sound,
 	TarmacRoll: Sound,
-	Wind: Sound,
+	Wind: Sound?,
 	Load: number,
 	GravelLevel: number,
 	TarmacLevel: number,
@@ -67,7 +78,7 @@ export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 }
 
 -- Le pilote est à ~20 studs (caméra de poursuite) : en dessous de cette
--- distance, aucune atténuation, il entend la voiture à plein volume.
+-- distance, aucune atténuation, il entend sa voiture à plein volume.
 local ROLLOFF_MIN = 40
 local ROLLOFF_MAX = 600
 
@@ -101,7 +112,22 @@ local TIRE_SMOOTH_TIME = 0.08
 local SLIDE_START = 0.9
 local SLIDE_RANGE = 1.5
 
-local function makeSound(name: string, soundId: string, parent: Instance, group: SoundGroup): Sound
+-- Un seul groupe pour toutes les voitures : un seul volume général.
+local sharedGroup: SoundGroup? = nil
+local function getGroup(): SoundGroup
+	local group = sharedGroup
+	if group then
+		return group
+	end
+	local created = Instance.new("SoundGroup")
+	created.Name = "Voitures"
+	created.Volume = SoundBank.MasterVolume
+	created.Parent = SoundService
+	sharedGroup = created
+	return created
+end
+
+local function makeSound(name: string, soundId: string, parent: Instance): Sound
 	local sound = Instance.new("Sound")
 	sound.Name = name
 	sound.SoundId = soundId
@@ -110,51 +136,47 @@ local function makeSound(name: string, soundId: string, parent: Instance, group:
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMinDistance = ROLLOFF_MIN
 	sound.RollOffMaxDistance = ROLLOFF_MAX
-	sound.SoundGroup = group
+	sound.SoundGroup = getGroup()
 	sound.Parent = parent
 	return sound
 end
 
-local function makeVoices(samples: { SoundBank.EngineSample }, prefix: string, parent: Instance, group: SoundGroup): { Voice }
+local function makeVoices(samples: { SoundBank.EngineSample }, prefix: string, parent: Instance): { Voice }
 	local voices = {}
 	for i, sample in ipairs(samples) do
-		local sound = makeSound(string.format("%s_%d", prefix, sample.Rpm), sample.Id, parent, group)
+		local sound = makeSound(string.format("%s_%d", prefix, sample.Rpm), sample.Id, parent)
 		voices[i] = { Sample = sample, Sound = sound, LastAudible = -math.huge }
 	end
 	return voices
 end
 
-function CarAudio.new(car: CarClass.Car): CarAudio
+--[[
+	chassis : les sons moteur et de roulement émettent depuis lui ;
+	wheelAttachments : un crissement par roue, émis depuis chacune (FL, FR, RL, RR) ;
+	isLocal : sa propre voiture (vent, préchargement).
+	Les sons sont directement sous une BasePart ou une Attachment, jamais dans un
+	Folder : un Sound n'est positionnel qu'à cette condition.
+]]
+function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLocal: boolean): CarAudio
 	local self = (setmetatable({}, CarAudio) :: any) :: CarAudio
-	self.Car = car
+	self.IsLocal = isLocal
 	self.Load = 0
 	self.GravelLevel = 0
+	self.TarmacLevel = 0
 	self.Active = false
 
-	local group = Instance.new("SoundGroup")
-	group.Name = "Voiture"
-	group.Volume = SoundBank.MasterVolume
-	group.Parent = SoundService
-	self.Group = group
-
-	-- Moteur et roulement émettent depuis le châssis, chaque crissement depuis
-	-- sa roue. Directement sous la part ou l'Attachment, pas dans un Folder :
-	-- un Sound n'est positionnel que si son parent est une BasePart ou une Attachment.
 	local profile = SoundBank.Engine
-	self.OnLoad = makeVoices(profile.OnLoad, "EngineOn", car.Chassis, group)
-	self.OffLoad = makeVoices(profile.OffLoad, "EngineOff", car.Chassis, group)
-	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, car.Chassis, group)
-	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, car.Chassis, group)
-	-- Le vent n'a pas de source : il siffle autour de la caméra, pas de la voiture.
-	-- Parent SoundService = son non spatialisé.
-	self.Wind = makeSound("Wind", SoundBank.Wind, SoundService, group)
-	self.TarmacLevel = 0
+	self.OnLoad = makeVoices(profile.OnLoad, "EngineOn", chassis)
+	self.OffLoad = makeVoices(profile.OffLoad, "EngineOff", chassis)
+	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, chassis)
+	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, chassis)
+	-- Le vent n'a pas de source : parent SoundService = son non spatialisé.
+	self.Wind = if isLocal then makeSound("Wind", SoundBank.Wind, SoundService) else nil
 
 	self.Screeches = {}
-	for i, wheel in ipairs(car.Wheels) do
+	for i, attachment in ipairs(wheelAttachments) do
 		self.Screeches[i] = {
-			Wheel = wheel,
-			Sound = makeSound("TireScreech", SoundBank.TireScreech, wheel.Attachment, group),
+			Sound = makeSound("TireScreech", SoundBank.TireScreech, attachment),
 			Level = 0,
 			PitchOffset = SCREECH_PITCH_OFFSETS[i] or 0,
 		}
@@ -162,42 +184,63 @@ function CarAudio.new(car: CarClass.Car): CarAudio
 
 	-- Préchargement en tâche de fond : sinon le premier coup d'accélérateur
 	-- tombe dans le silence le temps que l'échantillon arrive.
-	task.spawn(function()
-		local toLoad: { Instance } = { self.Gravel, self.TarmacRoll, self.Wind, self.Screeches[1].Sound }
-		for _, voice in ipairs(self.OnLoad) do
-			table.insert(toLoad, voice.Sound)
-		end
-		for _, voice in ipairs(self.OffLoad) do
-			table.insert(toLoad, voice.Sound)
-		end
-		ContentProvider:PreloadAsync(toLoad)
-	end)
+	if isLocal then
+		task.spawn(function()
+			local toLoad: { Instance } = { self.Gravel, self.TarmacRoll }
+			if self.Wind then
+				table.insert(toLoad, self.Wind)
+			end
+			if self.Screeches[1] then
+				table.insert(toLoad, self.Screeches[1].Sound)
+			end
+			for _, voice in ipairs(self.OnLoad) do
+				table.insert(toLoad, voice.Sound)
+			end
+			for _, voice in ipairs(self.OffLoad) do
+				table.insert(toLoad, voice.Sound)
+			end
+			ContentProvider:PreloadAsync(toLoad)
+		end)
+	end
 
 	return self
 end
 
-local function stopAll(self: CarAudio)
+local function allSounds(self: CarAudio): { Sound }
+	local sounds: { Sound } = { self.Gravel, self.TarmacRoll }
+	if self.Wind then
+		table.insert(sounds, self.Wind)
+	end
 	for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
 		for _, voice in ipairs(layer) do
-			voice.Sound:Stop()
-			voice.Sound.Volume = 0
+			table.insert(sounds, voice.Sound)
+		end
+	end
+	for _, tire in ipairs(self.Screeches) do
+		table.insert(sounds, tire.Sound)
+	end
+	return sounds
+end
+
+local function stopAll(self: CarAudio)
+	for _, sound in ipairs(allSounds(self)) do
+		sound:Stop()
+		sound.Volume = 0
+	end
+	for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
+		for _, voice in ipairs(layer) do
 			voice.LastAudible = -math.huge
 		end
 	end
 	for _, tire in ipairs(self.Screeches) do
-		tire.Sound:Stop()
 		tire.Level = 0
 	end
-	self.Gravel:Stop()
-	self.TarmacRoll:Stop()
-	self.Wind:Stop()
 	self.Load = 0
 	self.GravelLevel = 0
 	self.TarmacLevel = 0
 end
 
--- Coupé quand on descend de la voiture : la physique ne tourne plus, le
--- régime affiché serait figé.
+-- Coupé quand la voiture n'est pas pilotée : rien ne la fait tourner.
 function CarAudio:SetActive(active: boolean)
 	if self.Active == active then
 		return
@@ -205,6 +248,12 @@ function CarAudio:SetActive(active: boolean)
 	self.Active = active
 	if not active then
 		stopAll(self)
+	end
+end
+
+function CarAudio:Destroy()
+	for _, sound in ipairs(allSounds(self)) do
+		sound:Destroy()
 	end
 end
 
@@ -282,33 +331,13 @@ local function screechLevel(wheel: WheelClass.Wheel): number
 	return math.max(lock * LOCK_GAIN, slide * SLIDE_GAIN, spin * SPIN_GAIN)
 end
 
-function CarAudio:Update(dt: number)
-	if not self.Active then
-		return
-	end
-	local car = self.Car
-	local powertrain = car.Powertrain
-	local now = os.clock()
-
-	-- Moteur
-	self.Load = approach(self.Load, powertrain.Load, dt, LOAD_SMOOTH_TIME)
-	local rpm = powertrain.EngineRPM
-	local master = SoundBank.Engine.Volume
-	updateLayer(self.OnLoad, rpm, master * math.sqrt(self.Load), now)
-	updateLayer(self.OffLoad, rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
-
-	-- Crissement, roue par roue
-	for _, tire in ipairs(self.Screeches) do
-		tire.Level = approach(tire.Level, screechLevel(tire.Wheel), dt, TIRE_SMOOTH_TIME)
-		tire.Sound.PlaybackSpeed = 0.85 + 0.3 * tire.Level + tire.PitchOffset
-		setLooping(tire.Sound, SCREECH_VOLUME * tire.Level)
-	end
-
-	-- Roulement, sur surface meuble et sur le dur
-	local gravelSlide = 0
-	local gravelWheels = 0
-	local tarmacWheels = 0
-	for _, wheel in ipairs(car.Wheels) do
+-- État sonore de sa propre voiture, tiré de la physique. Sert aussi de
+-- télémétrie envoyée aux autres joueurs (Main.client.luau).
+function CarAudio.StateFromCar(car: CarClass.Car): AudioState
+	local screech = {}
+	local gravelSlide, gravelWheels, tarmacWheels = 0, 0, 0
+	for i, wheel in ipairs(car.Wheels) do
+		screech[i] = screechLevel(wheel)
 		if wheel.IsGrounded and wheel.Surface.Sound == "Gravel" then
 			gravelWheels += 1
 			local combined = math.sqrt(wheel.LongSlipNorm ^ 2 + wheel.LatSlipNorm ^ 2)
@@ -317,24 +346,58 @@ function CarAudio:Update(dt: number)
 			tarmacWheels += 1
 		end
 	end
+	local wheelCount = math.max(1, #car.Wheels)
+	return {
+		Rpm = car.Powertrain.EngineRPM,
+		Load = car.Powertrain.Load,
+		Speed = car.Chassis.AssemblyLinearVelocity.Magnitude,
+		Screech = screech,
+		GravelShare = gravelWheels / wheelCount,
+		GravelSlide = gravelSlide,
+		TarmacShare = tarmacWheels / wheelCount,
+	}
+end
 
-	local speed = car.Chassis.AssemblyLinearVelocity.Magnitude
-	local roll = (gravelWheels / #car.Wheels) * math.clamp(speed / 40, 0, 1)
-	local gravelTarget = GRAVEL_ROLL_VOLUME * roll + (if gravelWheels > 0 then GRAVEL_SLIDE_VOLUME * gravelSlide else 0)
+function CarAudio:Update(dt: number, state: AudioState)
+	if not self.Active then
+		return
+	end
+	local now = os.clock()
 
+	-- Moteur
+	self.Load = approach(self.Load, state.Load, dt, LOAD_SMOOTH_TIME)
+	local master = SoundBank.Engine.Volume
+	updateLayer(self.OnLoad, state.Rpm, master * math.sqrt(self.Load), now)
+	updateLayer(self.OffLoad, state.Rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
+
+	-- Crissement, roue par roue
+	for i, tire in ipairs(self.Screeches) do
+		tire.Level = approach(tire.Level, state.Screech[i] or 0, dt, TIRE_SMOOTH_TIME)
+		tire.Sound.PlaybackSpeed = 0.85 + 0.3 * tire.Level + tire.PitchOffset
+		setLooping(tire.Sound, SCREECH_VOLUME * tire.Level)
+	end
+
+	-- Roulement, sur le meuble et sur le dur
+	local speed = state.Speed
+	local roll = state.GravelShare * math.clamp(speed / 40, 0, 1)
+	local gravelTarget = GRAVEL_ROLL_VOLUME * roll
+		+ (if state.GravelShare > 0 then GRAVEL_SLIDE_VOLUME * state.GravelSlide else 0)
 	self.GravelLevel = approach(self.GravelLevel, gravelTarget, dt, TIRE_SMOOTH_TIME)
 	self.Gravel.PlaybackSpeed = 0.8 + 0.4 * math.clamp(speed / 120, 0, 1)
 	setLooping(self.Gravel, self.GravelLevel)
 
-	local tarmacTarget = TARMAC_ROLL_VOLUME * (tarmacWheels / #car.Wheels) * math.clamp(speed / 60, 0, 1)
+	local tarmacTarget = TARMAC_ROLL_VOLUME * state.TarmacShare * math.clamp(speed / 60, 0, 1)
 	self.TarmacLevel = approach(self.TarmacLevel, tarmacTarget, dt, TIRE_SMOOTH_TIME)
 	self.TarmacRoll.PlaybackSpeed = 0.7 + 0.6 * math.clamp(speed / 150, 0, 1)
 	setLooping(self.TarmacRoll, self.TarmacLevel)
 
 	-- Vent : carré de la vitesse, comme la traînée ; il monte aussi en aigu.
-	local windFactor = math.clamp(speed / WIND_FULL_SPEED, 0, 1)
-	self.Wind.PlaybackSpeed = 0.8 + 0.4 * windFactor
-	setLooping(self.Wind, WIND_VOLUME * windFactor * windFactor)
+	local wind = self.Wind
+	if wind then
+		local windFactor = math.clamp(speed / WIND_FULL_SPEED, 0, 1)
+		wind.PlaybackSpeed = 0.8 + 0.4 * windFactor
+		setLooping(wind, WIND_VOLUME * windFactor * windFactor)
+	end
 end
 
 return CarAudio

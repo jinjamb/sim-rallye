@@ -6,6 +6,7 @@ local UserInputService = game:GetService("UserInputService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Units = require(ReplicatedStorage.Shared.Constants.Units)
+local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
 local Dashboard = require(script.Parent.Dashboard)
@@ -14,9 +15,14 @@ local StageTimer = require(script.Parent.StageTimer)
 local ChaseCamera = require(script.Parent.ChaseCamera)
 local CarEffects = require(script.Parent.CarEffects)
 local Copilot = require(script.Parent.Copilot)
+local RemoteCars = require(script.Parent.RemoteCars)
+local Ghost = require(script.Parent.Ghost)
+local Leaderboard = require(script.Parent.Leaderboard)
+local SetupMenu = require(script.Parent.SetupMenu)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
+local playerGui = player:WaitForChild("PlayerGui")
 
 -- Toute la calibration (suspension, freins, aéro) est déduite du poids au moment
 -- de Car.new : une gravité qui ne correspond pas à l'échelle fausse tout en silence.
@@ -31,16 +37,44 @@ if math.abs(workspace.Gravity - Units.REAL_GRAVITY) > 0.5 then
 	))
 end
 
-local carModel = workspace:WaitForChild("RallyCar") :: Model
+-- Les voitures des autres joueurs vivent dès maintenant, même à pied.
+local remoteCars = RemoteCars.new(player.UserId)
+RunService.RenderStepped:Connect(function(dt: number)
+	remoteCars:Update(dt)
+end)
+
+--------------------------------------------------------------------------------
+-- Sa propre voiture : créée par le serveur (CarService) à l'arrivée du joueur
+--------------------------------------------------------------------------------
+
+local function waitForOwnCar(): Model
+	while true do
+		for _, child in ipairs(workspace:GetChildren()) do
+			if child:IsA("Model") and child:GetAttribute("OwnerUserId") == player.UserId then
+				return child
+			end
+		end
+		workspace.ChildAdded:Wait()
+	end
+end
+
+local carModel = waitForOwnCar()
 local chassis = carModel:WaitForChild("Chassis") :: BasePart
 local myRallyCar = CarClass.new(chassis)
-local dashboard = Dashboard.new(myRallyCar, player:WaitForChild("PlayerGui"))
-local carAudio = CarAudio.new(myRallyCar)
-local stageTimer = StageTimer.new(myRallyCar, player:WaitForChild("PlayerGui"))
-local copilot = Copilot.new(myRallyCar, player:WaitForChild("PlayerGui"))
 
+local wheelAttachments: { Attachment } = {}
+for i, wheel in ipairs(myRallyCar.Wheels) do
+	wheelAttachments[i] = wheel.Attachment
+end
+
+local dashboard = Dashboard.new(myRallyCar, playerGui)
+local carAudio = CarAudio.new(chassis, wheelAttachments, true)
+local stageTimer = StageTimer.new(myRallyCar, playerGui)
+local copilot = Copilot.new(myRallyCar, playerGui)
 local chaseCamera = ChaseCamera.new(myRallyCar, camera)
-local carEffects = CarEffects.new(myRallyCar)
+local carEffects = CarEffects.new(chassis, myRallyCar.Wheels :: any)
+local ghost = Ghost.new(chassis)
+local leaderboard = Leaderboard.new(playerGui, player.UserId)
 
 -- Le client ne simule que s'il possède le NetworkOwnership du châssis :
 -- sinon les impulsions sont écrasées par la réplication et la voiture "élastique".
@@ -48,14 +82,95 @@ local hasControl = false
 local debugEnabled = false
 
 --------------------------------------------------------------------------------
+-- Réglages de la voiture (menu P), sauvegardés côté serveur
+--------------------------------------------------------------------------------
+
+local SETUP_SAVE_DELAY = 1.5 -- regroupe une rafale de clics en une seule sauvegarde
+local setupSaveToken = 0
+
+local setupMenu = SetupMenu.new(playerGui, function(setup: CarSetup.Setup)
+	myRallyCar:ApplySetup(setup)
+	setupSaveToken += 1
+	local token = setupSaveToken
+	task.delay(SETUP_SAVE_DELAY, function()
+		if token == setupSaveToken then
+			Remotes.SaveSetup:FireServer(setup)
+		end
+	end)
+end)
+
+--------------------------------------------------------------------------------
+-- Temps officiels, record perso, fantôme, classement (RecordService)
+--------------------------------------------------------------------------------
+
+-- Le verdict du serveur peut arriver juste AVANT que le chrono local ne voie la
+-- ligne : l'envoi du fantôme attend alors la fin de l'enregistrement.
+local ghostUploadPending = false
+
+local function uploadGhost()
+	local recording = ghost.LastRecording
+	if recording then
+		Remotes.SubmitGhost:FireServer(recording)
+		ghost:SetBest(recording)
+	end
+end
+
+stageTimer.OnRunStarted = function()
+	ghostUploadPending = false
+	ghost:StartRun()
+end
+stageTimer.OnRunFinished = function(_seconds: number)
+	ghost:FinishRun()
+	if ghostUploadPending then
+		ghostUploadPending = false
+		uploadGhost()
+	end
+end
+stageTimer.OnRunCancelled = function()
+	ghostUploadPending = false
+	ghost:CancelRun()
+end
+
+Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	stageTimer:SetPersonalBest(if type(profile.BestMs) == "number" then profile.BestMs else nil)
+	if type(profile.Ghost) == "table" then
+		ghost:SetBest(profile.Ghost)
+	end
+	local setup = CarSetup.Sanitize(profile.Setup)
+	myRallyCar:ApplySetup(setup)
+	setupMenu:SetSetup(setup)
+end)
+
+Remotes.RunValidated.OnClientEvent:Connect(function(result: any)
+	stageTimer:SetOfficialResult(result)
+	if type(result) == "table" and result.Valid and result.PersonalBest then
+		if ghost.LastRecording then
+			uploadGhost()
+		else
+			ghostUploadPending = true
+		end
+	end
+end)
+
+Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
+	if type(entries) == "table" then
+		leaderboard:SetEntries(entries)
+	end
+end)
+
+--------------------------------------------------------------------------------
 -- Filtre des raycasts de suspension
 --------------------------------------------------------------------------------
 
 -- Roues visuelles, carrosserie, pilote soudé : tout ce qui est solidaire de la
 -- voiture doit être exclu, sinon les rayons de suspension tapent dedans au lieu
--- de toucher le sol (un raycast ignore CanCollide).
+-- de toucher le sol (un raycast ignore CanCollide). Les autres voitures sont
+-- traversées grâce au groupe de collision (voir Wheel.luau).
 local function refreshIgnoreList()
-	local ignore: {Instance} = {carModel}
+	local ignore: { Instance } = { carModel }
 	local character = player.Character
 	if character then
 		table.insert(ignore, character)
@@ -64,9 +179,6 @@ local function refreshIgnoreList()
 end
 
 refreshIgnoreList()
-player.CharacterAdded:Connect(function()
-	task.defer(refreshIgnoreList)
-end)
 
 --------------------------------------------------------------------------------
 -- Contrôles du personnage
@@ -106,10 +218,6 @@ end
 -- Caméra
 --------------------------------------------------------------------------------
 
-local function enterDrivingCamera()
-	chaseCamera:Enter()
-end
-
 local function exitDrivingCamera()
 	chaseCamera:Exit()
 	camera.CameraType = Enum.CameraType.Custom
@@ -145,14 +253,16 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 	if granted then
 		-- La caméra part de sa position actuelle et glisse vers la voiture.
 		refreshIgnoreList()
-		enterDrivingCamera()
+		chaseCamera:Enter()
 		setCharacterControlsEnabled(false)
 		dashboard:SetVisible(true)
 		carAudio:SetActive(true)
 		carEffects:SetActive(true)
 		stageTimer:SetVisible(true)
 		copilot:SetVisible(true)
-		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, T / croix gauche remise en piste, Retour arrière / bouton Vue recommencer la spéciale, F2 télémétrie, F3 journal console")
+		leaderboard:SetVisible(true)
+		ghost:SetVisible(true)
+		print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, Q descendre de voiture, F2 télémétrie, F3 journal")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
@@ -161,15 +271,22 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		carEffects:SetActive(false)
 		stageTimer:SetVisible(false)
 		copilot:SetVisible(false)
-		print("[Car] Contrôle perdu")
+		leaderboard:SetVisible(false)
+		ghost:SetVisible(false)
+		print("[Car] Hors de la voiture — E pour reprendre le volant")
 	end
 end)
 
--- Le personnage qui réapparaît reçoit un nouveau Humanoid : on réaligne la caméra.
+-- Personnage qui réapparaît : nouveau Humanoid pour la caméra, et la voiture
+-- vient le rechercher.
 player.CharacterAdded:Connect(function()
+	task.defer(refreshIgnoreList)
 	if not hasControl then
 		task.defer(exitDrivingCamera)
 	end
+	task.delay(1, function()
+		Remotes.RequestCarControl:FireServer(chassis)
+	end)
 end)
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
@@ -187,6 +304,10 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		-- Le journal reste utile pour garder une trace écrite d'un essai.
 		debugEnabled = not debugEnabled
 		print("[Car] Journal console", if debugEnabled then "activé" else "désactivé")
+	elseif key == Enum.KeyCode.P or key == Enum.KeyCode.ButtonL3 then
+		setupMenu:Toggle()
+	elseif key == Enum.KeyCode.L or key == Enum.KeyCode.ButtonR3 then
+		leaderboard:Toggle()
 	elseif not hasControl then
 		return
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
@@ -204,21 +325,47 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 end)
 
--- Demande initiale (le serveur refusera si le personnage est trop loin : appuyer sur E).
+-- Demande initiale : le serveur ne laisse prendre que SA voiture, où qu'on soit.
 Remotes.RequestCarControl:FireServer(chassis)
 
 --------------------------------------------------------------------------------
--- Tableau de bord (F2 : télémétrie détaillée)
+-- Affichage, son, effets, fantôme, télémétrie
 --------------------------------------------------------------------------------
 
+local TELEMETRY_INTERVAL = 0.1 -- 10 Hz : assez pour le son et les roues des autres
+local telemetryAccumulator = 0
+
 RunService.RenderStepped:Connect(function(dt: number)
-	if hasControl then
-		dashboard:Update(dt)
-		carAudio:Update(dt)
-		carEffects:Update(dt)
-		stageTimer:Update(dt)
-		-- Le copilote réutilise l'avancement que le chrono vient de calculer.
-		copilot:Update(dt, stageTimer.LastProgress)
+	if not hasControl then
+		return
+	end
+	local audioState = CarAudio.StateFromCar(myRallyCar)
+	dashboard:Update(dt)
+	carAudio:Update(dt, audioState)
+	carEffects:Update(dt)
+	stageTimer:Update(dt)
+	ghost:Update(dt)
+	-- Le copilote réutilise l'avancement que le chrono vient de calculer.
+	copilot:Update(dt, stageTimer.LastProgress)
+	leaderboard:Update()
+
+	-- Ce que les autres joueurs entendent et voient de cette voiture (CarService).
+	telemetryAccumulator += dt
+	if telemetryAccumulator >= TELEMETRY_INTERVAL then
+		telemetryAccumulator = 0
+		local screech = 0
+		for _, level in ipairs(audioState.Screech) do
+			screech = math.max(screech, level)
+		end
+		Remotes.CarTelemetry:FireServer(
+			audioState.Rpm,
+			audioState.Load,
+			InputManager:GetInputs().steer,
+			screech,
+			audioState.GravelSlide,
+			audioState.GravelShare,
+			audioState.TarmacShare
+		)
 	end
 end)
 

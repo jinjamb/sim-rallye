@@ -14,7 +14,10 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local PhysicsService = game:GetService("PhysicsService")
 local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
+
+local CAR_COLLISION_GROUP = "Cars" -- voir CarService.server.luau
 
 local Wheel = {}
 Wheel.__index = Wheel
@@ -242,6 +245,12 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	local rayParams = RaycastParams.new()
 	rayParams.FilterType = Enum.RaycastFilterType.Exclude
 	rayParams.FilterDescendantsInstances = { chassis }
+	-- Le rayon se comporte comme une voiture : il traverse les AUTRES voitures
+	-- (groupe "Cars", non collisionnant avec lui-même, créé par CarService).
+	-- Sinon une voiture qui en croise une autre s'appuierait sur son toit.
+	if PhysicsService:IsCollisionGroupRegistered(CAR_COLLISION_GROUP) then
+		rayParams.CollisionGroup = CAR_COLLISION_GROUP
+	end
 	self.RayParams = rayParams
 
 	return self

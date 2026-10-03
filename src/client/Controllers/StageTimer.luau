@@ -44,6 +44,14 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	BestTime: number?,
 	BestSplits: { number },
 	InvalidReason: string,
+	-- Verdict du serveur sur le dernier passage (temps officiel), affiché à l'arrivée.
+	OfficialText: string?,
+	OfficialColor: Color3,
+
+	-- Abonnés (fantôme) : départ, arrivée (temps local), passage annulé.
+	OnRunStarted: (() -> ())?,
+	OnRunFinished: ((number) -> ())?,
+	OnRunCancelled: (() -> ())?,
 }
 
 -- Bond d'abscisse au-delà duquel on considère que le tracé a été coupé. À
@@ -101,6 +109,11 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.BestTime = nil
 	self.BestSplits = {}
 	self.InvalidReason = ""
+	self.OfficialText = nil
+	self.OfficialColor = COLOR_DIM
+	self.OnRunStarted = nil
+	self.OnRunFinished = nil
+	self.OnRunCancelled = nil
 
 	local start = StageTrack.START_DISTANCE
 	local timedLength = StageTrack.GetFinishDistance() - start
@@ -172,6 +185,39 @@ function StageTimer:Restart()
 	self.State = "Idle"
 	self.SplitTimes = {}
 	self.Grace = true
+	self.OfficialText = nil
+	if self.OnRunCancelled then
+		self.OnRunCancelled()
+	end
+end
+
+-- Meilleur temps sauvegardé (profil chargé par le serveur), en millisecondes.
+function StageTimer:SetPersonalBest(ms: number?)
+	self.BestTime = if ms then ms / 1000 else nil
+end
+
+--[[
+	Verdict du serveur sur le passage qui vient de finir : c'est LUI qui fait foi
+	(RecordService le chronomètre de son côté). Il peut différer du chrono local
+	de quelques centièmes ; s'il est meilleur que le record, c'est lui qui le
+	remplace.
+]]
+function StageTimer:SetOfficialResult(result: any)
+	if type(result) ~= "table" then
+		return
+	end
+	if result.Valid and type(result.Ms) == "number" then
+		local text = "OFFICIEL " .. formatTime(result.Ms / 1000)
+		if result.PersonalBest then
+			text ..= " — RECORD PERSO !"
+			self.BestTime = result.Ms / 1000
+		end
+		self.OfficialText = text
+		self.OfficialColor = if result.PersonalBest then COLOR_FASTER else COLOR_DIM
+	else
+		self.OfficialText = "TEMPS REFUSÉ : " .. string.upper(tostring(result.Reason or "invalide"))
+		self.OfficialColor = COLOR_INVALID
+	end
 end
 
 --[[
@@ -188,6 +234,10 @@ function StageTimer:_start(now: number)
 	self.State = "Running"
 	self.StartClock = now
 	self.SplitTimes = {}
+	self.OfficialText = nil
+	if self.OnRunStarted then
+		self.OnRunStarted()
+	end
 end
 
 function StageTimer:_finish(now: number)
@@ -197,6 +247,9 @@ function StageTimer:_finish(now: number)
 	if best == nil or self.FinalTime < best then
 		self.BestTime = self.FinalTime
 		self.BestSplits = table.clone(self.SplitTimes)
+	end
+	if self.OnRunFinished then
+		self.OnRunFinished(self.FinalTime)
 	end
 end
 
@@ -221,6 +274,9 @@ function StageTimer:Update(_dt: number)
 			self.State = "Invalid"
 			self.FinalTime = now - self.StartClock
 			self.InvalidReason = "raccourci"
+			if self.OnRunCancelled then
+				self.OnRunCancelled()
+			end
 		else
 			local nextSplit = #self.SplitTimes + 1
 			if nextSplit <= #self.SplitDistances and progress >= self.SplitDistances[nextSplit] then
@@ -241,13 +297,21 @@ function StageTimer:_refresh(now: number)
 	self.Scale.Scale = math.clamp(viewport.Y / 1080, 0.6, 1.2)
 
 	local state = self.State
+	self.StatusLabel.TextColor3 = COLOR_DIM
 	if state == "Running" then
 		self.StatusLabel.Text = "EN COURSE"
 		self.TimeLabel.Text = formatTime(now - self.StartClock)
 		self.TimeLabel.TextColor3 = COLOR_TEXT
 	elseif state == "Finished" then
 		local isBest = self.BestTime == self.FinalTime
-		self.StatusLabel.Text = if isBest then "ARRIVÉE — MEILLEUR TEMPS" else "ARRIVÉE"
+		local official = self.OfficialText
+		if official then
+			self.StatusLabel.Text = official
+			self.StatusLabel.TextColor3 = self.OfficialColor
+		else
+			self.StatusLabel.Text = "ARRIVÉE — VALIDATION…"
+			self.StatusLabel.TextColor3 = COLOR_DIM
+		end
 		self.TimeLabel.Text = formatTime(self.FinalTime)
 		self.TimeLabel.TextColor3 = if isBest then COLOR_FASTER else COLOR_TEXT
 	elseif state == "Invalid" then

@@ -12,24 +12,39 @@
 	déplacé à chaque frame. Les particules ne suivent pas la voiture
 	(VelocityInheritance = 0) : elles restent là où elles ont été soulevées.
 	La fumée de glisse sur le dur reste gérée par Wheel.luau (émetteur Smoke).
-	Effet local : créé côté client, seul le pilote le voit.
+	Effet créé côté client, pour sa voiture (Main.client.luau) comme pour
+	celles des autres joueurs (RemoteCars.luau, roues reconstituées).
 ]]
 
-local CarClass = require(script.Parent.Parent.Physics.Car)
-local WheelClass = require(script.Parent.Parent.Physics.Wheel)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
 
 local CarEffects = {}
 CarEffects.__index = CarEffects
 
+--[[
+	Ce dont la poussière a besoin d'une roue. Les roues physiques (Wheel.luau)
+	le fournissent ; celles des voitures des autres joueurs aussi, reconstituées
+	par RemoteCars.luau à partir de rayons locaux et de la télémétrie.
+]]
+export type WheelLike = {
+	Attachment: Attachment,
+	IsGrounded: boolean,
+	Surface: Surfaces.SurfaceProperties,
+	ContactPoint: Vector3,
+	LongSlipNorm: number,
+	LatSlipNorm: number,
+}
+
 type DustEmitter = {
-	Wheel: WheelClass.Wheel,
+	Wheel: WheelLike,
 	Attachment: Attachment,
 	Emitter: ParticleEmitter,
 	Color: Color3?,
 }
 
 export type CarEffects = typeof(setmetatable({}, CarEffects)) & {
-	Car: CarClass.Car,
+	Chassis: BasePart,
 	Emitters: { DustEmitter },
 	Active: boolean,
 }
@@ -70,16 +85,22 @@ local function makeEmitter(chassis: BasePart, name: string): (Attachment, Partic
 	return attachment, emitter
 end
 
-function CarEffects.new(car: CarClass.Car): CarEffects
+function CarEffects.new(chassis: BasePart, wheels: { WheelLike }): CarEffects
 	local self = (setmetatable({}, CarEffects) :: any) :: CarEffects
-	self.Car = car
+	self.Chassis = chassis
 	self.Active = false
 	self.Emitters = {}
-	for i, wheel in ipairs(car.Wheels) do
-		local attachment, emitter = makeEmitter(car.Chassis, "Dust" .. string.sub(wheel.Attachment.Name, 6))
+	for i, wheel in ipairs(wheels) do
+		local attachment, emitter = makeEmitter(chassis, "Dust" .. string.sub(wheel.Attachment.Name, 6))
 		self.Emitters[i] = { Wheel = wheel, Attachment = attachment, Emitter = emitter, Color = nil }
 	end
 	return self
+end
+
+function CarEffects:Destroy()
+	for _, dust in ipairs(self.Emitters) do
+		dust.Attachment:Destroy()
+	end
 end
 
 function CarEffects:SetActive(active: boolean)
@@ -95,7 +116,7 @@ function CarEffects:Update(_dt: number)
 	if not self.Active then
 		return
 	end
-	local speed = self.Car.Chassis.AssemblyLinearVelocity.Magnitude
+	local speed = self.Chassis.AssemblyLinearVelocity.Magnitude
 	local rollFactor = math.clamp(speed / FULL_DUST_SPEED, 0, 1)
 
 	for _, dust in ipairs(self.Emitters) do

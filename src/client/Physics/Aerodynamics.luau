@@ -25,6 +25,7 @@ export type Aerodynamics = typeof(setmetatable({}, Aerodynamics)) & {
 	CenterOfPressureRear: number, -- idem à l'arrière
 	YawDamping: number, -- stabilité en ligne droite : couple opposé au lacet, croît avec la vitesse
 	MaxDownforce: number, -- garde-fou : appui total max, pour ne pas écraser la suspension
+	Weight: number,
 }
 
 local REFERENCE_SPEED = 100 -- studs/s (~100 km/h, voir Units.luau) : vitesse à laquelle les ratios ci-dessous sont exprimés
@@ -55,10 +56,8 @@ function Aerodynamics.new(chassis: BasePart): Aerodynamics
 	local referencePressure = REFERENCE_SPEED * REFERENCE_SPEED
 
 	self.DragCoefficient = (weight * DRAG_RATIO) / referencePressure
-
-	local totalDownforce = (weight * DOWNFORCE_RATIO) / referencePressure
-	self.DownforceFront = totalDownforce * (1 - REAR_BIAS)
-	self.DownforceRear = totalDownforce * REAR_BIAS
+	self.Weight = weight
+	self:SetDownforceRatio(DOWNFORCE_RATIO)
 
 	local size = chassis.Size
 	self.CenterOfPressureFront = size.Z * 0.35
@@ -74,6 +73,13 @@ function Aerodynamics.new(chassis: BasePart): Aerodynamics
 	self.MaxDownforce = weight * 2
 
 	return self
+end
+
+-- Appui total à REFERENCE_SPEED, en fraction du poids (réglable : CarSetup).
+function Aerodynamics:SetDownforceRatio(ratio: number)
+	local totalDownforce = (self.Weight * ratio) / (REFERENCE_SPEED * REFERENCE_SPEED)
+	self.DownforceFront = totalDownforce * (1 - REAR_BIAS)
+	self.DownforceRear = totalDownforce * REAR_BIAS
 end
 
 function Aerodynamics:Apply(chassis: BasePart, dt: number)

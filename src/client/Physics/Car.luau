@@ -4,6 +4,8 @@ local PowertrainClass = require(script.Parent.Powertrain)
 local AerodynamicsClass = require(script.Parent.Aerodynamics)
 local DifferentialClass = require(script.Parent.Differential)
 local InputManager = require(script.Parent.Parent.Controllers.InputManager)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
 
 local Car = {}
 Car.__index = Car
@@ -29,6 +31,11 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	-- Pression réellement appliquée (0..1), qui suit la pédale avec un temps de montée
 	BrakePressure: number,
 	HandbrakePressure: number,
+
+	-- Bases de calcul des réglages (CarSetup)
+	Weight: number,
+	SpringRate: number,
+	Setup: CarSetup.Setup,
 }
 
 --[[
@@ -166,7 +173,40 @@ function Car.new(chassis: BasePart): Car
 	self.AntiRollFront = springRate * ANTI_ROLL_FRONT_RATIO
 	self.AntiRollRear = springRate * ANTI_ROLL_REAR_RATIO
 
+	self.Weight = weight
+	self.SpringRate = springRate
+	-- Les valeurs par défaut du schéma sont celles ci-dessus : ça ne change
+	-- rien, mais tout passe désormais par le même chemin que les réglages joueur.
+	self:ApplySetup(CarSetup.Default())
+
 	return self
+end
+
+--[[
+	Réglages joueur (menu, sauvegarde) : bornés par CarSetup.Sanitize, puis
+	appliqués aux organes. Tout est pris en compte dès la frame suivante, voiture
+	en mouvement comprise.
+]]
+function Car:ApplySetup(input: CarSetup.Setup)
+	local setup = CarSetup.Sanitize(input)
+	self.Setup = setup
+
+	self.BrakeBiasFront = setup.BrakeBias
+	self.MaxBrakeForce = self.Weight * setup.BrakeForce
+
+	self.FrontDiff.PowerLock = setup.FrontPowerLock
+	self.FrontDiff.CoastLock = setup.FrontCoastLock
+	self.RearDiff.PowerLock = setup.RearPowerLock
+	self.RearDiff.CoastLock = setup.RearCoastLock
+	self.CenterDiff.Split = setup.CenterSplit
+	self.CenterDiff.PowerLock = setup.CenterLock
+	-- Le central est moins bloqué en frein moteur qu'en traction (rampes 1.5 voie).
+	self.CenterDiff.CoastLock = setup.CenterLock * 0.5
+
+	self.AntiRollFront = self.SpringRate * setup.AntiRollFront
+	self.AntiRollRear = self.SpringRate * setup.AntiRollRear
+	self.Aerodynamics:SetDownforceRatio(setup.Downforce)
+	self.Powertrain.Gearbox.FinalDrive = setup.FinalDrive
 end
 
 -- Vitesse au sol le long de l'axe du châssis (studs/s), positive en marche avant.

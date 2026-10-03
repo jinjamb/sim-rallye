@@ -10,15 +10,40 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 export type Remotes = {
-	-- Client -> Serveur : (chassis: BasePart) le joueur demande le contrôle d'une voiture
+	-- Client -> Serveur : (chassis: BasePart) le joueur demande le contrôle de SA voiture
 	RequestCarControl: RemoteEvent,
 	-- Client -> Serveur : () le joueur relâche sa voiture
 	ReleaseCarControl: RemoteEvent,
 	-- Serveur -> Client : (chassis: BasePart, granted: boolean)
 	CarControlChanged: RemoteEvent,
+
+	-- Client -> Serveur, ~10 Hz, perte tolérée : état de la voiture pour les
+	-- autres joueurs (son, roues, poussière). Voir CarService.
+	CarTelemetry: UnreliableRemoteEvent,
+
+	-- Serveur -> Client : (profile) meilleur temps, fantôme et réglages sauvegardés
+	ProfileLoaded: RemoteEvent,
+	-- Serveur -> Client : (result) temps officiel d'une spéciale, mesuré par le serveur
+	RunValidated: RemoteEvent,
+	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
+	SubmitGhost: RemoteEvent,
+	-- Serveur -> Client : (entries) classement
+	Leaderboard: RemoteEvent,
+	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
+	SaveSetup: RemoteEvent,
 }
 
-local REMOTE_NAMES = { "RequestCarControl", "ReleaseCarControl", "CarControlChanged" }
+local RELIABLE = {
+	"RequestCarControl",
+	"ReleaseCarControl",
+	"CarControlChanged",
+	"ProfileLoaded",
+	"RunValidated",
+	"SubmitGhost",
+	"Leaderboard",
+	"SaveSetup",
+}
+local UNRELIABLE = { "CarTelemetry" }
 
 local function buildServer(): Remotes
 	local folder = ReplicatedStorage:FindFirstChild("Remotes")
@@ -29,16 +54,22 @@ local function buildServer(): Remotes
 		folder = created
 	end
 
-	local built: { [string]: RemoteEvent } = {}
-	for _, name in ipairs(REMOTE_NAMES) do
+	local built: { [string]: Instance } = {}
+	local function ensure(name: string, className: string)
 		local existing = (folder :: Instance):FindFirstChild(name)
 		if not existing then
-			local remote = Instance.new("RemoteEvent")
+			local remote = Instance.new(className)
 			remote.Name = name
 			remote.Parent = folder
 			existing = remote
 		end
-		built[name] = existing :: RemoteEvent
+		built[name] = existing :: Instance
+	end
+	for _, name in ipairs(RELIABLE) do
+		ensure(name, "RemoteEvent")
+	end
+	for _, name in ipairs(UNRELIABLE) do
+		ensure(name, "UnreliableRemoteEvent")
 	end
 
 	return built :: any
@@ -47,9 +78,12 @@ end
 local function buildClient(): Remotes
 	local folder = ReplicatedStorage:WaitForChild("Remotes")
 
-	local built: { [string]: RemoteEvent } = {}
-	for _, name in ipairs(REMOTE_NAMES) do
-		built[name] = folder:WaitForChild(name) :: RemoteEvent
+	local built: { [string]: Instance } = {}
+	for _, name in ipairs(RELIABLE) do
+		built[name] = folder:WaitForChild(name)
+	end
+	for _, name in ipairs(UNRELIABLE) do
+		built[name] = folder:WaitForChild(name)
 	end
 
 	return built :: any

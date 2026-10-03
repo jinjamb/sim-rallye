@@ -3,6 +3,11 @@
 	À COLLER DANS LA BARRE DE COMMANDES DE ROBLOX STUDIO (Ctrl+9, puis Ctrl+Entrée).
 	Ce fichier n'est PAS synchronisé par Rojo : c'est un outil d'édition.
 
+	À lancer UNE fois, pour créer la voiture de base (la sélection est ignorée).
+	Pour l'habiller d'un modèle importé : ensuite, tools/attach-body.luau.
+	En jeu, le serveur prend workspace.RallyCar telle quelle comme modèle pour
+	tous les joueurs (CarService) : pas besoin de relancer ce script avant Play.
+
 	Construit le gabarit attendu par Car.luau :
 
 		RallyCar (Model)
@@ -60,7 +65,20 @@ local GLASS = Color3.fromRGB(20, 26, 36)
 local RIM = Color3.fromRGB(205, 165, 60)
 local RACE_NUMBER = "7"
 
+--[[
+	PROTECTION : une voiture habillée par tools/attach-body.luau (ImportedBody,
+	roues ajustées sur ce modèle) représente du travail. On ne l'écrase pas par
+	accident -- ce script ignore la sélection et reconstruit TOUJOURS la voiture
+	de base. Pour repartir de zéro malgré tout, passer ce réglage à true.
+]]
+local OVERWRITE_IMPORTED_BODY = false
+
 local existing = workspace:FindFirstChild("RallyCar")
+if existing and existing:FindFirstChild("ImportedBody") and not OVERWRITE_IMPORTED_BODY then
+	error("[build-rig] RallyCar porte une carrosserie importée : rien n'a été modifié. "
+		.. "Inutile de relancer build-rig, la voiture est prête (Play). "
+		.. "Pour la reconstruire quand même : OVERWRITE_IMPORTED_BODY = true.", 0)
+end
 if existing then
 	existing:Destroy()
 end
