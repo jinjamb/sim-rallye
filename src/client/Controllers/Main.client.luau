@@ -10,6 +10,9 @@ local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
 local Dashboard = require(script.Parent.Dashboard)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
+local StageTimer = require(script.Parent.StageTimer)
+local ChaseCamera = require(script.Parent.ChaseCamera)
+local CarEffects = require(script.Parent.CarEffects)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -32,13 +35,10 @@ local chassis = carModel:WaitForChild("Chassis") :: BasePart
 local myRallyCar = CarClass.new(chassis)
 local dashboard = Dashboard.new(myRallyCar, player:WaitForChild("PlayerGui"))
 local carAudio = CarAudio.new(myRallyCar)
+local stageTimer = StageTimer.new(myRallyCar, player:WaitForChild("PlayerGui"))
 
--- Réglages caméra
-local CAMERA_DISTANCE = 20
-local CAMERA_HEIGHT = 7
-local CAMERA_LOOK_HEIGHT = 2.5
-local CAMERA_SMOOTHING = 9 -- plus haut = caméra plus rigide
-local DRIFT_BLEND_SPEED = 15 -- studs/s à partir desquels la caméra suit la trajectoire
+local chaseCamera = ChaseCamera.new(myRallyCar, camera)
+local carEffects = CarEffects.new(myRallyCar)
 
 -- Le client ne simule que s'il possède le NetworkOwnership du châssis :
 -- sinon les impulsions sont écrasées par la réplication et la voiture "élastique".
@@ -105,10 +105,11 @@ end
 --------------------------------------------------------------------------------
 
 local function enterDrivingCamera()
-	camera.CameraType = Enum.CameraType.Scriptable
+	chaseCamera:Enter()
 end
 
 local function exitDrivingCamera()
+	chaseCamera:Exit()
 	camera.CameraType = Enum.CameraType.Custom
 	local character = player.Character
 	if character then
@@ -120,32 +121,9 @@ local function exitDrivingCamera()
 end
 
 RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, function(dt: number)
-	if not hasControl then
-		return
+	if hasControl then
+		chaseCamera:Update(dt)
 	end
-
-	local chassisCFrame = chassis.CFrame
-	local velocity = chassis.AssemblyLinearVelocity
-
-	-- En dessous du seuil on suit le nez de la voiture ; au-dessus on mélange avec
-	-- la direction réelle du déplacement, ce qui garde la trajectoire dans le champ
-	-- quand la voiture part en travers (et évite un fouetté de caméra en drift).
-	local lookDirection = chassisCFrame.LookVector
-	if velocity.Magnitude > DRIFT_BLEND_SPEED then
-		local blended = lookDirection:Lerp(velocity.Unit, 0.5)
-		if blended.Magnitude > 0.01 then
-			lookDirection = blended.Unit
-		end
-	end
-
-	local targetPosition = chassisCFrame.Position
-		- lookDirection * CAMERA_DISTANCE
-		+ Vector3.yAxis * CAMERA_HEIGHT
-	local target = CFrame.lookAt(targetPosition, chassisCFrame.Position + Vector3.yAxis * CAMERA_LOOK_HEIGHT)
-
-	-- Lissage indépendant du framerate.
-	local alpha = 1 - math.exp(-CAMERA_SMOOTHING * dt)
-	camera.CFrame = camera.CFrame:Lerp(target, alpha)
 end)
 
 --------------------------------------------------------------------------------
@@ -169,12 +147,16 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		setCharacterControlsEnabled(false)
 		dashboard:SetVisible(true)
 		carAudio:SetActive(true)
-		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, F2 télémétrie, F3 journal console")
+		carEffects:SetActive(true)
+		stageTimer:SetVisible(true)
+		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, T / croix gauche remise en piste, Retour arrière / bouton Vue recommencer la spéciale, F2 télémétrie, F3 journal console")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
 		dashboard:SetVisible(false)
 		carAudio:SetActive(false)
+		carEffects:SetActive(false)
+		stageTimer:SetVisible(false)
 		print("[Car] Contrôle perdu")
 	end
 end)
@@ -211,6 +193,10 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	elseif key == Enum.KeyCode.M or key == Enum.KeyCode.ButtonY then
 		local automatic = myRallyCar:ToggleAutomatic()
 		print("[Car] Boîte", if automatic then "automatique" else "manuelle")
+	elseif key == Enum.KeyCode.T or key == Enum.KeyCode.DPadLeft then
+		stageTimer:Recover()
+	elseif key == Enum.KeyCode.Backspace or key == Enum.KeyCode.ButtonSelect then
+		stageTimer:Restart()
 	end
 end)
 
@@ -225,6 +211,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 	if hasControl then
 		dashboard:Update(dt)
 		carAudio:Update(dt)
+		carEffects:Update(dt)
+		stageTimer:Update(dt)
 	end
 end)
 

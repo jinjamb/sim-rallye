@@ -66,6 +66,17 @@
         "GlobalShadows": true,
         "Outlines": false,
         "Technology": "Voxel"
+      },
+      "Atmosphere": {
+        "$className": "Atmosphere",
+        "$properties": {
+          "Density": 0.3,
+          "Offset": 0.25,
+          "Haze": 1.2,
+          "Glare": 0.2,
+          "Color": [0.78, 0.8, 0.82],
+          "Decay": [0.45, 0.52, 0.6]
+        }
       }
     },
     "SoundService": {

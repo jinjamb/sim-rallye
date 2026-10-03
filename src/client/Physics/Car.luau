@@ -35,12 +35,27 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	FREINAGE, exprimé en fraction du poids. MaxBrakeForce est la force TOTALE des
 	quatre freins : la répartition avant/arrière la partage entre les essieux, puis
 	chaque essieu entre ses deux roues.
-	Calibrage (transfert de charge avec hauteur de CdM / empattement ~ 0.21) :
-	sur asphalte, rien ne bloque (il faudrait plus de 1.0) ; sur terre, l'avant
-	bloque mais pas l'arrière (seuils 0.66 et 0.8), ce qui garde la voiture droite
-	au freinage plutôt que de la faire partir en tête-à-queue.
+
+	La glisse au frein vient de l'ARRIÈRE qui décroche : si seul l'avant bloque,
+	la voiture file tout droit, direction morte -- stable, mais impossible à
+	placer en travers au freinage. C'est ce que donnait l'ancienne répartition
+	70/30 : sur terre, l'avant bloquait dès 0.66, l'arrière jamais.
+
+	Calibrage avec la répartition 65/35 (transfert de charge : hauteur de CdM /
+	empattement ~ 0.21) -- force totale à partir de laquelle chaque essieu bloque :
+
+		             avant   arrière
+		asphalte      1.22     0.92    -> à 0.85, rien ne bloque : freinage
+		                                  franc et stable sur le dur
+		terre         0.72     0.72    -> les deux essieux décrochent ensemble :
+		                                  la voiture glisse, et pivote dès qu'on
+		                                  braque ou qu'on module à la gâchette
+		neige, boue   bloquent largement
+
+	Reculer la répartition vers l'arrière accentue la glisse au frein (l'arrière
+	décroche en premier : rotation) ; l'avancer la stabilise.
 ]]
-local BRAKE_FORCE_RATIO = 0.75
+local BRAKE_FORCE_RATIO = 0.85
 -- Par roue arrière : volontairement de quoi bloquer sur n'importe quelle surface.
 local HANDBRAKE_FORCE_RATIO = 0.5
 
@@ -100,7 +115,7 @@ function Car.new(chassis: BasePart): Car
 	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass)
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
 	self.MaxSteerAngle = 35
-	self.BrakeBiasFront = 0.70
+	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
 	self.Wheels = {}
 	self.WheelsByName = {}
 
@@ -152,6 +167,36 @@ end
 -- Vitesse au sol le long de l'axe du châssis (studs/s), positive en marche avant.
 function Car:GetForwardSpeed(): number
 	return self.Chassis.AssemblyLinearVelocity:Dot(self.Chassis.CFrame.LookVector)
+end
+
+--[[
+	Téléportation (remise en piste, retour au départ). Toute la voiture bouge :
+	PivotTo déplace le modèle, et le pilote, soudé au châssis, suit l'assembly.
+	On remet aussi à zéro tout ce qui garde la mémoire du mouvement -- vitesses
+	du châssis, rotation des roues, pédales -- sinon la voiture repartirait avec
+	l'élan (et le régime) qu'elle avait avant.
+]]
+function Car:Teleport(target: CFrame)
+	local model = self.Chassis.Parent
+	if model and model:IsA("Model") and model.PrimaryPart == self.Chassis then
+		model:PivotTo(target)
+	else
+		self.Chassis.CFrame = target
+	end
+	self.Chassis.AssemblyLinearVelocity = Vector3.zero
+	self.Chassis.AssemblyAngularVelocity = Vector3.zero
+
+	for _, wheel in ipairs(self.Wheels) do
+		wheel.AngularVelocity = 0
+	end
+	self.BrakePressure = 0
+	self.HandbrakePressure = 0
+
+	local powertrain = self.Powertrain
+	powertrain.EngineRPM = powertrain.IdleRPM
+	if powertrain.Gearbox.Automatic then
+		powertrain.Gearbox.Gear = 1
+	end
 end
 
 --[[

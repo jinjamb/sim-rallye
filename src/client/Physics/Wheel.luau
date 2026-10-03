@@ -110,19 +110,32 @@ local SLIP_REFERENCE_SPEED = 4 -- studs/s : plancher au dénominateur des glisse
 
 	Les deux glissements sont normalisés par leur valeur au pic, ce qui les rend
 	comparables, puis combinés en un seul scalaire. La courbe donne alors la part
-	d'adhérence disponible, et le budget qui en découle est réparti entre les axes
-	PROPORTIONNELLEMENT À LA DEMANDE. Conséquence directe : roues bloquées, la
-	demande longitudinale absorbe tout le budget et la direction ne répond plus.
+	d'adhérence disponible.
+
+	Quand le pneu sature, ce budget est réparti SELON LA DIRECTION DU GLISSEMENT
+	(normalisé) : un pneu qui frotte pousse à l'opposé de la direction dans
+	laquelle il glisse. Roue bloquée à 68 km/h qui dérape de côté à 7 studs/s :
+	~12 % de l'adhérence en latéral, comme en vrai.
+	(La première version répartissait au prorata des impulsions d'annulation.
+	Or le glissement longitudinal s'annule avec une impulsion minuscule -- la
+	roue est légère -- et le latéral avec une grosse -- il faut déplacer un quart
+	de voiture. La même roue bloquée gardait alors 69 % de son adhérence en
+	latéral : un train arrière bloqué tenait la route, le frein à main ne
+	faisait pas pivoter la voiture, et un patinage ne faisait pas décrocher
+	l'arrière à l'accélération.)
 ]]
-local PEAK_SLIP_RATIO = 0.19 -- glissement longitudinal au pic d'adhérence
-local PEAK_SLIP_ANGLE = 0.16 -- tangente de l'angle de dérive au pic (~9°)
-local GRIP_B, GRIP_C, GRIP_E = 1.9, 1.65, 0.6 -- Pacejka normalisé : pic exactement à 1
+--[[
+	Glissement au pic et forme de la courbe dépendent du SOL (Surfaces.luau,
+	champ Tire) : un pneu sur terre travaille à bien plus fort glissement que
+	sur asphalte, et perd beaucoup moins d'adhérence au-delà de son pic.
+]]
 
 -- Part de l'adhérence disponible selon le glissement combiné normalisé :
--- 1 au pic, ~0.78 en glissement total (roue bloquée, patinage, gros travers).
-local function combinedGrip(normalizedSlip: number): number
-	local bs = GRIP_B * math.abs(normalizedSlip)
-	return math.sin(GRIP_C * math.atan(bs - GRIP_E * (bs - math.atan(bs))))
+-- 1 au pic. Au-delà (roue bloquée, patinage, gros travers) : ~0.77 sur le dur,
+-- ~0.95 à ~0.87 sur le meuble.
+local function combinedGrip(normalizedSlip: number, tire: Surfaces.TireProfile): number
+	local bs = tire.B * math.abs(normalizedSlip)
+	return math.sin(tire.C * math.atan(bs - tire.E * (bs - math.atan(bs))))
 end
 
 local STATIC_COMPRESSION_RATIO = 0.30 -- part du débattement écrasée à l'arrêt
@@ -352,37 +365,57 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.SlipRatio = slipVelocity / referenceSpeed
 	self.SlipAngle = math.atan2(lateralVelocity, referenceSpeed)
 
-	local normalizedLong = self.SlipRatio / PEAK_SLIP_RATIO
-	local normalizedLat = (lateralVelocity / referenceSpeed) / PEAK_SLIP_ANGLE
+	local tire = self.Surface.Tire
+	local normalizedLong = self.SlipRatio / tire.PeakSlipRatio
+	local normalizedLat = (lateralVelocity / referenceSpeed) / tire.PeakSlipAngle
 	local combinedSlip = math.sqrt(normalizedLong * normalizedLong + normalizedLat * normalizedLat)
 	self.LongSlipNorm = normalizedLong
 	self.LatSlipNorm = normalizedLat
 
 	-- c) Le budget d'adhérence, unique et partagé.
-	local frictionBudget = normalForce * mu * combinedGrip(combinedSlip) * dt
+	local frictionBudget = normalForce * mu * combinedGrip(combinedSlip, tire) * dt
 
 	--[[
 		d) Les impulsions DÉSIRÉES : celles qui annuleraient exactement chaque
 		glissement. Le longitudinal tient compte des deux inerties (roue + quart de
 		voiture), le latéral seulement de la masse.
-		Les écrêter ensemble, en conservant leur direction, fait deux choses à la
-		fois : ça impose le cercle de friction, et ça garde la propriété implicite
-		du solveur -- chaque composante reste inférieure à son impulsion d'annulation,
-		donc aucun glissement ne peut changer de signe ni osciller.
+
+		Si leur somme tient dans le budget, le pneu adhère : on les applique telles
+		quelles. Sinon il glisse, et le budget se répartit selon la direction du
+		glissement normalisé (voir CERCLE DE FRICTION).
+		Chaque composante reste plafonnée à son impulsion d'annulation : c'est la
+		propriété implicite du solveur, aucun glissement ne peut changer de signe
+		ni osciller. Si un axe est ainsi plafonné (son glissement s'annule dans la
+		frame), le budget qu'il n'utilise pas revient à l'autre axe : un pneu dont
+		le glissement devient purement latéral pousse entièrement en latéral.
 	]]
 	local inverseEffectiveMass = (self.Radius * self.Radius / self.Inertia) + (1 / wheelMass)
 	local desiredLong = slipVelocity / inverseEffectiveMass
 	local desiredLat = -lateralVelocity * wheelMass
 	local desiredMagnitude = math.sqrt(desiredLong * desiredLong + desiredLat * desiredLat)
-
-	local scale = 1
-	if desiredMagnitude > frictionBudget and desiredMagnitude > 0 then
-		scale = frictionBudget / desiredMagnitude
-	end
 	self.FrictionUsage = if frictionBudget > 0 then math.min(1, desiredMagnitude / frictionBudget) else 0
 
-	local longitudinalImpulse = desiredLong * scale
-	local lateralImpulse = desiredLat * scale
+	local longitudinalImpulse = desiredLong
+	local lateralImpulse = desiredLat
+	if desiredMagnitude > frictionBudget then
+		local absLong, absLat = math.abs(desiredLong), math.abs(desiredLat)
+		local longCap, latCap
+		if combinedSlip > 1e-6 then
+			longCap = frictionBudget * math.abs(normalizedLong) / combinedSlip
+			latCap = frictionBudget * math.abs(normalizedLat) / combinedSlip
+		else
+			longCap = frictionBudget * absLong / desiredMagnitude
+			latCap = frictionBudget * absLat / desiredMagnitude
+		end
+		-- Budget non utilisé par un axe plafonné : rendu à l'autre (cercle exact).
+		if absLong < longCap then
+			latCap = math.sqrt(math.max(0, frictionBudget * frictionBudget - absLong * absLong))
+		elseif absLat < latCap then
+			longCap = math.sqrt(math.max(0, frictionBudget * frictionBudget - absLat * absLat))
+		end
+		longitudinalImpulse = math.sign(desiredLong) * math.min(absLong, longCap)
+		lateralImpulse = math.sign(desiredLat) * math.min(absLat, latCap)
+	end
 
 	-- e) Troisième loi de Newton : ce que le sol pousse, le pneu le rend à la jante.
 	self.AngularVelocity -= (longitudinalImpulse * self.Radius) / self.Inertia

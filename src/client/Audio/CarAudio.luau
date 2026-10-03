@@ -58,8 +58,11 @@ export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 	OffLoad: { Voice },
 	Screeches: { TireVoice },
 	Gravel: Sound,
+	TarmacRoll: Sound,
+	Wind: Sound,
 	Load: number,
 	GravelLevel: number,
+	TarmacLevel: number,
 	Active: boolean,
 }
 
@@ -88,6 +91,10 @@ local SCREECH_PITCH_OFFSETS = { 0, 0.04, -0.03, 0.02 }
 
 local GRAVEL_ROLL_VOLUME = 0.25
 local GRAVEL_SLIDE_VOLUME = 0.35
+local TARMAC_ROLL_VOLUME = 0.2
+-- Vent : proportionnel au carré de la vitesse, plein à WIND_FULL_SPEED.
+local WIND_VOLUME = 0.35
+local WIND_FULL_SPEED = 160 -- studs/s (~km/h)
 local TIRE_SMOOTH_TIME = 0.08
 -- Glissement normalisé (1 = pic d'adhérence) à partir duquel un pneu fait du
 -- bruit, et largeur de la montée jusqu'au plein volume.
@@ -137,6 +144,11 @@ function CarAudio.new(car: CarClass.Car): CarAudio
 	self.OnLoad = makeVoices(profile.OnLoad, "EngineOn", car.Chassis, group)
 	self.OffLoad = makeVoices(profile.OffLoad, "EngineOff", car.Chassis, group)
 	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, car.Chassis, group)
+	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, car.Chassis, group)
+	-- Le vent n'a pas de source : il siffle autour de la caméra, pas de la voiture.
+	-- Parent SoundService = son non spatialisé.
+	self.Wind = makeSound("Wind", SoundBank.Wind, SoundService, group)
+	self.TarmacLevel = 0
 
 	self.Screeches = {}
 	for i, wheel in ipairs(car.Wheels) do
@@ -151,7 +163,7 @@ function CarAudio.new(car: CarClass.Car): CarAudio
 	-- Préchargement en tâche de fond : sinon le premier coup d'accélérateur
 	-- tombe dans le silence le temps que l'échantillon arrive.
 	task.spawn(function()
-		local toLoad: { Instance } = { self.Gravel, self.Screeches[1].Sound }
+		local toLoad: { Instance } = { self.Gravel, self.TarmacRoll, self.Wind, self.Screeches[1].Sound }
 		for _, voice in ipairs(self.OnLoad) do
 			table.insert(toLoad, voice.Sound)
 		end
@@ -177,8 +189,11 @@ local function stopAll(self: CarAudio)
 		tire.Level = 0
 	end
 	self.Gravel:Stop()
+	self.TarmacRoll:Stop()
+	self.Wind:Stop()
 	self.Load = 0
 	self.GravelLevel = 0
+	self.TarmacLevel = 0
 end
 
 -- Coupé quand on descend de la voiture : la physique ne tourne plus, le
@@ -289,14 +304,17 @@ function CarAudio:Update(dt: number)
 		setLooping(tire.Sound, SCREECH_VOLUME * tire.Level)
 	end
 
-	-- Roulement sur surface meuble
+	-- Roulement, sur surface meuble et sur le dur
 	local gravelSlide = 0
 	local gravelWheels = 0
+	local tarmacWheels = 0
 	for _, wheel in ipairs(car.Wheels) do
 		if wheel.IsGrounded and wheel.Surface.Sound == "Gravel" then
 			gravelWheels += 1
 			local combined = math.sqrt(wheel.LongSlipNorm ^ 2 + wheel.LatSlipNorm ^ 2)
 			gravelSlide = math.max(gravelSlide, beyondPeak(combined))
+		elseif wheel.IsGrounded and wheel.Surface.Sound == "Tarmac" then
+			tarmacWheels += 1
 		end
 	end
 
@@ -307,6 +325,16 @@ function CarAudio:Update(dt: number)
 	self.GravelLevel = approach(self.GravelLevel, gravelTarget, dt, TIRE_SMOOTH_TIME)
 	self.Gravel.PlaybackSpeed = 0.8 + 0.4 * math.clamp(speed / 120, 0, 1)
 	setLooping(self.Gravel, self.GravelLevel)
+
+	local tarmacTarget = TARMAC_ROLL_VOLUME * (tarmacWheels / #car.Wheels) * math.clamp(speed / 60, 0, 1)
+	self.TarmacLevel = approach(self.TarmacLevel, tarmacTarget, dt, TIRE_SMOOTH_TIME)
+	self.TarmacRoll.PlaybackSpeed = 0.7 + 0.6 * math.clamp(speed / 150, 0, 1)
+	setLooping(self.TarmacRoll, self.TarmacLevel)
+
+	-- Vent : carré de la vitesse, comme la traînée ; il monte aussi en aigu.
+	local windFactor = math.clamp(speed / WIND_FULL_SPEED, 0, 1)
+	self.Wind.PlaybackSpeed = 0.8 + 0.4 * windFactor
+	setLooping(self.Wind, WIND_VOLUME * windFactor * windFactor)
 end
 
 return CarAudio

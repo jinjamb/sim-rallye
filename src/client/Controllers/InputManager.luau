@@ -45,6 +45,16 @@ local TRIGGER_DEADZONE = 0.05
 -- Courbe du stick : > 1 = plus de précision autour du centre, où se joue la
 -- conduite en ligne, sans perdre la butée.
 local STEER_EXPONENT = 1.4
+--[[
+	Courbes des gâchettes ("linéarité" des jeux de simulation). Le moteur pousse
+	jusqu'à 1.46 g en 1re pour ~0.7 g d'adhérence sur terre : toute la plage
+	utile de l'accélérateur tient dans le premier tiers de la course. Avec
+	l'exposant, mi-gâchette ne donne plus que ~30 % : le dosage se fait sur la
+	moitié de la course au lieu d'un tiers. Le frein, moins brutal, a une
+	courbe plus douce, pour trouver le point de blocage sans le dépasser.
+]]
+local THROTTLE_EXPONENT = 1.7
+local BRAKE_EXPONENT = 1.3
 
 -- Rampes clavier, en secondes de 0 à 1.
 local KEYBOARD_STEER_TIME = 0.22 -- vers la butée
@@ -172,8 +182,8 @@ function InputManager:Update(dt: number, forwardSpeed: number): CarInputs
 	local stick = applyDeadzone(padStickX, STICK_DEADZONE)
 	-- Stick à droite = X positif, mais steer positif = à gauche.
 	local padSteer = -math.sign(stick) * math.abs(stick) ^ STEER_EXPONENT
-	local padThrottleValue = applyDeadzone(padThrottle, TRIGGER_DEADZONE)
-	local padBrakeValue = applyDeadzone(padBrake, TRIGGER_DEADZONE)
+	local padThrottleValue = applyDeadzone(padThrottle, TRIGGER_DEADZONE) ^ THROTTLE_EXPONENT
+	local padBrakeValue = applyDeadzone(padBrake, TRIGGER_DEADZONE) ^ BRAKE_EXPONENT
 
 	-- Fusion
 	local padActive = padSteer ~= 0 or padThrottleValue > 0 or padBrakeValue > 0

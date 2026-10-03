@@ -83,4 +83,11 @@ SoundBank.TireScreech = id(109487442763183) -- "Tire Squealing Screeching Loop"
 -- Roulement sur gravier, continu (sonothèque officielle Roblox).
 SoundBank.GravelRoll = id(9126157444) -- "Vehicle Gravel Tires Crunch Constant Over Rocks"
 
+-- Roulement des pneus sur le dur, continu (sonothèque officielle Roblox).
+SoundBank.TarmacRoll = id(9112886486) -- "Tire Constant 2"
+
+-- Vent : il monte avec le carré de la vitesse, comme la pression aérodynamique.
+-- PAS ENCORE ÉCOUTÉ : à remplacer s'il sonne mal ou ne boucle pas proprement.
+SoundBank.Wind = id(5813077875) -- "wind"
+
 return SoundBank
