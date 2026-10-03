@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local WheelClass = require(script.Parent.Parent.Physics.Wheel)
+local InputManager = require(script.Parent.InputManager)
 
 local Dashboard = {}
 Dashboard.__index = Dashboard
@@ -50,7 +51,7 @@ local WHEEL_NAMES = { FL = "AVG", FR = "AVD", RL = "ARG", RR = "ARD" }
 
 local CLUSTER_WIDTH = 380
 local CLUSTER_HEIGHT = 170
-local DETAIL_HEIGHT = 205
+local DETAIL_HEIGHT = 220
 local PANEL_GAP = 8
 local SCREEN_MARGIN = 24
 local REV_SEGMENTS = 24
@@ -306,6 +307,7 @@ end
 function Dashboard:_updateDetail()
 	local car = self.Car
 	local cornerWeight = car.Chassis.AssemblyMass * workspace.Gravity / 4
+	local inputs = InputManager:GetInputs()
 
 	local function row(label: string, cell: (WheelClass.Wheel) -> string): string
 		local line = pad(label, 8)
@@ -347,6 +349,13 @@ function Dashboard:_updateDetail()
 			car.FrontDiff:GetStateLabel(),
 			car.RearDiff:GetStateLabel(),
 			car.CenterDiff:GetStateLabel()
+		),
+		string.format(
+			"%-7s gaz %3.0f%% frein %3.0f%% volant %+.2f",
+			InputManager:GetActiveSource(),
+			inputs.throttle * 100,
+			inputs.brake * 100,
+			inputs.steer
 		),
 		string.format(
 			"freins %3.0f%%   frein à main %3.0f%%",

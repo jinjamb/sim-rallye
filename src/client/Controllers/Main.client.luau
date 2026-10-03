@@ -166,7 +166,7 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		enterDrivingCamera()
 		setCharacterControlsEnabled(false)
 		dashboard:SetVisible(true)
-		print("[Car] Contrôle accordé — Q pour descendre, R/F rapports, M boîte auto/manuelle, F2 télémétrie, F3 journal console")
+		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, F2 télémétrie, F3 journal console")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
@@ -186,25 +186,27 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	if gameProcessed then
 		return
 	end
-	if input.KeyCode == Enum.KeyCode.E then
+	local key = input.KeyCode
+	if key == Enum.KeyCode.E or key == Enum.KeyCode.DPadUp then
 		Remotes.RequestCarControl:FireServer(chassis)
-	elseif input.KeyCode == Enum.KeyCode.Q then
+	elseif key == Enum.KeyCode.Q or key == Enum.KeyCode.DPadDown then
 		Remotes.ReleaseCarControl:FireServer()
-	elseif input.KeyCode == Enum.KeyCode.F2 then
+	elseif key == Enum.KeyCode.F2 then
 		dashboard:ToggleDetail()
-	elseif input.KeyCode == Enum.KeyCode.F3 then
+	elseif key == Enum.KeyCode.F3 then
 		-- Le journal reste utile pour garder une trace écrite d'un essai.
 		debugEnabled = not debugEnabled
 		print("[Car] Journal console", if debugEnabled then "activé" else "désactivé")
 	elseif not hasControl then
 		return
-	elseif input.KeyCode == Enum.KeyCode.R then
+	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
+	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		myRallyCar:ShiftUp()
-	elseif input.KeyCode == Enum.KeyCode.F then
+	elseif key == Enum.KeyCode.F or key == Enum.KeyCode.ButtonX or key == Enum.KeyCode.ButtonL1 then
 		myRallyCar:ShiftDown()
-	elseif input.KeyCode == Enum.KeyCode.M then
+	elseif key == Enum.KeyCode.M or key == Enum.KeyCode.ButtonY then
 		local automatic = myRallyCar:ToggleAutomatic()
-		print("[Car] Boîte", if automatic then "automatique" else "manuelle (R/F)")
+		print("[Car] Boîte", if automatic then "automatique" else "manuelle")
 	end
 end)
 
@@ -276,7 +278,8 @@ RunService.Heartbeat:Connect(function(dt: number)
 		.. (if powertrain.FuelCut then " RUPTEUR" else "")
 
 	print(string.format(
-		"[Car] throttle=%.0f brake=%.0f steer=%.0f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.0f km/h | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
+		"[Car] %s throttle=%.2f brake=%.2f steer=%+.2f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.0f km/h | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
+		InputManager:GetActiveSource(),
 		inputs.throttle,
 		inputs.brake,
 		inputs.steer,
@@ -311,6 +314,7 @@ RunService.PreSimulation:Connect(function(dt: number)
 		return
 	end
 	local step = math.min(dt, MAX_PHYSICS_STEP)
-	local inputs = InputManager:GetInputs()
+	-- Les rampes du clavier avancent ici, une seule fois par pas physique.
+	local inputs = InputManager:Update(step, myRallyCar:GetForwardSpeed())
 	myRallyCar:Update(step, inputs)
 end)
