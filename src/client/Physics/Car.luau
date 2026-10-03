@@ -2,6 +2,7 @@
 local WheelClass = require(script.Parent.Wheel)
 local PowertrainClass = require(script.Parent.Powertrain)
 local AerodynamicsClass = require(script.Parent.Aerodynamics)
+local DifferentialClass = require(script.Parent.Differential)
 local InputManager = require(script.Parent.Parent.Controllers.InputManager)
 
 local Car = {}
@@ -16,8 +17,10 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	MaxSteerAngle: number,
 	MaxBrakeForce: number,
 	HandbrakeForce: number,
-	DriveBiasRear: number,
 	BrakeBiasFront: number,
+	FrontDiff: DifferentialClass.Differential,
+	RearDiff: DifferentialClass.Differential,
+	CenterDiff: DifferentialClass.Differential, -- sortie 1 = avant, sortie 2 = arrière
 	Wheelbase: number,
 	TrackWidth: number,
 	AntiRollFront: number,
@@ -61,6 +64,27 @@ local function approachPressure(current: number, target: number, dt: number, app
 end
 
 --[[
+	TRANSMISSION : trois autobloquants à rampes (voir Differential.luau).
+
+	Preload exprimé en fraction du couple d'adhérence statique d'une roue
+	(poids/4 x rayon, mu = 1) : il se recale tout seul avec la masse et la gravité.
+	Lock : 0 = ouvert, 1 = blocage complet sous charge. TBR = (1+L)/(1-L).
+
+	AVANT, 1.5 voie, doux : un avant trop bloqué refuse de tourner (sous-virage
+	à l'accélération) et tire dans le volant.
+	ARRIÈRE, plus bloqué : c'est lui qui donne la motricité en sortie de virage et qui fait
+	pivoter la voiture au gaz. Le Coast donne de la stabilité au lever de pied.
+	CENTRAL : 60 % à l'arrière, comme avant, pour le caractère survireur ; le
+	blocage renvoie le couple vers l'essieu qui adhère quand l'autre patine.
+	(Une vraie Rally2 n'a PAS de différentiel central : arbre rigide. Pour
+	l'imiter, mettre Lock à 1 et un Preload élevé -- la voiture devient plus
+	sous-vireuse en épingle, et le frein à main devient indispensable.)
+]]
+local FRONT_DIFF = { Split = 0.5, PreloadRatio = 0.05, PowerLock = 0.35, CoastLock = 0.15 }
+local REAR_DIFF = { Split = 0.5, PreloadRatio = 0.10, PowerLock = 0.5, CoastLock = 0.3 }
+local CENTER_DIFF = { Split = 0.6, PreloadRatio = 0.05, PowerLock = 0.4, CoastLock = 0.2 }
+
+--[[
 	Barres anti-roulis, exprimées en fraction de la raideur de ressort.
 	Une barre plus raide que le ressort lui-même reporterait l'instabilité de
 	l'intégration sur le mode de roulis.
@@ -76,7 +100,6 @@ function Car.new(chassis: BasePart): Car
 	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass)
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
 	self.MaxSteerAngle = 35
-	self.DriveBiasRear = 0.6
 	self.BrakeBiasFront = 0.70
 	self.Wheels = {}
 	self.WheelsByName = {}
@@ -86,6 +109,19 @@ function Car.new(chassis: BasePart): Car
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
 	self.BrakePressure = 0
 	self.HandbrakePressure = 0
+
+	local wheelGripTorque = (weight / 4) * self.Powertrain.WheelRadius
+	local function makeDiff(spec: typeof(FRONT_DIFF)): DifferentialClass.Differential
+		return DifferentialClass.new({
+			Split = spec.Split,
+			Preload = wheelGripTorque * spec.PreloadRatio,
+			PowerLock = spec.PowerLock,
+			CoastLock = spec.CoastLock,
+		})
+	end
+	self.FrontDiff = makeDiff(FRONT_DIFF)
+	self.RearDiff = makeDiff(REAR_DIFF)
+	self.CenterDiff = makeDiff(CENTER_DIFF)
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -204,29 +240,79 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	]]
 	local rearDecoupled = inputs.handbrake
 
-	-- Moteur : le régime est imposé par la rotation des roues ENTRAÎNÉES via la
-	-- transmission. Un différentiel ouvert égaliserait les couples et laisserait la
-	-- roue la moins adhérente tout prendre ; on garde ici une répartition rigide,
-	-- moyennée. Moyenne SIGNÉE : en marche arrière, les roues tournent à l'envers.
-	-- Arrière désaccouplé, ses roues bloquées ne doivent plus tirer le régime vers le bas.
-	local drivenAngularVelocity = 0
-	local drivenCount = 0
-	for _, wheel in ipairs(self.Wheels) do
-		if wheel.IsFront or not rearDecoupled then
-			drivenAngularVelocity += wheel.AngularVelocity
-			drivenCount += 1
-		end
-	end
-	drivenAngularVelocity /= drivenCount
+	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
+	local rl, rr = self.WheelsByName.WheelRL, self.WheelsByName.WheelRR
+
+	--[[
+		Régime moteur : imposé par les roues à travers les différentiels. Un
+		différentiel qui partage le couple dans la proportion s tourne, à son
+		entrée, à la moyenne de ses sorties PONDÉRÉE par s (conservation de la
+		puissance). Moyennes SIGNÉES : en marche arrière, les roues tournent à
+		l'envers. Arrière désaccouplé, ses roues bloquées ne comptent plus.
+	]]
+	local frontAxleSpeed = (fl.AngularVelocity + fr.AngularVelocity) / 2
+	local rearAxleSpeed = (rl.AngularVelocity + rr.AngularVelocity) / 2
+	local rearShare = if rearDecoupled then 0 else self.CenterDiff.Split
+	local drivenAngularVelocity = frontAxleSpeed * (1 - rearShare) + rearAxleSpeed * rearShare
 
 	-- Couple à la roue, plus une force : c'est la roue qui le convertira en
 	-- traction, à hauteur de ce que le glissement et l'adhérence permettent.
 	local totalWheelTorque = self.Powertrain:Update(dt, drivenAngularVelocity, throttle)
 
-	-- Différentiel AWD
-	local rearShare = if rearDecoupled then 0 else self.DriveBiasRear
-	local rearTorquePerWheel = (totalWheelTorque * rearShare) / 2
-	local frontTorquePerWheel = (totalWheelTorque * (1.0 - rearShare)) / 2
+	-- Puissance qui va du moteur vers les roues (traction) ou l'inverse (frein moteur) :
+	-- c'est ce qui choisit entre les rampes Power et Coast des autobloquants.
+	local isPower = totalWheelTorque * drivenAngularVelocity >= 0
+
+	-- 1) Partie OUVERTE : chaque différentiel partage le couple dans sa proportion fixe.
+	local frontAxleTorque = totalWheelTorque * (1 - rearShare)
+	local rearAxleTorque = totalWheelTorque * rearShare
+	fl:ApplyDriveTorque(dt, frontAxleTorque * (1 - self.FrontDiff.Split))
+	fr:ApplyDriveTorque(dt, frontAxleTorque * self.FrontDiff.Split)
+	rl:ApplyDriveTorque(dt, rearAxleTorque * (1 - self.RearDiff.Split))
+	rr:ApplyDriveTorque(dt, rearAxleTorque * self.RearDiff.Split)
+
+	--[[
+		2) Partie AUTOBLOQUANTE : on freine l'écart de vitesse entre les sorties,
+		AVANT que le pneu ne réagisse, pour qu'il voie des roues déjà couplées.
+		Gauche/droite d'abord : à inerties égales, ça ne change pas la moyenne de
+		l'essieu, donc l'ordre avec le central est indifférent.
+	]]
+	local function solveAxle(
+		diff: DifferentialClass.Differential,
+		left: WheelClass.Wheel,
+		right: WheelClass.Wheel,
+		axleTorque: number
+	)
+		local capacity = diff:GetCapacity(axleTorque, isPower)
+		local impulse = diff:Solve(left.AngularVelocity, left.Inertia, right.AngularVelocity, right.Inertia, capacity, dt)
+		left.AngularVelocity -= impulse / left.Inertia
+		right.AngularVelocity += impulse / right.Inertia
+	end
+	solveAxle(self.FrontDiff, fl, fr, frontAxleTorque)
+	solveAxle(self.RearDiff, rl, rr, rearAxleTorque)
+
+	--[[
+		Central : chaque essieu est vu comme une inertie de deux roues (son
+		différentiel ouvert partage l'impulsion en deux moitiés égales). Arrière
+		désaccouplé, l'arbre est ouvert : rien ne relie plus les deux essieux.
+	]]
+	if rearDecoupled then
+		self.CenterDiff:Disengage()
+	else
+		local capacity = self.CenterDiff:GetCapacity(totalWheelTorque, isPower)
+		local impulse = self.CenterDiff:Solve(
+			(fl.AngularVelocity + fr.AngularVelocity) / 2,
+			fl.Inertia + fr.Inertia,
+			(rl.AngularVelocity + rr.AngularVelocity) / 2,
+			rl.Inertia + rr.Inertia,
+			capacity,
+			dt
+		)
+		fl.AngularVelocity -= (impulse / 2) / fl.Inertia
+		fr.AngularVelocity -= (impulse / 2) / fr.Inertia
+		rl.AngularVelocity += (impulse / 2) / rl.Inertia
+		rr.AngularVelocity += (impulse / 2) / rr.Inertia
+	end
 
 	-- Ackermann Steering
 	local targetSteerAngle = math.rad(self.MaxSteerAngle * inputs.steer)
@@ -237,10 +323,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		rightAngle = math.atan(self.Wheelbase / (turnRadius + (self.TrackWidth / 2)))
 	end
 
+
 	-- PHASE 3 : distribution aux roues (suspension corrigée + pneus + visuel)
 	for _, wheel in ipairs(self.Wheels) do
-		local driveTorque = wheel.IsFront and frontTorquePerWheel or rearTorquePerWheel
-
 		-- Part de l'essieu, puis moitié par roue.
 		local axleBias = if wheel.IsFront then self.BrakeBiasFront else (1.0 - self.BrakeBiasFront)
 		local brakeForce = self.MaxBrakeForce * self.BrakePressure * axleBias / 2
@@ -254,7 +339,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 			wheelSteerAngle = wheel.IsLeft and leftAngle or rightAngle
 		end
 
-		wheel:ApplyForces(dt, driveTorque, brakeForce, wheelSteerAngle)
+		wheel:ApplyForces(dt, brakeForce, wheelSteerAngle)
 		wheel:UpdateVisual(dt)
 	end
 

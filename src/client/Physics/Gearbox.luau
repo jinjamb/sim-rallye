@@ -21,6 +21,7 @@ export type Gearbox = typeof(setmetatable({}, Gearbox)) & {
 	FinalDrive: number,
 	LimiterRPM: number,
 	WheelRadius: number,
+	UpshiftRPM: number, -- point de montée optimal, aussi utilisé par la LED de passage
 
 	Gear: number,
 	Automatic: boolean,
@@ -81,6 +82,7 @@ function Gearbox.new(limiterRPM: number, wheelRadius: number): Gearbox
 	self.FinalDrive = FINAL_DRIVE
 	self.LimiterRPM = limiterRPM
 	self.WheelRadius = wheelRadius
+	self.UpshiftRPM = UPSHIFT_RPM
 
 	self.Gear = 1
 	self.Automatic = true

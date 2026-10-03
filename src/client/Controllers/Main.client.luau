@@ -8,6 +8,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
+local Dashboard = require(script.Parent.Dashboard)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -28,6 +29,7 @@ end
 local carModel = workspace:WaitForChild("RallyCar") :: Model
 local chassis = carModel:WaitForChild("Chassis") :: BasePart
 local myRallyCar = CarClass.new(chassis)
+local dashboard = Dashboard.new(myRallyCar, player:WaitForChild("PlayerGui"))
 
 -- Réglages caméra
 local CAMERA_DISTANCE = 20
@@ -163,10 +165,12 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		refreshIgnoreList()
 		enterDrivingCamera()
 		setCharacterControlsEnabled(false)
-		print("[Car] Contrôle accordé — Q pour descendre, R/F pour passer les rapports, M boîte auto/manuelle, F2 diagnostic")
+		dashboard:SetVisible(true)
+		print("[Car] Contrôle accordé — Q pour descendre, R/F rapports, M boîte auto/manuelle, F2 télémétrie, F3 journal console")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
+		dashboard:SetVisible(false)
 		print("[Car] Contrôle perdu")
 	end
 end)
@@ -187,8 +191,11 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	elseif input.KeyCode == Enum.KeyCode.Q then
 		Remotes.ReleaseCarControl:FireServer()
 	elseif input.KeyCode == Enum.KeyCode.F2 then
+		dashboard:ToggleDetail()
+	elseif input.KeyCode == Enum.KeyCode.F3 then
+		-- Le journal reste utile pour garder une trace écrite d'un essai.
 		debugEnabled = not debugEnabled
-		print("[Car] Diagnostic", if debugEnabled then "activé" else "désactivé")
+		print("[Car] Journal console", if debugEnabled then "activé" else "désactivé")
 	elseif not hasControl then
 		return
 	elseif input.KeyCode == Enum.KeyCode.R then
@@ -205,7 +212,17 @@ end)
 Remotes.RequestCarControl:FireServer(chassis)
 
 --------------------------------------------------------------------------------
--- Diagnostic (F2)
+-- Tableau de bord (F2 : télémétrie détaillée)
+--------------------------------------------------------------------------------
+
+RunService.RenderStepped:Connect(function(dt: number)
+	if hasControl then
+		dashboard:Update(dt)
+	end
+end)
+
+--------------------------------------------------------------------------------
+-- Journal console (F3)
 --------------------------------------------------------------------------------
 
 local debugAccumulator = 0

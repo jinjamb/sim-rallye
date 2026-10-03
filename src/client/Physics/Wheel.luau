@@ -52,6 +52,10 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	SlipRatio: number,
 	SlipAngle: number,
 	FrictionUsage: number, -- part du cercle de friction consommée (1 = pneu saturé)
+	-- Glissements normalisés par leur valeur au pic (|x| > 1 : au-delà du pic).
+	-- Longitudinal > 0 : la roue patine ; < 0 : elle bloque.
+	LongSlipNorm: number,
+	LatSlipNorm: number,
 
 	-- Visuel
 	Tire: BasePart?,
@@ -203,6 +207,8 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.SlipRatio = 0
 	self.SlipAngle = 0
 	self.FrictionUsage = 0
+	self.LongSlipNorm = 0
+	self.LatSlipNorm = 0
 
 	-- Roue visuelle : "WheelFL" -> "TireFL" / "MotorFL". Facultative.
 	local suffix = string.sub(attachment.Name, 6)
@@ -281,8 +287,18 @@ function Wheel:_applyResistiveTorque(dt: number, torque: number)
 	end
 end
 
+--[[
+	Couple de la transmission. Appelé par Car.luau AVANT le couplage des
+	différentiels et AVANT ApplyForces : le pneu voit ainsi la vitesse de roue
+	déjà accélérée par le moteur et égalisée par les autobloquants.
+	En l'air, plus rien ne s'oppose au couple : la roue s'emballe.
+]]
+function Wheel:ApplyDriveTorque(dt: number, driveTorque: number)
+	self.AngularVelocity += (driveTorque / self.Inertia) * dt
+end
+
 -- Phase 3 : suspension (ressort + barre anti-roulis) puis forces du pneu
-function Wheel:ApplyForces(dt: number, driveTorque: number, brakeForce: number, steerAngle: number)
+function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.SteerAngle = steerAngle
 
 	local smoke = self.Attachment:FindFirstChild("Smoke") :: ParticleEmitter?
@@ -292,8 +308,8 @@ function Wheel:ApplyForces(dt: number, driveTorque: number, brakeForce: number, 
 		self.SlipRatio = 0
 		self.SlipAngle = 0
 		self.FrictionUsage = 0
-		-- Roue en l'air : plus rien ne s'oppose au couple, elle s'emballe.
-		self.AngularVelocity += (driveTorque / self.Inertia) * dt
+		self.LongSlipNorm = 0
+		self.LatSlipNorm = 0
 		self:_applyResistiveTorque(dt, brakeForce * self.Radius)
 		if smoke then
 			smoke.Enabled = false
@@ -327,8 +343,7 @@ function Wheel:ApplyForces(dt: number, driveTorque: number, brakeForce: number, 
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 
-	-- a) Le couple moteur accélère la roue, librement pour l'instant.
-	self.AngularVelocity += (driveTorque / self.Inertia) * dt
+	-- a) Le couple moteur a déjà été appliqué (ApplyDriveTorque, puis différentiels).
 
 	-- b) Les deux glissements, normalisés par leur valeur au pic pour être comparables.
 	local referenceSpeed = math.max(math.abs(longitudinalVelocity), SLIP_REFERENCE_SPEED)
@@ -340,6 +355,8 @@ function Wheel:ApplyForces(dt: number, driveTorque: number, brakeForce: number, 
 	local normalizedLong = self.SlipRatio / PEAK_SLIP_RATIO
 	local normalizedLat = (lateralVelocity / referenceSpeed) / PEAK_SLIP_ANGLE
 	local combinedSlip = math.sqrt(normalizedLong * normalizedLong + normalizedLat * normalizedLat)
+	self.LongSlipNorm = normalizedLong
+	self.LatSlipNorm = normalizedLat
 
 	-- c) Le budget d'adhérence, unique et partagé.
 	local frictionBudget = normalForce * mu * combinedGrip(combinedSlip) * dt
