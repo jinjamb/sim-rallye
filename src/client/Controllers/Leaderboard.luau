@@ -134,6 +134,21 @@ function Leaderboard:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
 end
 
+-- Disposition tactile : le tableau de bord occupe le haut à droite ; le
+-- classement s'ouvre au centre, à la demande (bouton TEMPS), masqué par défaut.
+function Leaderboard:SetTouchLayout(enabled: boolean)
+	if enabled then
+		self.Panel.AnchorPoint = Vector2.new(0.5, 0.5)
+		self.Panel.Position = UDim2.fromScale(0.5, 0.5)
+		self.Shown = false
+	else
+		self.Panel.AnchorPoint = Vector2.new(1, 0)
+		self.Panel.Position = UDim2.new(1, -SCREEN_MARGIN, 0, TOP_OFFSET)
+		self.Shown = true
+	end
+	self.Panel.Visible = self.Shown
+end
+
 function Leaderboard:Toggle()
 	self.Shown = not self.Shown
 	self.Panel.Visible = self.Shown

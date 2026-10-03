@@ -111,6 +111,12 @@ function Copilot:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
 end
 
+-- Disposition tactile : la rangée d'actions occupe le haut de l'écran, le
+-- bandeau du copilote descend juste en dessous.
+function Copilot:SetTouchLayout(enabled: boolean)
+	self.Panel.Position = UDim2.new(0.5, 0, 0, if enabled then 50 else 16)
+end
+
 -- Repart de la position actuelle : plus rien d'annoncé, prochaine note = la
 -- première devant la voiture.
 function Copilot:_resync(progress: number)

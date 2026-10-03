@@ -19,6 +19,7 @@ local RemoteCars = require(script.Parent.RemoteCars)
 local Ghost = require(script.Parent.Ghost)
 local Leaderboard = require(script.Parent.Leaderboard)
 local SetupMenu = require(script.Parent.SetupMenu)
+local TouchControls = require(script.Parent.TouchControls)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -237,6 +238,67 @@ RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, fun
 end)
 
 --------------------------------------------------------------------------------
+-- Actions, communes au clavier, à la manette et à l'écran tactile
+--------------------------------------------------------------------------------
+
+local actions: TouchControls.Actions = {
+	ShiftUp = function()
+		if hasControl then
+			myRallyCar:ShiftUp()
+		end
+	end,
+	ShiftDown = function()
+		if hasControl then
+			myRallyCar:ShiftDown()
+		end
+	end,
+	ToggleMode = function()
+		if hasControl then
+			local automatic = myRallyCar:ToggleAutomatic()
+			print("[Car] Boîte", if automatic then "automatique" else "manuelle")
+		end
+	end,
+	Recover = function()
+		if hasControl then
+			stageTimer:Recover()
+		end
+	end,
+	Restart = function()
+		if hasControl then
+			stageTimer:Restart()
+		end
+	end,
+	ToggleSetup = function()
+		setupMenu:Toggle()
+	end,
+	ToggleLeaderboard = function()
+		leaderboard:Toggle()
+	end,
+	EnterCar = function()
+		Remotes.RequestCarControl:FireServer(chassis)
+	end,
+	ExitCar = function()
+		Remotes.ReleaseCarControl:FireServer()
+	end,
+}
+
+-- Téléphone ou tablette : commandes à l'écran, et l'interface se range autour.
+local touchControls: TouchControls.TouchControls? = nil
+if TouchControls.IsTouchDevice() then
+	local created = TouchControls.new(playerGui, actions)
+	created:SetDriving(false)
+	touchControls = created
+	dashboard:SetTouchLayout(true)
+	stageTimer:SetTouchLayout(true)
+	copilot:SetTouchLayout(true)
+	leaderboard:SetTouchLayout(true)
+	setupMenu:SetTouchLayout(true)
+	RunService.RenderStepped:Connect(function()
+		created:Update()
+	end)
+end
+
+--------------------------------------------------------------------------------
 -- Prise / perte de contrôle
 --------------------------------------------------------------------------------
 
@@ -249,6 +311,9 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 	end
 
 	hasControl = granted
+	if touchControls then
+		touchControls:SetDriving(granted)
+	end
 
 	if granted then
 		-- La caméra part de sa position actuelle et glisse vers la voiture.
@@ -295,9 +360,9 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 	local key = input.KeyCode
 	if key == Enum.KeyCode.E or key == Enum.KeyCode.DPadUp then
-		Remotes.RequestCarControl:FireServer(chassis)
+		actions.EnterCar()
 	elseif key == Enum.KeyCode.Q or key == Enum.KeyCode.DPadDown then
-		Remotes.ReleaseCarControl:FireServer()
+		actions.ExitCar()
 	elseif key == Enum.KeyCode.F2 then
 		dashboard:ToggleDetail()
 	elseif key == Enum.KeyCode.F3 then
@@ -305,23 +370,20 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		debugEnabled = not debugEnabled
 		print("[Car] Journal console", if debugEnabled then "activé" else "désactivé")
 	elseif key == Enum.KeyCode.P or key == Enum.KeyCode.ButtonL3 then
-		setupMenu:Toggle()
+		actions.ToggleSetup()
 	elseif key == Enum.KeyCode.L or key == Enum.KeyCode.ButtonR3 then
-		leaderboard:Toggle()
-	elseif not hasControl then
-		return
+		actions.ToggleLeaderboard()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
-		myRallyCar:ShiftUp()
+		actions.ShiftUp()
 	elseif key == Enum.KeyCode.F or key == Enum.KeyCode.ButtonX or key == Enum.KeyCode.ButtonL1 then
-		myRallyCar:ShiftDown()
+		actions.ShiftDown()
 	elseif key == Enum.KeyCode.M or key == Enum.KeyCode.ButtonY then
-		local automatic = myRallyCar:ToggleAutomatic()
-		print("[Car] Boîte", if automatic then "automatique" else "manuelle")
+		actions.ToggleMode()
 	elseif key == Enum.KeyCode.T or key == Enum.KeyCode.DPadLeft then
-		stageTimer:Recover()
+		actions.Recover()
 	elseif key == Enum.KeyCode.Backspace or key == Enum.KeyCode.ButtonSelect then
-		stageTimer:Restart()
+		actions.Restart()
 	end
 end)
 

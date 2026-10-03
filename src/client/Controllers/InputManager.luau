@@ -150,6 +150,25 @@ local keyboardThrottle = 0
 local keyboardBrake = 0
 local keyboardSteer = 0
 
+--[[
+	Commandes tactiles (TouchControls.luau) : pédales et volant à l'écran, déjà
+	analogiques -- le doigt se pose plus ou moins haut sur la pédale, glisse
+	plus ou moins loin sur le volant. Le volant tactile reçoit la même
+	réduction de braquage avec la vitesse que le clavier : un doigt sur une
+	vitre est bien moins précis qu'un stick.
+]]
+local touchThrottle = 0
+local touchBrake = 0
+local touchSteer = 0
+local touchHandbrake = false
+
+function InputManager:SetTouch(throttle: number, brake: number, steer: number, handbrake: boolean)
+	touchThrottle = math.clamp(throttle, 0, 1)
+	touchBrake = math.clamp(brake, 0, 1)
+	touchSteer = math.clamp(steer, -1, 1)
+	touchHandbrake = handbrake
+end
+
 local last: CarInputs = { throttle = 0, brake = 0, steer = 0, handbrake = false }
 local lastSource = "clavier"
 
@@ -185,21 +204,35 @@ function InputManager:Update(dt: number, forwardSpeed: number): CarInputs
 	local padThrottleValue = applyDeadzone(padThrottle, TRIGGER_DEADZONE) ^ THROTTLE_EXPONENT
 	local padBrakeValue = applyDeadzone(padBrake, TRIGGER_DEADZONE) ^ BRAKE_EXPONENT
 
+	-- Tactile : même courbe que le stick, même limite à haute vitesse que le clavier.
+	local touchSteerValue = math.sign(touchSteer) * math.abs(touchSteer) ^ STEER_EXPONENT * steerLimit
+
 	-- Fusion
 	local padActive = padSteer ~= 0 or padThrottleValue > 0 or padBrakeValue > 0
 	local keyboardActive = wantThrottle > 0 or wantBrake > 0 or wantSteer ~= 0
+	local touchActive = touchSteer ~= 0 or touchThrottle > 0 or touchBrake > 0 or touchHandbrake
 	if padActive then
 		lastSource = "manette"
+	elseif touchActive then
+		lastSource = "tactile"
 	elseif keyboardActive then
 		lastSource = "clavier"
 	end
 
+	local steer = keyboardSteer
+	if padSteer ~= 0 then
+		steer = padSteer
+	elseif touchSteerValue ~= 0 then
+		steer = touchSteerValue
+	end
+
 	last = {
-		throttle = math.max(keyboardThrottle, padThrottleValue),
-		brake = math.max(keyboardBrake, padBrakeValue),
-		steer = if padSteer ~= 0 then padSteer else keyboardSteer,
+		throttle = math.max(keyboardThrottle, padThrottleValue, touchThrottle),
+		brake = math.max(keyboardBrake, padBrakeValue, touchBrake),
+		steer = steer,
 		handbrake = UserInputService:IsKeyDown(Enum.KeyCode.Space)
-			or UserInputService:IsGamepadButtonDown(GAMEPAD, Enum.KeyCode.ButtonA),
+			or UserInputService:IsGamepadButtonDown(GAMEPAD, Enum.KeyCode.ButtonA)
+			or touchHandbrake,
 	}
 	return last
 end
@@ -209,7 +242,7 @@ function InputManager:GetInputs(): CarInputs
 	return last
 end
 
--- "clavier" ou "manette" : la dernière source réellement utilisée.
+-- "clavier", "manette" ou "tactile" : la dernière source réellement utilisée.
 function InputManager:GetActiveSource(): string
 	return lastSource
 end

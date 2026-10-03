@@ -28,6 +28,7 @@ type RunState = "Idle" | "Running" | "Finished" | "Invalid"
 export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	Car: CarClass.Car,
 	Gui: ScreenGui,
+	Panel: Frame,
 	Scale: UIScale,
 	StatusLabel: TextLabel,
 	TimeLabel: TextLabel,
@@ -146,6 +147,7 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	stroke.Transparency = 0.9
 	stroke.Parent = panel
 	panel.Parent = gui
+	self.Panel = panel
 
 	-- Même mise à l'échelle que le tableau de bord, autour du coin bas-gauche.
 	local scale = Instance.new("UIScale")
@@ -171,6 +173,18 @@ end
 
 function StageTimer:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
+end
+
+-- Disposition tactile : le volant occupe le coin bas-gauche, le chrono monte
+-- en haut à gauche (sous la barre de Roblox).
+function StageTimer:SetTouchLayout(enabled: boolean)
+	if enabled then
+		self.Panel.AnchorPoint = Vector2.new(0, 0)
+		self.Panel.Position = UDim2.new(0, 12, 0, 12)
+	else
+		self.Panel.AnchorPoint = Vector2.new(0, 1)
+		self.Panel.Position = UDim2.new(0, SCREEN_MARGIN, 1, -SCREEN_MARGIN)
+	end
 end
 
 local function dropFrame(sample: StageTrack.Sample): CFrame

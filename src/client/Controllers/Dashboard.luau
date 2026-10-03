@@ -44,6 +44,8 @@ export type Dashboard = typeof(setmetatable({}, Dashboard)) & {
 	DetailPanel: Frame,
 	DetailLabel: TextLabel,
 	DetailAccumulator: number,
+	Root: Frame,
+	Cluster: Frame,
 }
 
 local WHEEL_ORDER = { "FL", "FR", "RL", "RR" }
@@ -147,6 +149,8 @@ function Dashboard.new(car: CarClass.Car, playerGui: Instance): Dashboard
 
 	local cluster = makePanel("Cluster", Vector2.new(CLUSTER_WIDTH, CLUSTER_HEIGHT), root)
 	cluster.Position = UDim2.fromScale(1, 1)
+	self.Root = root
+	self.Cluster = cluster
 
 	-- Rampe de LED
 	local revBar = Instance.new("Frame")
@@ -250,6 +254,30 @@ end
 
 function Dashboard:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
+end
+
+--[[
+	Disposition tactile : les pouces occupent les coins bas (volant, pédales,
+	TouchControls.luau), le tableau de bord monte en haut à droite. La
+	télémétrie détaillée passe alors SOUS le bloc principal.
+]]
+function Dashboard:SetTouchLayout(enabled: boolean)
+	local root, cluster, detail = self.Root, self.Cluster, self.DetailPanel
+	if enabled then
+		root.AnchorPoint = Vector2.new(1, 0)
+		root.Position = UDim2.new(1, -12, 0, 12)
+		cluster.AnchorPoint = Vector2.new(1, 0)
+		cluster.Position = UDim2.fromScale(1, 0)
+		detail.AnchorPoint = Vector2.new(1, 0)
+		detail.Position = UDim2.new(1, 0, 0, CLUSTER_HEIGHT + PANEL_GAP)
+	else
+		root.AnchorPoint = Vector2.new(1, 1)
+		root.Position = UDim2.new(1, -SCREEN_MARGIN, 1, -SCREEN_MARGIN)
+		cluster.AnchorPoint = Vector2.new(1, 1)
+		cluster.Position = UDim2.fromScale(1, 1)
+		detail.AnchorPoint = Vector2.new(1, 1)
+		detail.Position = UDim2.new(1, 0, 1, -(CLUSTER_HEIGHT + PANEL_GAP))
+	end
 end
 
 function Dashboard:ToggleDetail(): boolean
