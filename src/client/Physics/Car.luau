@@ -22,7 +22,6 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	TrackWidth: number,
 	AntiRollFront: number,
 	AntiRollRear: number,
-	CurrentRPM: number,
 }
 
 -- Freinage exprimé en fraction du poids : assez pour bloquer l'avant sur asphalte
@@ -54,7 +53,6 @@ function Car.new(chassis: BasePart): Car
 	local weight = chassis.AssemblyMass * workspace.Gravity
 	self.MaxBrakeForce = weight * BRAKE_FORCE_RATIO
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
-	self.CurrentRPM = 0
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -80,6 +78,33 @@ function Car.new(chassis: BasePart): Car
 	self.AntiRollRear = springRate * ANTI_ROLL_REAR_RATIO
 
 	return self
+end
+
+-- Vitesse au sol le long de l'axe du châssis (studs/s), positive en marche avant.
+function Car:GetForwardSpeed(): number
+	return self.Chassis.AssemblyLinearVelocity:Dot(self.Chassis.CFrame.LookVector)
+end
+
+--[[
+	Palettes. Toucher une palette passe la boîte en manuel, comme sur une boîte
+	auto à palettes ; ToggleAutomatic la rend à l'électronique.
+]]
+function Car:ShiftUp(): boolean
+	local gearbox = self.Powertrain.Gearbox
+	gearbox:SetAutomatic(false)
+	return gearbox:ShiftUp(self:GetForwardSpeed())
+end
+
+function Car:ShiftDown(): boolean
+	local gearbox = self.Powertrain.Gearbox
+	gearbox:SetAutomatic(false)
+	return gearbox:ShiftDown(self:GetForwardSpeed())
+end
+
+function Car:ToggleAutomatic(): boolean
+	local gearbox = self.Powertrain.Gearbox
+	gearbox:SetAutomatic(not gearbox.Automatic)
+	return gearbox.Automatic
 end
 
 -- Propagée aux 4 roues : voir Wheel:SetIgnoreList.
@@ -113,24 +138,33 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	applyAxleAntiRoll(self.WheelsByName.WheelFL, self.WheelsByName.WheelFR, self.AntiRollFront)
 	applyAxleAntiRoll(self.WheelsByName.WheelRL, self.WheelsByName.WheelRR, self.AntiRollRear)
 
+	-- Boîte : la logique auto voit les pédales telles que le joueur les appuie.
+	local gearbox = self.Powertrain.Gearbox
+	local forwardSpeed = self:GetForwardSpeed()
+	if gearbox.Automatic then
+		gearbox:UpdateAutomatic(forwardSpeed, inputs.throttle, inputs.brake)
+	end
+
+	-- Marche arrière en boîte auto, façon arcade : la touche de frein devient
+	-- l'accélérateur, et l'accélérateur freine jusqu'à l'arrêt.
+	local throttle, brake = inputs.throttle, inputs.brake
+	if gearbox.Automatic and gearbox.Gear == -1 then
+		throttle, brake = brake, throttle
+	end
+
 	-- Moteur : le régime est imposé par la rotation des roues via la transmission.
 	-- Un différentiel ouvert égaliserait les couples et laisserait la roue la moins
 	-- adhérente tout prendre ; on garde ici une répartition rigide, moyennée.
+	-- Moyenne SIGNÉE : en marche arrière, les roues tournent à l'envers.
 	local drivenAngularVelocity = 0
 	for _, wheel in ipairs(self.Wheels) do
-		drivenAngularVelocity += math.abs(wheel.AngularVelocity)
+		drivenAngularVelocity += wheel.AngularVelocity
 	end
 	drivenAngularVelocity /= #self.Wheels
 
-	self.CurrentRPM = self.Powertrain:CalculateRPM(drivenAngularVelocity)
-	local engineTorque = self.Powertrain:GetEngineTorque(self.CurrentRPM)
-
 	-- Couple à la roue, plus une force : c'est la roue qui le convertira en
 	-- traction, à hauteur de ce que le glissement et l'adhérence permettent.
-	local totalWheelTorque = engineTorque
-		* self.Powertrain.CurrentGearRatio
-		* self.Powertrain.FinalDrive
-		* inputs.throttle
+	local totalWheelTorque = self.Powertrain:Update(dt, drivenAngularVelocity, throttle)
 
 	-- Différentiel AWD
 	local rearTorquePerWheel = (totalWheelTorque * self.DriveBiasRear) / 2
@@ -150,9 +184,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		local driveTorque = wheel.IsFront and frontTorquePerWheel or rearTorquePerWheel
 
 		local brakeForce = 0
-		if inputs.brake > 0 then
+		if brake > 0 then
 			local bias = wheel.IsFront and self.BrakeBiasFront or (1.0 - self.BrakeBiasFront)
-			brakeForce = self.MaxBrakeForce * inputs.brake * bias
+			brakeForce = self.MaxBrakeForce * brake * bias
 		end
 		if inputs.handbrake and not wheel.IsFront then
 			brakeForce = self.HandbrakeForce

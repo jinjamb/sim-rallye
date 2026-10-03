@@ -149,7 +149,7 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		refreshIgnoreList()
 		enterDrivingCamera()
 		setCharacterControlsEnabled(false)
-		print("[Car] Contrôle accordé — Q pour descendre, F2 pour le diagnostic")
+		print("[Car] Contrôle accordé — Q pour descendre, R/F pour passer les rapports, M boîte auto/manuelle, F2 diagnostic")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
@@ -175,6 +175,15 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	elseif input.KeyCode == Enum.KeyCode.F2 then
 		debugEnabled = not debugEnabled
 		print("[Car] Diagnostic", if debugEnabled then "activé" else "désactivé")
+	elseif not hasControl then
+		return
+	elseif input.KeyCode == Enum.KeyCode.R then
+		myRallyCar:ShiftUp()
+	elseif input.KeyCode == Enum.KeyCode.F then
+		myRallyCar:ShiftDown()
+	elseif input.KeyCode == Enum.KeyCode.M then
+		local automatic = myRallyCar:ToggleAutomatic()
+		print("[Car] Boîte", if automatic then "automatique" else "manuelle (R/F)")
 	end
 end)
 
@@ -210,16 +219,46 @@ RunService.Heartbeat:Connect(function(dt: number)
 		maxUsage = math.max(maxUsage, wheel.FrictionUsage)
 	end
 
+	-- Surface sous chaque roue : un seul nom si les quatre sont d'accord, sinon le
+	-- détail (utile en travers d'une limite de surface, ou sur une bande split-mu).
+	local surfaceNames: { string } = {}
+	local sameSurface = true
+	for i, suffix in ipairs({ "FL", "FR", "RL", "RR" }) do
+		local wheel = myRallyCar.WheelsByName["Wheel" .. suffix]
+		local name = if wheel.IsGrounded
+			then string.format("%s %.2f", wheel.Surface.Name, wheel.Surface.Grip)
+			else "en l'air"
+		surfaceNames[i] = name
+		if name ~= surfaceNames[1] then
+			sameSurface = false
+		end
+	end
+	local surfaceLabel = if sameSurface
+		then surfaceNames[1]
+		else string.format("AVG %s / AVD %s / ARG %s / ARD %s", table.unpack(surfaceNames))
+
+	local powertrain = myRallyCar.Powertrain
+	local gearbox = powertrain.Gearbox
+	local gearLabel = if gearbox.Gear == -1 then "R" elseif gearbox.Gear == 0 then "N" else tostring(gearbox.Gear)
+	local flags = (if gearbox:IsShifting() then " passage" else "")
+		.. (if powertrain.ClutchSlipping then " embrayage-patine" else "")
+		.. (if powertrain.FuelCut then " RUPTEUR" else "")
+
 	print(string.format(
-		"[Car] throttle=%.0f brake=%.0f steer=%.0f | sol=%d/4 charge=%.0f (poids=%.0f) | %.1f studs/s | %.0f tr/min | glissement=%.2f | cercle=%.0f%%",
+		"[Car] throttle=%.0f brake=%.0f steer=%.0f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.1f studs/s | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
 		inputs.throttle,
 		inputs.brake,
 		inputs.steer,
+		if inputs.handbrake then " FREIN-À-MAIN" else "",
 		grounded,
 		totalLoad,
 		chassis.AssemblyMass * workspace.Gravity,
+		surfaceLabel,
 		chassis.AssemblyLinearVelocity.Magnitude,
-		myRallyCar.CurrentRPM,
+		if gearbox.Automatic then "A" else "M",
+		gearLabel,
+		powertrain.EngineRPM,
+		flags,
 		maxSlip,
 		maxUsage * 100
 	))
