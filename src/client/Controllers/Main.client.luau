@@ -199,23 +199,29 @@ RunService.Heartbeat:Connect(function(dt: number)
 	local inputs = InputManager:GetInputs()
 	local grounded = 0
 	local totalLoad = 0
+	local maxSlip = 0
+	local maxUsage = 0
 	for _, wheel in ipairs(myRallyCar.Wheels) do
 		if wheel.IsGrounded then
 			grounded += 1
 			totalLoad += wheel.NormalForce
 		end
+		maxSlip = math.max(maxSlip, math.abs(wheel.SlipRatio))
+		maxUsage = math.max(maxUsage, wheel.FrictionUsage)
 	end
 
 	print(string.format(
-		"[Car] contrôle=%s | throttle=%.0f brake=%.0f steer=%.0f | roues au sol=%d/4 charge=%.0f (poids=%.0f) | vitesse=%.1f",
-		tostring(hasControl),
+		"[Car] throttle=%.0f brake=%.0f steer=%.0f | sol=%d/4 charge=%.0f (poids=%.0f) | %.1f studs/s | %.0f tr/min | glissement=%.2f | cercle=%.0f%%",
 		inputs.throttle,
 		inputs.brake,
 		inputs.steer,
 		grounded,
 		totalLoad,
 		chassis.AssemblyMass * workspace.Gravity,
-		chassis.AssemblyLinearVelocity.Magnitude
+		chassis.AssemblyLinearVelocity.Magnitude,
+		myRallyCar.CurrentRPM,
+		maxSlip,
+		maxUsage * 100
 	))
 end)
 

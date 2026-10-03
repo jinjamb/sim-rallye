@@ -31,6 +31,8 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	Damping: number,
 	MaxSuspensionForce: number,
 	RollCenterHeight: number,
+	Radius: number,
+	Inertia: number,
 
 	-- État recalculé à chaque frame (phase 1)
 	IsGrounded: boolean,
@@ -44,6 +46,12 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 
 	-- Rempli par Car.luau entre les phases 1 et 2
 	AntiRollForce: number,
+
+	-- Dynamique de rotation : la roue est un corps à part entière
+	AngularVelocity: number,
+	SlipRatio: number,
+	SlipAngle: number,
+	FrictionUsage: number, -- part du cercle de friction consommée (1 = pneu saturé)
 
 	-- Visuel
 	Tire: BasePart?,
@@ -63,6 +71,56 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	plus aucun retuning, et surtout on ne peut plus repasser au-dessus des bornes
 	de stabilité de l'intégration explicite.
 ]]
+--[[
+	DYNAMIQUE DE ROTATION DE LA ROUE.
+
+	Chaque roue possède sa vitesse angulaire. Le couple moteur l'accélère, le pneu
+	la freine par réaction, le frein la ralentit. L'écart entre la vitesse de la
+	jante (omega * R) et celle du sol est le TAUX DE GLISSEMENT : c'est lui qui
+	produit la motricité, le patinage et le blocage de roue.
+
+	Formulation par impulsions plutôt que par courbe intégrée explicitement.
+	On calcule d'abord l'impulsion qui annulerait EXACTEMENT le glissement --
+	en tenant compte des deux inerties en jeu, celle de la roue et celle du quart
+	de voiture -- puis on l'écrête à la limite d'adhérence :
+
+		J_adherence = glissement / (R² / I + 1 / m)
+
+	C'est une résolution implicite : non écrêtée, elle annule le glissement en une
+	étape sans jamais osciller ; écrêtée, elle est par construction insuffisante à
+	le faire changer de signe. Aucune des deux branches ne peut diverger, quelle que
+	soit la petitesse de l'inertie de roue -- là où intégrer une courbe de Pacejka
+	en Euler explicite exigerait une inertie ~100x trop grande pour rester stable.
+]]
+local WHEEL_MASS_RATIO = 0.06 -- masse d'une roue + transmission ramenée à la roue, en fraction du véhicule
+local SLIP_REFERENCE_SPEED = 4 -- studs/s : plancher au dénominateur des glissements
+
+--[[
+	CERCLE DE FRICTION.
+
+	Un pneu ne dispose que d'UN budget d'adhérence, mu * N, qu'il répartit entre le
+	longitudinal et le latéral. Tant que les deux axes étaient écrêtés séparément,
+	une roue pouvait délivrer jusqu'à 1.41 * mu * N en combiné : on pouvait freiner
+	à fond ET tourner à l'adhérence maximale, ce qui supprimait tout l'intérêt de
+	gérer les transferts de charge.
+
+	Les deux glissements sont normalisés par leur valeur au pic, ce qui les rend
+	comparables, puis combinés en un seul scalaire. La courbe donne alors la part
+	d'adhérence disponible, et le budget qui en découle est réparti entre les axes
+	PROPORTIONNELLEMENT À LA DEMANDE. Conséquence directe : roues bloquées, la
+	demande longitudinale absorbe tout le budget et la direction ne répond plus.
+]]
+local PEAK_SLIP_RATIO = 0.19 -- glissement longitudinal au pic d'adhérence
+local PEAK_SLIP_ANGLE = 0.16 -- tangente de l'angle de dérive au pic (~9°)
+local GRIP_B, GRIP_C, GRIP_E = 1.9, 1.65, 0.6 -- Pacejka normalisé : pic exactement à 1
+
+-- Part de l'adhérence disponible selon le glissement combiné normalisé :
+-- 1 au pic, ~0.78 en glissement total (roue bloquée, patinage, gros travers).
+local function combinedGrip(normalizedSlip: number): number
+	local bs = GRIP_B * math.abs(normalizedSlip)
+	return math.sin(GRIP_C * math.atan(bs - GRIP_E * (bs - math.atan(bs))))
+end
+
 local STATIC_COMPRESSION_RATIO = 0.30 -- part du débattement écrasée à l'arrêt
 local DAMPING_RATIO = 0.4 -- ζ : 1.0 = critique, en dessous la suspension respire
 local MIN_FRAMERATE_DT = 1 / 30 -- doit correspondre au plafond de Main.client.luau
@@ -141,6 +199,10 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.SpinAngle = 0
 	self.SteerAngle = 0
 	self.LongitudinalVelocity = 0
+	self.AngularVelocity = 0
+	self.SlipRatio = 0
+	self.SlipAngle = 0
+	self.FrictionUsage = 0
 
 	-- Roue visuelle : "WheelFL" -> "TireFL" / "MotorFL". Facultative.
 	local suffix = string.sub(attachment.Name, 6)
@@ -149,6 +211,13 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.Tire = tire :: BasePart?
 	self.Motor = chassis:FindFirstChild("Motor" .. suffix) :: Motor6D?
 	self.VisualRadius = if tire and tire:IsA("BasePart") then tire.Size.Y / 2 else 1
+
+	-- Rayon physique = rayon visuel : doit rester égal à Powertrain.WheelRadius,
+	-- qui sert à calibrer le couple moteur.
+	self.Radius = self.VisualRadius
+	-- I = 1/2 * m * R² (disque plein). La fraction englobe aussi l'inertie de la
+	-- transmission ramenée à la roue, qui freine le patinage dans la réalité.
+	self.Inertia = 0.5 * (chassis.AssemblyMass * WHEEL_MASS_RATIO) * self.Radius * self.Radius
 
 	-- Alloué une seule fois : le raycast tourne 4x par frame.
 	local rayParams = RaycastParams.new()
@@ -199,14 +268,33 @@ function Wheel:UpdateSuspension(dt: number)
 	self.SpringForce = math.clamp(force, 0, self.MaxSuspensionForce)
 end
 
+-- Applique le couple de freinage et la résistance au roulement à la rotation de
+-- la roue. Ils ne peuvent jamais l'inverser : au pire ils l'arrêtent net.
+-- Appelé APRÈS l'impulsion du pneu, sinon une roue bloquée se verrait relancée
+-- par l'adhérence à chaque frame et clignoterait visuellement.
+function Wheel:_applyResistiveTorque(dt: number, torque: number)
+	local delta = (torque / self.Inertia) * dt
+	if math.abs(self.AngularVelocity) <= delta then
+		self.AngularVelocity = 0
+	else
+		self.AngularVelocity -= math.sign(self.AngularVelocity) * delta
+	end
+end
+
 -- Phase 3 : suspension (ressort + barre anti-roulis) puis forces du pneu
-function Wheel:ApplyForces(dt: number, driveForce: number, brakeForce: number, steerAngle: number)
+function Wheel:ApplyForces(dt: number, driveTorque: number, brakeForce: number, steerAngle: number)
 	self.SteerAngle = steerAngle
 
 	local smoke = self.Attachment:FindFirstChild("Smoke") :: ParticleEmitter?
 
 	if not self.IsGrounded then
 		self.NormalForce = 0
+		self.SlipRatio = 0
+		self.SlipAngle = 0
+		self.FrictionUsage = 0
+		-- Roue en l'air : plus rien ne s'oppose au couple, elle s'emballe.
+		self.AngularVelocity += (driveTorque / self.Inertia) * dt
+		self:_applyResistiveTorque(dt, brakeForce * self.Radius)
 		if smoke then
 			smoke.Enabled = false
 		end
@@ -236,58 +324,71 @@ function Wheel:ApplyForces(dt: number, driveForce: number, brakeForce: number, s
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
 	local mu = self.Surface.Grip
-	local maxLongitudinalImpulse = normalForce * mu * dt
 
-	-- 3. FORCES LONGITUDINALES (Motricité, Freinage, Résistance au roulement)
-	local targetDriveImpulse = driveForce * dt
-	local brakeImpulse = 0
-	local isLocked = false
+	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 
-	if math.abs(longitudinalVelocity) > 0.5 and brakeForce > 0 then
-		local requiredBrakeImpulse = math.abs(longitudinalVelocity) * wheelMass
-		local targetBrakeImpulse = math.min(brakeForce * dt, requiredBrakeImpulse)
-		if targetBrakeImpulse > maxLongitudinalImpulse then
-			targetBrakeImpulse = maxLongitudinalImpulse
-			isLocked = true
-		end
-		brakeImpulse = -targetBrakeImpulse * math.sign(longitudinalVelocity)
+	-- a) Le couple moteur accélère la roue, librement pour l'instant.
+	self.AngularVelocity += (driveTorque / self.Inertia) * dt
+
+	-- b) Les deux glissements, normalisés par leur valeur au pic pour être comparables.
+	local referenceSpeed = math.max(math.abs(longitudinalVelocity), SLIP_REFERENCE_SPEED)
+	local slipVelocity = (self.AngularVelocity * self.Radius) - longitudinalVelocity
+
+	self.SlipRatio = slipVelocity / referenceSpeed
+	self.SlipAngle = math.atan2(lateralVelocity, referenceSpeed)
+
+	local normalizedLong = self.SlipRatio / PEAK_SLIP_RATIO
+	local normalizedLat = (lateralVelocity / referenceSpeed) / PEAK_SLIP_ANGLE
+	local combinedSlip = math.sqrt(normalizedLong * normalizedLong + normalizedLat * normalizedLat)
+
+	-- c) Le budget d'adhérence, unique et partagé.
+	local frictionBudget = normalForce * mu * combinedGrip(combinedSlip) * dt
+
+	--[[
+		d) Les impulsions DÉSIRÉES : celles qui annuleraient exactement chaque
+		glissement. Le longitudinal tient compte des deux inerties (roue + quart de
+		voiture), le latéral seulement de la masse.
+		Les écrêter ensemble, en conservant leur direction, fait deux choses à la
+		fois : ça impose le cercle de friction, et ça garde la propriété implicite
+		du solveur -- chaque composante reste inférieure à son impulsion d'annulation,
+		donc aucun glissement ne peut changer de signe ni osciller.
+	]]
+	local inverseEffectiveMass = (self.Radius * self.Radius / self.Inertia) + (1 / wheelMass)
+	local desiredLong = slipVelocity / inverseEffectiveMass
+	local desiredLat = -lateralVelocity * wheelMass
+	local desiredMagnitude = math.sqrt(desiredLong * desiredLong + desiredLat * desiredLat)
+
+	local scale = 1
+	if desiredMagnitude > frictionBudget and desiredMagnitude > 0 then
+		scale = frictionBudget / desiredMagnitude
 	end
+	self.FrictionUsage = if frictionBudget > 0 then math.min(1, desiredMagnitude / frictionBudget) else 0
 
-	local rollingImpulse = 0
-	if math.abs(longitudinalVelocity) > 0.5 then
-		rollingImpulse = -math.sign(longitudinalVelocity) * normalForce * self.Surface.RollingResistance * dt
-	end
+	local longitudinalImpulse = desiredLong * scale
+	local lateralImpulse = desiredLat * scale
 
-	local totalLongImpulse = math.clamp(
-		targetDriveImpulse + brakeImpulse + rollingImpulse,
-		-maxLongitudinalImpulse,
-		maxLongitudinalImpulse
-	)
-	self.Chassis:ApplyImpulseAtPosition(forwardVector * totalLongImpulse, contactPoint)
-
-	-- 4. FORCES LATÉRALES (Coulomb & Pacejka)
-	local appliedLateralImpulse = 0
-	if math.abs(longitudinalVelocity) < 2.0 then
-		local requiredLateralImpulse = -lateralVelocity * wheelMass
-		local maxLatImpulse = normalForce * mu * dt
-		appliedLateralImpulse = math.clamp(requiredLateralImpulse, -maxLatImpulse, maxLatImpulse)
-	else
-		local slipAngle = math.atan2(lateralVelocity, math.abs(longitudinalVelocity))
-		local B, C, E = 10.0, 1.9, 0.97
-		local D = normalForce * mu
-		local pacejkaForce = D * math.sin(C * math.atan(B * slipAngle - E * (B * slipAngle - math.atan(B * slipAngle))))
-		appliedLateralImpulse = -pacejkaForce * dt
-	end
+	-- e) Troisième loi de Newton : ce que le sol pousse, le pneu le rend à la jante.
+	self.AngularVelocity -= (longitudinalImpulse * self.Radius) / self.Inertia
+	self.Chassis:ApplyImpulseAtPosition(forwardVector * longitudinalImpulse, contactPoint)
 
 	-- Appliquée au centre de roulis, pas à l'empreinte : voir RollCenterHeight.
 	local lateralApplicationPoint = contactPoint + upVector * self.RollCenterHeight
-	self.Chassis:ApplyImpulseAtPosition(rightVector * appliedLateralImpulse, lateralApplicationPoint)
+	self.Chassis:ApplyImpulseAtPosition(rightVector * lateralImpulse, lateralApplicationPoint)
+
+	-- f) Frein et résistance au roulement, en dernier (voir _applyResistiveTorque).
+	local resistiveTorque = (brakeForce + normalForce * self.Surface.RollingResistance) * self.Radius
+	self:_applyResistiveTorque(dt, resistiveTorque)
+
+	-- Roue bloquée : le frein l'a arrêtée alors que la voiture avance encore.
+	local isLocked = brakeForce > 0
+		and math.abs(self.AngularVelocity) < 0.5
+		and math.abs(longitudinalVelocity) > 2
 
 	-- 5. EFFETS VISUELS (Patinage / Drift)
 	if smoke then
-		local isSpinning = math.abs(targetDriveImpulse) > maxLongitudinalImpulse
-		local isDrifting = math.abs(lateralVelocity) > 3.0
-		smoke.Enabled = isSpinning or isDrifting or isLocked
+		-- Le pneu sature : il glisse, peu importe dans quelle direction.
+		local isSliding = self.FrictionUsage >= 1 and math.abs(combinedSlip) > 1
+		smoke.Enabled = isSliding or isLocked
 		smoke.Color = ColorSequence.new(self.Surface.DustColor)
 	end
 end
@@ -303,9 +404,10 @@ function Wheel:UpdateVisual(dt: number)
 	local travel = if self.IsGrounded then (self.SuspensionLength - self.Compression) else self.SuspensionLength
 	local localPosition = self.Attachment.Position + Vector3.new(0, self.VisualRadius - travel, 0)
 
-	-- L'avant étant en -Z, une rotation négative autour de X fait avancer le haut
-	-- de la roue dans le sens de la marche.
-	self.SpinAngle -= (self.LongitudinalVelocity / self.VisualRadius) * dt
+	-- La jante suit la vraie vitesse angulaire : une roue bloquée s'arrête pour de
+	-- bon, une roue qui patine s'emballe. L'avant étant en -Z, une rotation
+	-- négative autour de X fait avancer le haut de la roue dans le sens de la marche.
+	self.SpinAngle -= self.AngularVelocity * dt
 	self.SpinAngle %= math.pi * 2
 
 	motor.C0 = CFrame.new(localPosition) * CFrame.Angles(0, self.SteerAngle, 0) * CFrame.Angles(self.SpinAngle, 0, 0)

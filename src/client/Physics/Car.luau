@@ -22,6 +22,7 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	TrackWidth: number,
 	AntiRollFront: number,
 	AntiRollRear: number,
+	CurrentRPM: number,
 }
 
 -- Freinage exprimé en fraction du poids : assez pour bloquer l'avant sur asphalte
@@ -53,6 +54,7 @@ function Car.new(chassis: BasePart): Car
 	local weight = chassis.AssemblyMass * workspace.Gravity
 	self.MaxBrakeForce = weight * BRAKE_FORCE_RATIO
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
+	self.CurrentRPM = 0
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -111,18 +113,28 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	applyAxleAntiRoll(self.WheelsByName.WheelFL, self.WheelsByName.WheelFR, self.AntiRollFront)
 	applyAxleAntiRoll(self.WheelsByName.WheelRL, self.WheelsByName.WheelRR, self.AntiRollRear)
 
-	-- Moteur
-	local forwardVector = self.Chassis.CFrame.LookVector
-	local forwardSpeed = math.abs(self.Chassis.AssemblyLinearVelocity:Dot(forwardVector))
-	local currentRPM = self.Powertrain:CalculateRPM(forwardSpeed)
-	local maxEngineTorque = self.Powertrain:GetEngineTorque(currentRPM)
+	-- Moteur : le régime est imposé par la rotation des roues via la transmission.
+	-- Un différentiel ouvert égaliserait les couples et laisserait la roue la moins
+	-- adhérente tout prendre ; on garde ici une répartition rigide, moyennée.
+	local drivenAngularVelocity = 0
+	for _, wheel in ipairs(self.Wheels) do
+		drivenAngularVelocity += math.abs(wheel.AngularVelocity)
+	end
+	drivenAngularVelocity /= #self.Wheels
 
-	local wheelTorque = maxEngineTorque * self.Powertrain.CurrentGearRatio * self.Powertrain.FinalDrive
-	local totalDriveForce = (wheelTorque / self.Powertrain.WheelRadius) * inputs.throttle
+	self.CurrentRPM = self.Powertrain:CalculateRPM(drivenAngularVelocity)
+	local engineTorque = self.Powertrain:GetEngineTorque(self.CurrentRPM)
+
+	-- Couple à la roue, plus une force : c'est la roue qui le convertira en
+	-- traction, à hauteur de ce que le glissement et l'adhérence permettent.
+	local totalWheelTorque = engineTorque
+		* self.Powertrain.CurrentGearRatio
+		* self.Powertrain.FinalDrive
+		* inputs.throttle
 
 	-- Différentiel AWD
-	local rearForcePerWheel = (totalDriveForce * self.DriveBiasRear) / 2
-	local frontForcePerWheel = (totalDriveForce * (1.0 - self.DriveBiasRear)) / 2
+	local rearTorquePerWheel = (totalWheelTorque * self.DriveBiasRear) / 2
+	local frontTorquePerWheel = (totalWheelTorque * (1.0 - self.DriveBiasRear)) / 2
 
 	-- Ackermann Steering
 	local targetSteerAngle = math.rad(self.MaxSteerAngle * inputs.steer)
@@ -135,7 +147,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 
 	-- PHASE 3 : distribution aux roues (suspension corrigée + pneus + visuel)
 	for _, wheel in ipairs(self.Wheels) do
-		local driveForce = wheel.IsFront and frontForcePerWheel or rearForcePerWheel
+		local driveTorque = wheel.IsFront and frontTorquePerWheel or rearTorquePerWheel
 
 		local brakeForce = 0
 		if inputs.brake > 0 then
@@ -151,7 +163,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 			wheelSteerAngle = wheel.IsLeft and leftAngle or rightAngle
 		end
 
-		wheel:ApplyForces(dt, driveForce, brakeForce, wheelSteerAngle)
+		wheel:ApplyForces(dt, driveTorque, brakeForce, wheelSteerAngle)
 		wheel:UpdateVisual(dt)
 	end
 

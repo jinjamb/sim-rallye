@@ -75,9 +75,14 @@ function Powertrain:GetEngineTorque(rpm: number): number
 	return 0
 end
 
-function Powertrain:CalculateRPM(carSpeedMetersPerSecond: number): number
-	local wheelRadPerSec = carSpeedMetersPerSecond / self.WheelRadius
-	local wheelRPM = wheelRadPerSec * 9.5492
+--[[
+	Le régime vient désormais de la ROTATION RÉELLE des roues, plus de la vitesse
+	de la voiture. La différence est tout sauf cosmétique : roues bloquées au
+	freinage, le moteur redescend au ralenti ; roues qui patinent à l'arrêt, il
+	monte dans les tours. C'est ce que la transmission impose physiquement.
+]]
+function Powertrain:CalculateRPM(wheelAngularVelocity: number): number
+	local wheelRPM = math.abs(wheelAngularVelocity) * 9.5492 -- rad/s -> tr/min
 	local engineRPM = wheelRPM * self.CurrentGearRatio * self.FinalDrive
 	return math.clamp(engineRPM, self.IdleRPM, self.MaxRPM)
 end
