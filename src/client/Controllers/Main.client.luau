@@ -9,6 +9,7 @@ local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
 local Dashboard = require(script.Parent.Dashboard)
+local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -30,6 +31,7 @@ local carModel = workspace:WaitForChild("RallyCar") :: Model
 local chassis = carModel:WaitForChild("Chassis") :: BasePart
 local myRallyCar = CarClass.new(chassis)
 local dashboard = Dashboard.new(myRallyCar, player:WaitForChild("PlayerGui"))
+local carAudio = CarAudio.new(myRallyCar)
 
 -- Réglages caméra
 local CAMERA_DISTANCE = 20
@@ -166,11 +168,13 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		enterDrivingCamera()
 		setCharacterControlsEnabled(false)
 		dashboard:SetVisible(true)
+		carAudio:SetActive(true)
 		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, F2 télémétrie, F3 journal console")
 	else
 		exitDrivingCamera()
 		setCharacterControlsEnabled(true)
 		dashboard:SetVisible(false)
+		carAudio:SetActive(false)
 		print("[Car] Contrôle perdu")
 	end
 end)
@@ -220,6 +224,7 @@ Remotes.RequestCarControl:FireServer(chassis)
 RunService.RenderStepped:Connect(function(dt: number)
 	if hasControl then
 		dashboard:Update(dt)
+		carAudio:Update(dt)
 	end
 end)
 

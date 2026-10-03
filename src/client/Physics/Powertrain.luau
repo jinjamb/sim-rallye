@@ -27,6 +27,7 @@ export type Powertrain = typeof(setmetatable({}, Powertrain)) & {
 	EngineRPM: number,
 	ClutchSlipping: boolean,
 	FuelCut: boolean,
+	Load: number, -- 0..1 : le moteur pousse (1) ou est entraîné (0). Pilote le son.
 }
 
 -- Courbe en N·m, tracée comme sur un banc réel. Elle n'est PAS directement
@@ -148,6 +149,7 @@ function Powertrain.new(vehicleMass: number): Powertrain
 	self.EngineRPM = self.IdleRPM
 	self.ClutchSlipping = false
 	self.FuelCut = false
+	self.Load = 0
 	return self
 end
 
@@ -205,6 +207,10 @@ function Powertrain:Update(dt: number, wheelAngularVelocity: number, throttle: n
 	elseif self.EngineRPM < self.LimiterRPM - LIMITER_HYSTERESIS then
 		self.FuelCut = false
 	end
+
+	-- Charge : coupée pendant un passage (coupure d'allumage) et au rupteur, ce
+	-- qui donne au son le "trou" de la montée de rapport et le crépitement du rupteur.
+	self.Load = if gearbox:IsShifting() or self.FuelCut then 0 else throttle
 
 	if clutchOpen then
 		return 0
