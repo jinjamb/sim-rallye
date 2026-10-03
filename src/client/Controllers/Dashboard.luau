@@ -399,7 +399,13 @@ function Dashboard:Update(dt: number)
 
 	self.GearLabel.Text = gearText(gearbox.Gear)
 	self.GearLabel.TextColor3 = if gearbox:IsShifting() then COLOR_TEXT_DIM else COLOR_TEXT
-	self.ModeLabel.Text = if gearbox.Automatic then "AUTO" else "MANUEL"
+	-- Descentes mémorisées en attente d'un régime sûr : "MANUEL ▼2".
+	local pending = gearbox.PendingDownshifts
+	self.ModeLabel.Text = if gearbox.Automatic
+		then "AUTO"
+		elseif pending > 0 then string.format("MANUEL ▼%d", pending)
+		else "MANUEL"
+	self.ModeLabel.TextColor3 = if pending > 0 then COLOR_YELLOW else COLOR_TEXT_DIM
 
 	self.SpeedLabel.Text = string.format("%.0f", Units.ToKmh(car.Chassis.AssemblyLinearVelocity.Magnitude))
 	self.RpmLabel.Text = string.format("%.0f tr/min", math.floor(rpm / 50 + 0.5) * 50)

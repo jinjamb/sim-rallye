@@ -129,15 +129,17 @@ local function getPeakPower(): number
 	return peak
 end
 
-function Powertrain.new(vehicleMass: number): Powertrain
+function Powertrain.new(vehicleMass: number, wheelRadius: number): Powertrain
 	local self = (setmetatable({}, Powertrain) :: any) :: Powertrain
 	self.MaxRPM = 8000
 	self.IdleRPM = 1000
 	self.LimiterRPM = LIMITER_RPM
 	self.LaunchRPM = LAUNCH_RPM
 
-	-- Doit correspondre au rayon des roues visuelles du gabarit (TireXX.Size.Y / 2).
-	self.WheelRadius = 1.0
+	-- Rayon réel des roues du gabarit (Wheel.Radius = TireXX.Size.Y / 2), fourni
+	-- par Car.luau. Les vitesses par rapport de Gearbox.luau sont données pour
+	-- un rayon de 1 stud : elles varient en proportion.
+	self.WheelRadius = wheelRadius
 
 	-- Puissance (masse * studs² / s³) = couple (masse * studs² / s²) x rad/s.
 	local targetPower = vehicleMass * Units.PowerToWeightToStuds(TARGET_POWER_TO_WEIGHT)

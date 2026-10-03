@@ -13,6 +13,7 @@ local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local StageTimer = require(script.Parent.StageTimer)
 local ChaseCamera = require(script.Parent.ChaseCamera)
 local CarEffects = require(script.Parent.CarEffects)
+local Copilot = require(script.Parent.Copilot)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -36,6 +37,7 @@ local myRallyCar = CarClass.new(chassis)
 local dashboard = Dashboard.new(myRallyCar, player:WaitForChild("PlayerGui"))
 local carAudio = CarAudio.new(myRallyCar)
 local stageTimer = StageTimer.new(myRallyCar, player:WaitForChild("PlayerGui"))
+local copilot = Copilot.new(myRallyCar, player:WaitForChild("PlayerGui"))
 
 local chaseCamera = ChaseCamera.new(myRallyCar, camera)
 local carEffects = CarEffects.new(myRallyCar)
@@ -149,6 +151,7 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		carAudio:SetActive(true)
 		carEffects:SetActive(true)
 		stageTimer:SetVisible(true)
+		copilot:SetVisible(true)
 		print("[Car] Contrôle accordé — Q / croix bas pour descendre, R/F ou B/X ou RB/LB rapports, M / Y boîte auto/manuelle, T / croix gauche remise en piste, Retour arrière / bouton Vue recommencer la spéciale, F2 télémétrie, F3 journal console")
 	else
 		exitDrivingCamera()
@@ -157,6 +160,7 @@ Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart
 		carAudio:SetActive(false)
 		carEffects:SetActive(false)
 		stageTimer:SetVisible(false)
+		copilot:SetVisible(false)
 		print("[Car] Contrôle perdu")
 	end
 end)
@@ -213,6 +217,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 		carAudio:Update(dt)
 		carEffects:Update(dt)
 		stageTimer:Update(dt)
+		-- Le copilote réutilise l'avancement que le chrono vient de calculer.
+		copilot:Update(dt, stageTimer.LastProgress)
 	end
 end)
 

@@ -27,6 +27,8 @@ export type Gearbox = typeof(setmetatable({}, Gearbox)) & {
 	Automatic: boolean,
 	ShiftTimer: number, -- > 0 : passage en cours, couple coupé
 	CooldownTimer: number, -- > 0 : la boîte auto attend avant de redécider
+	PendingDownshifts: number, -- descentes demandées, en attente d'un régime sûr
+	PendingTimer: number, -- temps restant avant d'oublier ces demandes
 }
 
 --[[
@@ -73,6 +75,18 @@ local AUTO_COOLDOWN = 0.35 -- délai minimal entre deux décisions automatiques
 -- seul cas où l'on autorise le passage marche avant <-> marche arrière.
 local STANDSTILL_SPEED = 1.5
 
+--[[
+	MÉMOIRE DES RÉTROGRADATIONS (boîte manuelle). Une descente refusée -- elle
+	ferait dépasser le rupteur, ou un passage est déjà en cours -- n'est pas
+	perdue : elle attend, et s'exécute d'elle-même dès que la vitesse le permet.
+	Au gros freinage, on tape trois fois "descendre" et les trois rapports
+	tombent au fil du ralentissement, chacun dès qu'il est sûr : le frein moteur
+	arrive au plus tôt, sans jamais faire sur-régimer.
+	Une montée annule les descentes en attente ; elles sont aussi oubliées au
+	bout de DOWNSHIFT_QUEUE_TIMEOUT sans nouvel appui (on a changé d'avis).
+]]
+local DOWNSHIFT_QUEUE_TIMEOUT = 2.5 -- secondes
+
 local RAD_PER_SEC_TO_RPM = 9.5492
 
 function Gearbox.new(limiterRPM: number, wheelRadius: number): Gearbox
@@ -88,6 +102,8 @@ function Gearbox.new(limiterRPM: number, wheelRadius: number): Gearbox
 	self.Automatic = true
 	self.ShiftTimer = 0
 	self.CooldownTimer = 0
+	self.PendingDownshifts = 0
+	self.PendingTimer = 0
 	return self
 end
 
@@ -145,6 +161,8 @@ end
 	Renvoient true si le rapport a changé.
 ]]
 function Gearbox:ShiftUp(groundSpeed: number): boolean
+	-- Monter, c'est renoncer aux descentes encore en attente.
+	self.PendingDownshifts = 0
 	if self.Gear >= self:GetTopGear() or self:IsShifting() then
 		return false
 	end
@@ -161,7 +179,7 @@ function Gearbox:ShiftUp(groundSpeed: number): boolean
 	return true
 end
 
-function Gearbox:ShiftDown(groundSpeed: number): boolean
+function Gearbox:_tryShiftDown(groundSpeed: number): boolean
 	if self.Gear <= -1 or self:IsShifting() then
 		return false
 	end
@@ -177,7 +195,40 @@ function Gearbox:ShiftDown(groundSpeed: number): boolean
 	return true
 end
 
+-- Demande de descente (palette). Refusée maintenant, elle est mémorisée si elle
+-- vise un rapport de marche avant (voir MÉMOIRE DES RÉTROGRADATIONS).
+function Gearbox:ShiftDown(groundSpeed: number): boolean
+	local queuedTarget = self.Gear - self.PendingDownshifts - 1
+	if self.PendingDownshifts == 0 and self:_tryShiftDown(groundSpeed) then
+		return true
+	end
+	if queuedTarget >= 1 then
+		self.PendingDownshifts += 1
+		self.PendingTimer = DOWNSHIFT_QUEUE_TIMEOUT
+	end
+	return false
+end
+
+-- Exécute les descentes en attente dès qu'elles sont sûres. À appeler à chaque
+-- frame en boîte manuelle.
+function Gearbox:ProcessPendingDownshifts(dt: number, groundSpeed: number)
+	if self.PendingDownshifts <= 0 then
+		return
+	end
+	self.PendingTimer -= dt
+	if self.PendingTimer <= 0 then
+		self.PendingDownshifts = 0
+		return
+	end
+	if self:_tryShiftDown(groundSpeed) then
+		self.PendingDownshifts -= 1
+	end
+end
+
 function Gearbox:SetAutomatic(automatic: boolean)
+	if automatic then
+		self.PendingDownshifts = 0
+	end
 	self.Automatic = automatic
 	-- La boîte auto ne gère pas le point mort.
 	if automatic and self.Gear == 0 then

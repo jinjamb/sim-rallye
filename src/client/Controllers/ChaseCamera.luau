@@ -39,8 +39,10 @@ export type ChaseCamera = typeof(setmetatable({}, ChaseCamera)) & {
 
 local BASE_DISTANCE = 15
 local SPEED_DISTANCE = 2 -- recul supplémentaire à pleine vitesse
-local HEIGHT = 5
-local LOOK_HEIGHT = 2.2
+-- Juste au-dessus de l'aileron (toit à ~3.5, aileron à ~4 au-dessus du centre
+-- du châssis, voir tools/build-rig.luau) : plus bas, la carrosserie masque la route.
+local HEIGHT = 6.2
+local LOOK_HEIGHT = 3.0
 local LOOK_AHEAD_BASE = 4
 local LOOK_AHEAD_PER_SPEED = 0.06 -- studs de regard en avant par stud/s
 local SMOOTHING = 9 -- plus haut = caméra plus rigide

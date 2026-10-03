@@ -231,8 +231,8 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.Motor = chassis:FindFirstChild("Motor" .. suffix) :: Motor6D?
 	self.VisualRadius = if tire and tire:IsA("BasePart") then tire.Size.Y / 2 else 1
 
-	-- Rayon physique = rayon visuel : doit rester égal à Powertrain.WheelRadius,
-	-- qui sert à calibrer le couple moteur.
+	-- Rayon physique = rayon visuel. Car.luau le transmet à Powertrain, qui en
+	-- déduit le couple et la vitesse à la roue.
 	self.Radius = self.VisualRadius
 	-- I = 1/2 * m * R² (disque plein). La fraction englobe aussi l'inertie de la
 	-- transmission ramenée à la roue, qui freine le patinage dans la réalité.

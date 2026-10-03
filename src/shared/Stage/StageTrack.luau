@@ -55,6 +55,19 @@ type Segment = {
 	Material: Enum.Material?,
 }
 
+-- Un segment une fois posé sur le tracé : ce que le copilote lit (Pacenotes.luau).
+export type SegmentInfo = {
+	Index: number,
+	StartDistance: number,
+	EndDistance: number,
+	Turn: number?, -- degrés, positif = à gauche ; nil = ligne droite
+	Radius: number?,
+	StartHeight: number,
+	EndHeight: number,
+	Linear: boolean,
+	Material: Enum.Material,
+}
+
 StageTrack.ORIGIN = Vector3.new(0, 0, -256) -- bord de la Baseplate, au ras de sa surface
 StageTrack.SAMPLE_STEP = 4 -- studs : la résolution des voxels de terrain
 StageTrack.ROAD_WIDTH = 24 -- ~6.7 m : une route de spéciale étroite
@@ -115,6 +128,7 @@ local SEGMENTS: { Segment } = {
 }
 
 local cachedSamples: { Sample }? = nil
+local cachedSegments: { SegmentInfo } = {}
 local cachedLength = 0
 
 local function smoothstep(t: number): number
@@ -133,6 +147,7 @@ local function build(): { Sample }
 	local height = 0
 	local distance = 0
 	local material = Enum.Material.Ground
+	local segments: { SegmentInfo } = {}
 
 	local function push(curvature: number)
 		table.insert(samples, {
@@ -164,6 +179,19 @@ local function build(): { Sample }
 		local startHeight = height
 		local endHeight = segment.Height or height
 		local linear = segment.Ease == "linear"
+
+		table.insert(segments, {
+			Index = #segments + 1,
+			StartDistance = distance,
+			EndDistance = distance + length,
+			Turn = if curvature ~= 0 then segment.Turn else nil,
+			Radius = if curvature ~= 0 then segment.Radius else nil,
+			StartHeight = startHeight,
+			EndHeight = endHeight,
+			Linear = linear,
+			Material = material,
+		})
+
 		local steps = math.max(1, math.ceil(length / StageTrack.SAMPLE_STEP))
 		local ds = length / steps
 
@@ -192,7 +220,14 @@ local function build(): { Sample }
 	end
 
 	cachedLength = distance
+	cachedSegments = segments
 	return samples
+end
+
+-- Les segments du tracé, avec leurs abscisses de début et de fin.
+function StageTrack.GetSegments(): { SegmentInfo }
+	StageTrack.GetSamples()
+	return cachedSegments
 end
 
 function StageTrack.GetSamples(): { Sample }

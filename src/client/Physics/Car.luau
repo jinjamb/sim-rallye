@@ -112,7 +112,6 @@ local ANTI_ROLL_REAR_RATIO = 0.42
 function Car.new(chassis: BasePart): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
-	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass)
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
 	self.MaxSteerAngle = 35
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
@@ -124,19 +123,6 @@ function Car.new(chassis: BasePart): Car
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
 	self.BrakePressure = 0
 	self.HandbrakePressure = 0
-
-	local wheelGripTorque = (weight / 4) * self.Powertrain.WheelRadius
-	local function makeDiff(spec: typeof(FRONT_DIFF)): DifferentialClass.Differential
-		return DifferentialClass.new({
-			Split = spec.Split,
-			Preload = wheelGripTorque * spec.PreloadRatio,
-			PowerLock = spec.PowerLock,
-			CoastLock = spec.CoastLock,
-		})
-	end
-	self.FrontDiff = makeDiff(FRONT_DIFF)
-	self.RearDiff = makeDiff(REAR_DIFF)
-	self.CenterDiff = makeDiff(CENTER_DIFF)
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -154,6 +140,25 @@ function Car.new(chassis: BasePart): Car
 		table.insert(self.Wheels, wheel)
 		self.WheelsByName[name] = wheel
 	end
+
+	-- Le rayon de roue calibre la boîte (vitesse par rapport, couple à la roue) :
+	-- il est lu sur les roues réelles du gabarit, pas supposé. Une carrosserie
+	-- importée avec de plus grandes roues (tools/attach-body.luau) allonge donc
+	-- tous les rapports d'autant, comme en vrai.
+	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass, self.Wheels[1].Radius)
+
+	local wheelGripTorque = (weight / 4) * self.Powertrain.WheelRadius
+	local function makeDiff(spec: typeof(FRONT_DIFF)): DifferentialClass.Differential
+		return DifferentialClass.new({
+			Split = spec.Split,
+			Preload = wheelGripTorque * spec.PreloadRatio,
+			PowerLock = spec.PowerLock,
+			CoastLock = spec.CoastLock,
+		})
+	end
+	self.FrontDiff = makeDiff(FRONT_DIFF)
+	self.RearDiff = makeDiff(REAR_DIFF)
+	self.CenterDiff = makeDiff(CENTER_DIFF)
 
 	-- Calées sur la raideur réellement calculée par Wheel.new (elle-même déduite
 	-- de la masse) : le gabarit peut changer sans rien retoucher ici.
@@ -257,6 +262,8 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	local forwardSpeed = self:GetForwardSpeed()
 	if gearbox.Automatic then
 		gearbox:UpdateAutomatic(forwardSpeed, inputs.throttle, inputs.brake)
+	else
+		gearbox:ProcessPendingDownshifts(dt, forwardSpeed)
 	end
 
 	-- Marche arrière en boîte auto, façon arcade : la touche de frein devient
