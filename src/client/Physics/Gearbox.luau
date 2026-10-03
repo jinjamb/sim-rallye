@@ -29,20 +29,21 @@ export type Gearbox = typeof(setmetatable({}, Gearbox)) & {
 }
 
 --[[
-	ÉTAGEMENT.
-	Le 1er rapport est calé pour ~1.1 g de poussée au couple max : nettement plus
-	que ce que les pneus peuvent passer sur terre (mu 0.72), à peu près la limite
-	sur asphalte. Le 6e place la vitesse de pointe, limitée par la traînée
-	(~123 studs/s), vers 6300 tr/min, juste après le pic de puissance.
-	Entre les deux, les écarts se resserrent en montant, comme sur une boîte de
-	rallye : gros trou 1-2 pour le départ, rapports serrés là où on reste en régime.
+	ÉTAGEMENT (gravité réelle, 150 W/kg : voir Units.luau et Powertrain.luau).
+	Poussée au couple max, en g : 1re 1.46 | 2e 1.06 | 3e 0.81 | 4e 0.65 | 5e 0.52 | 6e 0.43
+	L'adhérence vaut 1.05 g sur asphalte, 0.72 sur terre : la 1re patine partout,
+	la 2e sur asphalte est à la limite, et sur terre on patine jusqu'en 3e. C'est
+	l'ordre de grandeur d'une vraie Rally2, AWD ou pas.
+	Courte comme une boîte de spéciale : la pointe est limitée par le rupteur en
+	6e (~180 km/h), pas par la traînée. Les écarts se resserrent en montant :
+	gros trou 1-2 pour le départ, rapports serrés là où on reste en régime.
 
-	Vitesse au rupteur (8000 tr/min, roue de 1 stud) :
-		1re 46 | 2e 64 | 3e 83 | 4e 105 | 5e 129 | 6e 157 studs/s
+	Vitesse au rupteur (8000 tr/min, roue de 1 stud), en studs/s ~ km/h :
+		1re 54 | 2e 75 | 3e 98 | 4e 123 | 5e 152 | 6e 184
 ]]
 local GEAR_RATIOS = { 4.40, 3.20, 2.45, 1.95, 1.58, 1.30 }
 local REVERSE_RATIO = 3.80
-local FINAL_DRIVE = 4.1
+local FINAL_DRIVE = 3.5
 
 --[[
 	Durées de passage : couple coupé pendant ce temps. Une séquentielle de rallye
@@ -226,7 +227,7 @@ function Gearbox:UpdateAutomatic(groundSpeed: number, throttle: number, brake: n
 
 	--[[
 		Descente : on saute directement au bon rapport au lieu de descendre un par
-		un. Au gros freinage, la voiture perd 80 studs/s en une seconde ; avec un
+		un. Au gros freinage, la voiture perd des dizaines de studs/s par seconde ; avec un
 		délai entre chaque passage, elle arrivait au point de corde trois rapports
 		trop haut, et relançait à 1500 tr/min.
 		On descend tant que le régime d'arrivée reste sous la limite, et on

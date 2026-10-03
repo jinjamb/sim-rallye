@@ -27,11 +27,25 @@ export type Aerodynamics = typeof(setmetatable({}, Aerodynamics)) & {
 	MaxDownforce: number, -- garde-fou : appui total max, pour ne pas écraser la suspension
 }
 
-local REFERENCE_SPEED = 100 -- studs/s : vitesse à laquelle les ratios ci-dessous sont exprimés
+local REFERENCE_SPEED = 100 -- studs/s (~100 km/h, voir Units.luau) : vitesse à laquelle les ratios ci-dessous sont exprimés
 local DOWNFORCE_RATIO = 0.25 -- appui total à REFERENCE_SPEED, en fraction du poids
-local DRAG_RATIO = 0.18 -- traînée à REFERENCE_SPEED, en fraction du poids
+--[[
+	Traînée réelle d'une voiture de rallye avec aileron : SCx ~ 0.8 m², soit à
+	100 km/h  0.5 * 1.225 * 0.8 * 27.8² ~ 380 N pour ~13 kN de poids -> 3 %.
+	(L'ancienne valeur, 18 %, bridait surtout un moteur 3.5 fois trop puissant.)
+]]
+local DRAG_RATIO = 0.03 -- traînée à REFERENCE_SPEED, en fraction du poids
 local REAR_BIAS = 0.6 -- plus d'appui à l'arrière = stabilité en appui et à haute vitesse
-local YAW_DAMPING_RATE = 0.015 -- décélération angulaire par (rad/s · stud/s)
+
+--[[
+	Amortissement du lacet : décélération angulaire par (rad/s · stud/s), réglé
+	à l'origine sous la gravité par défaut de Roblox (196.2). Il doit rester
+	proportionnel aux forces de pneu, qui suivent la gravité : sans cette mise à
+	l'échelle, sous gravité réelle il serait 5.6 fois trop fort relativement aux
+	pneus et étoufferait toute mise en travers.
+]]
+local YAW_DAMPING_RATE_AT_ROBLOX_GRAVITY = 0.015
+local ROBLOX_DEFAULT_GRAVITY = 196.2
 
 function Aerodynamics.new(chassis: BasePart): Aerodynamics
 	local self = (setmetatable({}, Aerodynamics) :: any) :: Aerodynamics
@@ -53,7 +67,8 @@ function Aerodynamics.new(chassis: BasePart): Aerodynamics
 	-- Le couple d'amortissement doit suivre l'inertie de lacet, sinon une grosse
 	-- voiture tourne comme une toupie et une petite se fige.
 	local yawInertia = (mass / 12) * (size.X * size.X + size.Z * size.Z)
-	self.YawDamping = yawInertia * YAW_DAMPING_RATE
+	local yawDampingRate = YAW_DAMPING_RATE_AT_ROBLOX_GRAVITY * (workspace.Gravity / ROBLOX_DEFAULT_GRAVITY)
+	self.YawDamping = yawInertia * yawDampingRate
 
 	-- L'appui ne doit jamais talonner la suspension à lui seul.
 	self.MaxDownforce = weight * 2

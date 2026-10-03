@@ -22,12 +22,43 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	TrackWidth: number,
 	AntiRollFront: number,
 	AntiRollRear: number,
+
+	-- Pression réellement appliquée (0..1), qui suit la pédale avec un temps de montée
+	BrakePressure: number,
+	HandbrakePressure: number,
 }
 
--- Freinage exprimé en fraction du poids : assez pour bloquer l'avant sur asphalte
--- (mu = 1.05) sans jamais bloquer l'arrière en premier.
-local BRAKE_FORCE_RATIO = 0.45
+--[[
+	FREINAGE, exprimé en fraction du poids. MaxBrakeForce est la force TOTALE des
+	quatre freins : la répartition avant/arrière la partage entre les essieux, puis
+	chaque essieu entre ses deux roues.
+	Calibrage (transfert de charge avec hauteur de CdM / empattement ~ 0.21) :
+	sur asphalte, rien ne bloque (il faudrait plus de 1.0) ; sur terre, l'avant
+	bloque mais pas l'arrière (seuils 0.66 et 0.8), ce qui garde la voiture droite
+	au freinage plutôt que de la faire partir en tête-à-queue.
+]]
+local BRAKE_FORCE_RATIO = 0.75
+-- Par roue arrière : volontairement de quoi bloquer sur n'importe quelle surface.
 local HANDBRAKE_FORCE_RATIO = 0.5
+
+--[[
+	TEMPS DE MONTÉE EN PRESSION. Le circuit hydraulique et le pied du pilote ne
+	passent pas de 0 à 100 % en une frame : sans ça, le clavier fait tomber
+	d'un coup toute la décélération, la caisse plonge sèchement et le freinage
+	"pince" au lieu de s'installer. Le relâchement est plus rapide que l'appui.
+	Le frein à main hydraulique de rallye, lui, est quasi instantané.
+]]
+local BRAKE_APPLY_TIME = 0.3 -- secondes de 0 à 100 %
+local BRAKE_RELEASE_TIME = 0.1
+local HANDBRAKE_APPLY_TIME = 0.08
+local HANDBRAKE_RELEASE_TIME = 0.08
+
+local function approachPressure(current: number, target: number, dt: number, applyTime: number, releaseTime: number): number
+	if target > current then
+		return math.min(target, current + dt / applyTime)
+	end
+	return math.max(target, current - dt / releaseTime)
+end
 
 --[[
 	Barres anti-roulis, exprimées en fraction de la raideur de ressort.
@@ -53,6 +84,8 @@ function Car.new(chassis: BasePart): Car
 	local weight = chassis.AssemblyMass * workspace.Gravity
 	self.MaxBrakeForce = weight * BRAKE_FORCE_RATIO
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
+	self.BrakePressure = 0
+	self.HandbrakePressure = 0
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -152,23 +185,48 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		throttle, brake = brake, throttle
 	end
 
-	-- Moteur : le régime est imposé par la rotation des roues via la transmission.
-	-- Un différentiel ouvert égaliserait les couples et laisserait la roue la moins
-	-- adhérente tout prendre ; on garde ici une répartition rigide, moyennée.
-	-- Moyenne SIGNÉE : en marche arrière, les roues tournent à l'envers.
+	self.BrakePressure = approachPressure(self.BrakePressure, brake, dt, BRAKE_APPLY_TIME, BRAKE_RELEASE_TIME)
+	self.HandbrakePressure = approachPressure(
+		self.HandbrakePressure,
+		if inputs.handbrake then 1 else 0,
+		dt,
+		HANDBRAKE_APPLY_TIME,
+		HANDBRAKE_RELEASE_TIME
+	)
+
+	--[[
+		DÉSACCOUPLEMENT DE L'ARRIÈRE. Sur une 4 roues motrices de rallye, tirer le
+		frein à main ouvre un embrayage dans la transmission centrale : l'arrière
+		n'est plus entraîné, tout le couple part à l'avant. Sans ça, le frein à main
+		lutte contre le moteur sur l'essieu arrière, le moteur l'emporte en partie,
+		et l'épingle au frein à main reste molle. Avec : l'arrière se bloque net
+		pendant que l'avant continue de tirer la voiture dans le virage.
+	]]
+	local rearDecoupled = inputs.handbrake
+
+	-- Moteur : le régime est imposé par la rotation des roues ENTRAÎNÉES via la
+	-- transmission. Un différentiel ouvert égaliserait les couples et laisserait la
+	-- roue la moins adhérente tout prendre ; on garde ici une répartition rigide,
+	-- moyennée. Moyenne SIGNÉE : en marche arrière, les roues tournent à l'envers.
+	-- Arrière désaccouplé, ses roues bloquées ne doivent plus tirer le régime vers le bas.
 	local drivenAngularVelocity = 0
+	local drivenCount = 0
 	for _, wheel in ipairs(self.Wheels) do
-		drivenAngularVelocity += wheel.AngularVelocity
+		if wheel.IsFront or not rearDecoupled then
+			drivenAngularVelocity += wheel.AngularVelocity
+			drivenCount += 1
+		end
 	end
-	drivenAngularVelocity /= #self.Wheels
+	drivenAngularVelocity /= drivenCount
 
 	-- Couple à la roue, plus une force : c'est la roue qui le convertira en
 	-- traction, à hauteur de ce que le glissement et l'adhérence permettent.
 	local totalWheelTorque = self.Powertrain:Update(dt, drivenAngularVelocity, throttle)
 
 	-- Différentiel AWD
-	local rearTorquePerWheel = (totalWheelTorque * self.DriveBiasRear) / 2
-	local frontTorquePerWheel = (totalWheelTorque * (1.0 - self.DriveBiasRear)) / 2
+	local rearShare = if rearDecoupled then 0 else self.DriveBiasRear
+	local rearTorquePerWheel = (totalWheelTorque * rearShare) / 2
+	local frontTorquePerWheel = (totalWheelTorque * (1.0 - rearShare)) / 2
 
 	-- Ackermann Steering
 	local targetSteerAngle = math.rad(self.MaxSteerAngle * inputs.steer)
@@ -183,13 +241,12 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	for _, wheel in ipairs(self.Wheels) do
 		local driveTorque = wheel.IsFront and frontTorquePerWheel or rearTorquePerWheel
 
-		local brakeForce = 0
-		if brake > 0 then
-			local bias = wheel.IsFront and self.BrakeBiasFront or (1.0 - self.BrakeBiasFront)
-			brakeForce = self.MaxBrakeForce * brake * bias
-		end
-		if inputs.handbrake and not wheel.IsFront then
-			brakeForce = self.HandbrakeForce
+		-- Part de l'essieu, puis moitié par roue.
+		local axleBias = if wheel.IsFront then self.BrakeBiasFront else (1.0 - self.BrakeBiasFront)
+		local brakeForce = self.MaxBrakeForce * self.BrakePressure * axleBias / 2
+		if not wheel.IsFront then
+			-- Les deux commandes agissent sur les mêmes étriers : la plus forte l'emporte.
+			brakeForce = math.max(brakeForce, self.HandbrakeForce * self.HandbrakePressure)
 		end
 
 		local wheelSteerAngle = 0

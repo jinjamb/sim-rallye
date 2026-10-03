@@ -5,11 +5,25 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
+
+-- Toute la calibration (suspension, freins, aéro) est déduite du poids au moment
+-- de Car.new : une gravité qui ne correspond pas à l'échelle fausse tout en silence.
+-- Elle est réglée dans default.project.json ; si Rojo n'a pas synchronisé le place,
+-- on le dit plutôt que de rouler sur une physique 5.6 fois trop adhérente.
+if math.abs(workspace.Gravity - Units.REAL_GRAVITY) > 0.5 then
+	warn(string.format(
+		"[Car] workspace.Gravity = %.1f, attendu %.1f (gravité réelle à %.2f m/stud). Synchronise le place avec Rojo.",
+		workspace.Gravity,
+		Units.REAL_GRAVITY,
+		Units.METERS_PER_STUD
+	))
+end
 
 local carModel = workspace:WaitForChild("RallyCar") :: Model
 local chassis = carModel:WaitForChild("Chassis") :: BasePart
@@ -245,7 +259,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		.. (if powertrain.FuelCut then " RUPTEUR" else "")
 
 	print(string.format(
-		"[Car] throttle=%.0f brake=%.0f steer=%.0f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.1f studs/s | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
+		"[Car] throttle=%.0f brake=%.0f steer=%.0f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.0f km/h | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
 		inputs.throttle,
 		inputs.brake,
 		inputs.steer,
@@ -254,7 +268,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 		totalLoad,
 		chassis.AssemblyMass * workspace.Gravity,
 		surfaceLabel,
-		chassis.AssemblyLinearVelocity.Magnitude,
+		Units.ToKmh(chassis.AssemblyLinearVelocity.Magnitude),
 		if gearbox.Automatic then "A" else "M",
 		gearLabel,
 		powertrain.EngineRPM,

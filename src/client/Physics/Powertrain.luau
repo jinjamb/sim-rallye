@@ -6,6 +6,8 @@
 	répartir sur les roues.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local GearboxClass = require(script.Parent.Gearbox)
 
 local Powertrain = {}
@@ -39,18 +41,19 @@ local TorqueCurve = {
 }
 
 --[[
-	Roblox n'est pas en unités SI : la gravité vaut 196.2 studs/s² et un stud n'est
-	pas un mètre. Une courbe de couple "réaliste" en N·m ne produit donc pas
-	l'accélération attendue. TorqueScale fait le pont, et se déduit d'une cible
-	d'accélération au lieu d'être un nombre magique -- c'est le rapport
-	poids/puissance du véhicule.
+	CALIBRATION : RAPPORT POIDS/PUISSANCE RÉEL.
+	La masse d'une assembly Roblox n'est pas en kg et un stud n'est pas un mètre :
+	la courbe en N·m ne peut pas être appliquée telle quelle. TorqueScale fait le
+	pont, en imposant que la puissance MAXIMALE de la courbe, ramenée à la masse
+	du véhicule, soit celle d'une vraie voiture de rallye (voir Units.luau pour
+	la conversion d'échelle). La forme de la courbe est conservée, seule son
+	amplitude est recalée ; l'étagement de la boîte n'y entre pas.
 
-	La cible est exprimée sur un rapport de RÉFÉRENCE fixe (l'ancien rapport
-	unique, 1.86 x 4.1), indépendant de l'étagement : on peut retoucher les
-	rapports de la boîte sans changer la puissance du moteur.
+	Rally2 : ~290 ch (213 kW) pour ~1400 kg équipage compris -> ~150 W/kg.
+	En 1re, la poussée au couple max dépasse alors nettement l'adhérence sur
+	asphalte (voir Gearbox.luau), comme sur la vraie : d'où les launch controls.
 ]]
-local REFERENCE_TOTAL_RATIO = 1.86 * 4.1
-local TARGET_REFERENCE_ACCELERATION = 90 -- studs/s² au couple maximal, sur le rapport de référence
+local TARGET_POWER_TO_WEIGHT = 150 -- W/kg
 
 --[[
 	EMBRAYAGE.
@@ -89,10 +92,38 @@ local LIMITER_HYSTERESIS = 250
 
 local RAD_PER_SEC_TO_RPM = 9.5492
 
+-- Couple de la courbe brute (N·m), interpolé linéairement.
+local function sampleCurve(rpm: number): number
+	if rpm <= TorqueCurve[1].rpm then
+		return TorqueCurve[1].torque
+	end
+	if rpm >= TorqueCurve[#TorqueCurve].rpm then
+		return TorqueCurve[#TorqueCurve].torque
+	end
+	for i = 1, #TorqueCurve - 1 do
+		local p1, p2 = TorqueCurve[i], TorqueCurve[i + 1]
+		if rpm >= p1.rpm and rpm <= p2.rpm then
+			return p1.torque + (p2.torque - p1.torque) * ((rpm - p1.rpm) / (p2.rpm - p1.rpm))
+		end
+	end
+	return 0
+end
+
 local function getPeakTorque(): number
 	local peak = 0
 	for _, point in ipairs(TorqueCurve) do
 		peak = math.max(peak, point.torque)
+	end
+	return peak
+end
+
+-- Puissance maximale de la courbe brute (N·m x rad/s), échantillonnée : le pic ne
+-- tombe pas forcément sur un point de la courbe.
+local function getPeakPower(): number
+	local peak = 0
+	local lastRpm = TorqueCurve[#TorqueCurve].rpm
+	for rpm = 0, lastRpm, 25 do
+		peak = math.max(peak, sampleCurve(rpm) * rpm / RAD_PER_SEC_TO_RPM)
 	end
 	return peak
 end
@@ -107,10 +138,10 @@ function Powertrain.new(vehicleMass: number): Powertrain
 	-- Doit correspondre au rayon des roues visuelles du gabarit (TireXX.Size.Y / 2).
 	self.WheelRadius = 1.0
 
-	local peakTorque = getPeakTorque()
-	self.TorqueScale = (vehicleMass * TARGET_REFERENCE_ACCELERATION * self.WheelRadius)
-		/ (peakTorque * REFERENCE_TOTAL_RATIO)
-	self.EngineBrakeTorque = peakTorque * self.TorqueScale * ENGINE_BRAKE_RATIO
+	-- Puissance (masse * studs² / s³) = couple (masse * studs² / s²) x rad/s.
+	local targetPower = vehicleMass * Units.PowerToWeightToStuds(TARGET_POWER_TO_WEIGHT)
+	self.TorqueScale = targetPower / getPeakPower()
+	self.EngineBrakeTorque = getPeakTorque() * self.TorqueScale * ENGINE_BRAKE_RATIO
 
 	self.Gearbox = GearboxClass.new(self.LimiterRPM, self.WheelRadius)
 
@@ -121,20 +152,7 @@ function Powertrain.new(vehicleMass: number): Powertrain
 end
 
 function Powertrain:GetEngineTorque(rpm: number): number
-	if rpm <= TorqueCurve[1].rpm then
-		return TorqueCurve[1].torque * self.TorqueScale
-	end
-	if rpm >= TorqueCurve[#TorqueCurve].rpm then
-		return TorqueCurve[#TorqueCurve].torque * self.TorqueScale
-	end
-	for i = 1, #TorqueCurve - 1 do
-		local p1, p2 = TorqueCurve[i], TorqueCurve[i + 1]
-		if rpm >= p1.rpm and rpm <= p2.rpm then
-			local interpolated = p1.torque + (p2.torque - p1.torque) * ((rpm - p1.rpm) / (p2.rpm - p1.rpm))
-			return interpolated * self.TorqueScale
-		end
-	end
-	return 0
+	return sampleCurve(rpm) * self.TorqueScale
 end
 
 function Powertrain:_revFreely(dt: number, target: number)

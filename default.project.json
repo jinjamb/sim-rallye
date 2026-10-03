@@ -16,6 +16,10 @@
     },
 
     "StarterPlayer": {
+      "$properties": {
+        "CharacterUseJumpPower": false,
+        "CharacterJumpHeight": 7.2
+      },
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
@@ -25,7 +29,8 @@
 
     "Workspace": {
       "$properties": {
-        "FilteringEnabled": true
+        "FilteringEnabled": true,
+        "Gravity": 35.036
       },
       "Baseplate": {
         "$className": "Part",
