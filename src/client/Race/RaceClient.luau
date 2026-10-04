@@ -1,0 +1,336 @@
+--!strict
+--[[
+	RaceClient.luau
+	Le rallycross côté client : reçoit ce qu'envoie RaceService (courses
+	ouvertes, état de sa course, classement en direct, événements, records) et
+	le répartit entre le menu (RaceMenu), l'affichage de course (RaceHud) et la
+	caméra spectateur (SpectatorCamera).
+
+	Les décisions (tours, positions, arrivée) sont toutes prises par le serveur :
+	ce module ne fait qu'afficher et transmettre les demandes du joueur.
+]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local RaceUi = require(script.Parent.RaceUi)
+local RaceMenu = require(script.Parent.RaceMenu)
+local RaceHud = require(script.Parent.RaceHud)
+local Minimap = require(script.Parent.Minimap)
+local SpectatorCamera = require(script.Parent.SpectatorCamera)
+
+local RaceClient = {}
+RaceClient.__index = RaceClient
+
+export type Options = {
+	PlayerGui: Instance,
+	Camera: Camera,
+	LocalUserId: number,
+	-- Voitures des autres joueurs visibles (même course), par UserId.
+	GetOtherCars: () -> { [number]: BasePart },
+	-- Le joueur quitte la vue spectateur : la caméra de poursuite reprend la main.
+	OnSpectateStopped: () -> (),
+}
+
+export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
+	Options: Options,
+	Menu: RaceMenu.RaceMenu,
+	Hud: RaceHud.RaceHud,
+	Spectator: SpectatorCamera.SpectatorCamera,
+	Lobby: { RaceUi.LobbyRace },
+	Race: RaceUi.RaceSnapshot?,
+	Live: RaceUi.LivePayload?,
+	Records: { [string]: RaceUi.TrackBoard },
+	Stats: RaceUi.Stats?,
+	LapBests: { [string]: number },
+	MyChassis: BasePart?,
+}
+
+local function serverNow(): number
+	return workspace:GetServerTimeNow()
+end
+
+function RaceClient.new(options: Options): RaceClient
+	local self = (setmetatable({}, RaceClient) :: any) :: RaceClient
+	self.Options = options
+	self.Lobby = {}
+	self.Race = nil
+	self.Live = nil
+	self.Records = {}
+	self.Stats = nil
+	self.LapBests = {}
+	self.MyChassis = nil
+
+	self.Menu = RaceMenu.new(options.PlayerGui, options.LocalUserId, function(action: string, payload: any)
+		Remotes.RaceAction:FireServer(action, payload)
+	end)
+	self.Hud = RaceHud.new(options.PlayerGui, options.LocalUserId, {
+		Spectate = function()
+			self:StartSpectating()
+		end,
+		SpectateNext = function(direction: number)
+			self:SpectateNext(direction)
+		end,
+		StopSpectate = function()
+			self:StopSpectating()
+		end,
+	})
+	self.Spectator = SpectatorCamera.new(options.Camera)
+
+	Remotes.LobbyState.OnClientEvent:Connect(function(list: any)
+		if type(list) == "table" then
+			self.Lobby = list
+			self:_refreshMenu()
+		end
+	end)
+	Remotes.RaceState.OnClientEvent:Connect(function(snapshot: any)
+		self:_setRace(if type(snapshot) == "table" then snapshot else nil)
+	end)
+	Remotes.RaceLive.OnClientEvent:Connect(function(payload: any)
+		if type(payload) == "table" and type(payload.Rows) == "table" then
+			self.Live = payload
+			self.Hud:SetLive(payload)
+		end
+	end)
+	Remotes.RaceEvent.OnClientEvent:Connect(function(kind: any, data: any)
+		self:_onEvent(kind, if type(data) == "table" then data else {})
+	end)
+	Remotes.TrackRecords.OnClientEvent:Connect(function(boards: any)
+		if type(boards) == "table" then
+			self.Records = boards
+			self:_refreshMenu()
+		end
+	end)
+	return self
+end
+
+function RaceClient:_refreshMenu()
+	self.Menu:SetData({
+		Lobby = self.Lobby,
+		Race = self.Race,
+		Records = self.Records,
+		Stats = self.Stats,
+		Laps = self.LapBests,
+	})
+end
+
+function RaceClient:_setRace(snapshot: RaceUi.RaceSnapshot?)
+	local previous = self.Race
+	self.Race = snapshot
+	if not snapshot or snapshot.State == "Lobby" then
+		self.Live = nil
+		self:StopSpectating()
+	end
+	if snapshot and snapshot.State ~= "Racing" and self.Spectator.Active then
+		self:StopSpectating()
+	end
+	-- La mise en grille ferme le menu : place à la course.
+	if snapshot and snapshot.State == "Grid" and (previous == nil or previous.State ~= "Grid") then
+		self.Menu:SetOpen(false)
+	end
+	self.Hud:SetRace(snapshot)
+	self:_refreshMenu()
+end
+
+function RaceClient:_onEvent(kind: string, data: any)
+	local hud = self.Hud
+	local race = self.Race
+	if kind == "Error" then
+		local message = tostring(data.Message or "Action impossible.")
+		self.Menu:SetStatus(message, RaceUi.COLOR_RED)
+		hud:ShowMessage(message, RaceUi.COLOR_RED)
+	elseif kind == "Go" then
+		hud:ShowMessage("GO !", RaceUi.COLOR_GREEN, 1.2)
+	elseif kind == "Lap" then
+		local lap = tonumber(data.Lap) or 0
+		local text = string.format("TOUR %d — %s", lap, RaceUi.FormatTime(tonumber(data.Time)))
+		local color = RaceUi.COLOR_TEXT
+		if data.Record then
+			text ..= " — RECORD PERSO DU CIRCUIT !"
+			color = RaceUi.COLOR_ACCENT
+		elseif data.Best and lap > 1 then
+			text ..= " — MEILLEUR TOUR"
+			color = RaceUi.COLOR_GREEN
+		end
+		if race and lap == race.Laps - 1 then
+			local myRow = self:_myRow()
+			local jokerDue = myRow ~= nil and myRow.J == 0
+			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. RaceUi.FormatTime(tonumber(data.Time))
+			color = if jokerDue then RaceUi.COLOR_ORANGE else RaceUi.COLOR_TEXT
+		end
+		hud:ShowMessage(text, color, 3)
+	elseif kind == "Joker" then
+		local count = tonumber(data.Count) or 1
+		if count == 1 then
+			hud:ShowMessage("JOKER ✓", RaceUi.COLOR_GREEN)
+		else
+			hud:ShowMessage("JOKER EN TROP : un seul suffit", RaceUi.COLOR_ORANGE)
+		end
+	elseif kind == "Penalty" then
+		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), string.upper(tostring(data.Reason))), RaceUi.COLOR_RED, 3.5)
+	elseif kind == "Chequered" then
+		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", RaceUi.COLOR_TEXT, 3)
+	elseif kind == "Finished" then
+		hud:ShowMessage(string.format("ARRIVÉE — P%d", tonumber(data.Position) or 0), RaceUi.COLOR_ACCENT, 4)
+	elseif kind == "Results" then
+		self:StopSpectating()
+		hud:ShowResults(data :: any)
+	end
+end
+
+function RaceClient:_myRow(): RaceUi.LiveRow?
+	local live = self.Live
+	if not live then
+		return nil
+	end
+	for _, row in ipairs(live.Rows) do
+		if row.U == self.Options.LocalUserId then
+			return row
+		end
+	end
+	return nil
+end
+
+-- Profil : statistiques de carrière et meilleurs tours (par Circuit.Key).
+function RaceClient:SetProfile(stats: any, laps: any)
+	if type(stats) == "table" then
+		self.Stats = stats
+	end
+	if type(laps) == "table" then
+		self.LapBests = laps
+	end
+	self:_refreshMenu()
+end
+
+function RaceClient:SetTouchLayout(enabled: boolean)
+	self.Menu:SetTouchLayout(enabled)
+	self.Hud:SetTouchLayout(enabled)
+end
+
+function RaceClient:ToggleMenu()
+	self.Menu:Toggle()
+end
+
+-- Châssis de sa propre voiture (pour la mini-carte), nil sans voiture.
+function RaceClient:SetMyChassis(chassis: BasePart?)
+	self.MyChassis = chassis
+end
+
+--------------------------------------------------------------------------------
+-- Spectateur
+--------------------------------------------------------------------------------
+
+-- Possible une fois arrivé, tant que d'autres roulent encore.
+function RaceClient:CanSpectate(): boolean
+	local race = self.Race
+	local me = self:_myRow()
+	return race ~= nil and race.State == "Racing" and me ~= nil and me.F
+end
+
+function RaceClient:IsSpectating(): boolean
+	return self.Spectator.Active
+end
+
+-- Pilotes à suivre : ceux encore en course d'abord, dans l'ordre du classement.
+function RaceClient:_targets(): { { UserId: number, Name: string, Chassis: BasePart } }
+	local cars = self.Options.GetOtherCars()
+	local running, finished = {}, {}
+	local live = self.Live
+	if live then
+		for _, row in ipairs(live.Rows) do
+			local chassis = cars[row.U]
+			if row.U ~= self.Options.LocalUserId and chassis and not row.D then
+				table.insert(if row.F then finished else running, { UserId = row.U, Name = row.N, Chassis = chassis })
+			end
+		end
+	end
+	for _, entry in ipairs(finished) do
+		table.insert(running, entry)
+	end
+	return running
+end
+
+function RaceClient:StartSpectating()
+	if not self:CanSpectate() then
+		return
+	end
+	local targets = self:_targets()
+	local first = targets[1]
+	if first then
+		self.Spectator:SetTarget(first.Chassis, first.Name, first.UserId)
+	end
+end
+
+function RaceClient:SpectateNext(direction: number)
+	if not self.Spectator.Active then
+		self:StartSpectating()
+		return
+	end
+	local targets = self:_targets()
+	if #targets == 0 then
+		return
+	end
+	local index = 1
+	for i, entry in ipairs(targets) do
+		if entry.UserId == self.Spectator.TargetUserId then
+			index = ((i - 1 + direction) % #targets) + 1
+		end
+	end
+	local target = targets[index]
+	self.Spectator:SetTarget(target.Chassis, target.Name, target.UserId)
+end
+
+function RaceClient:StopSpectating()
+	if self.Spectator.Active then
+		self.Spectator:Stop()
+		self.Options.OnSpectateStopped()
+	end
+end
+
+-- Caméra : renvoie true si la vue spectateur l'a prise en charge.
+function RaceClient:UpdateCamera(dt: number): boolean
+	local spectator = self.Spectator
+	if not spectator.Active then
+		return false
+	end
+	local target = spectator.Target
+	if not target or not target:IsDescendantOf(workspace) then
+		-- Voiture disparue (pilote parti) : au suivant, ou fin de la vue.
+		local targets = self:_targets()
+		if targets[1] then
+			spectator:SetTarget(targets[1].Chassis, targets[1].Name, targets[1].UserId)
+		else
+			self:StopSpectating()
+			return false
+		end
+	end
+	spectator:Update(dt)
+	return true
+end
+
+--------------------------------------------------------------------------------
+-- Mise à jour
+--------------------------------------------------------------------------------
+
+function RaceClient:Update(dt: number)
+	self.Menu:Update()
+	local race = self.Race
+	local cars: { Minimap.CarDot } = {}
+	if race and race.State ~= "Lobby" then
+		local mine = self.MyChassis
+		if mine and mine:IsDescendantOf(workspace) then
+			table.insert(cars, { Position = mine.Position, Me = true })
+		end
+		for _, chassis in pairs(self.Options.GetOtherCars()) do
+			table.insert(cars, { Position = chassis.Position, Me = false })
+		end
+	end
+	self.Hud:Update(dt, cars, serverNow())
+	self.Hud:SetSpectate({
+		Available = self:CanSpectate(),
+		Active = self.Spectator.Active,
+		Name = self.Spectator.TargetName,
+	})
+end
+
+return RaceClient

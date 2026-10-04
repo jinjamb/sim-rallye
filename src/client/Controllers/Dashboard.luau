@@ -256,6 +256,10 @@ function Dashboard:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
 end
 
+function Dashboard:Destroy()
+	self.Gui:Destroy()
+end
+
 --[[
 	Disposition tactile : les pouces occupent les coins bas (volant, pédales,
 	TouchControls.luau), le tableau de bord monte en haut à droite. La

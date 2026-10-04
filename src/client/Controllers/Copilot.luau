@@ -111,6 +111,10 @@ function Copilot:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
 end
 
+function Copilot:Destroy()
+	self.Gui:Destroy()
+end
+
 -- Disposition tactile : la rangée d'actions occupe le haut de l'écran, le
 -- bandeau du copilote descend juste en dessous.
 function Copilot:SetTouchLayout(enabled: boolean)

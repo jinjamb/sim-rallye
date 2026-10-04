@@ -28,6 +28,9 @@ export type Powertrain = typeof(setmetatable({}, Powertrain)) & {
 	ClutchSlipping: boolean,
 	FuelCut: boolean,
 	Load: number, -- 0..1 : le moteur pousse (1) ou est entraîné (0). Pilote le son.
+	-- Embrayage tenu ouvert (voiture retenue sur la grille, Car.Held) : le moteur
+	-- monte en régime sans entraîner les roues, plafonné au régime de départ.
+	ClutchHeld: boolean,
 }
 
 -- Courbe en N·m, tracée comme sur un banc réel. Elle n'est PAS directement
@@ -152,6 +155,7 @@ function Powertrain.new(vehicleMass: number, wheelRadius: number): Powertrain
 	self.ClutchSlipping = false
 	self.FuelCut = false
 	self.Load = 0
+	self.ClutchHeld = false
 	return self
 end
 
@@ -183,7 +187,7 @@ function Powertrain:Update(dt: number, wheelAngularVelocity: number, throttle: n
 	-- si la voiture roule à l'envers du rapport engagé (recul en 1re, avance en R).
 	local coupledRPM = wheelAngularVelocity * totalRatio * RAD_PER_SEC_TO_RPM
 
-	local clutchOpen = gearbox.Gear == 0 or gearbox:IsShifting()
+	local clutchOpen = gearbox.Gear == 0 or gearbox:IsShifting() or self.ClutchHeld
 	local isLaunchGear = gearbox.Gear == 1 or gearbox.Gear == -1
 	local slipFloorRPM = if isLaunchGear
 		then self.IdleRPM + throttle * (self.LaunchRPM - self.IdleRPM)
@@ -196,8 +200,11 @@ function Powertrain:Update(dt: number, wheelAngularVelocity: number, throttle: n
 	elseif clutchOpen then
 		-- Point mort : le moteur monte librement. Pendant un passage : il se
 		-- synchronise sur le nouveau rapport (chute à la montée, coup de gaz à la descente).
-		local target = if gearbox.Gear == 0
-			then self.IdleRPM + throttle * (self.LimiterRPM - self.IdleRPM)
+		-- Embrayage tenu : "launch control", le régime plafonne au régime de départ,
+		-- en plein couple quand l'embrayage se fermera.
+		local target = if self.ClutchHeld
+			then self.IdleRPM + throttle * (self.LaunchRPM - self.IdleRPM)
+			elseif gearbox.Gear == 0 then self.IdleRPM + throttle * (self.LimiterRPM - self.IdleRPM)
 			else math.clamp(coupledRPM, self.IdleRPM, self.MaxRPM)
 		self:_revFreely(dt, target)
 	else

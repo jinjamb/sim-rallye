@@ -11,8 +11,9 @@
 		plus on accélère (ou freine). Un appui en bas donne déjà 35 % : le dosage
 		se fait en glissant le pouce. À côté : frein à main, rapports.
 		EN HAUT, une rangée d'actions : remise en piste, retour au départ, boîte
-		auto/manuelle, réglages, classement, descendre de voiture.
-		Hors de la voiture : un seul gros bouton "Prendre le volant".
+		auto/manuelle, réglages, classement, courses de rallycross, descendre de
+		voiture. En course, "départ" et "sortir" disparaissent (SetRaceMode).
+		Hors de la voiture : "Prendre le volant" et "Courses".
 
 	MULTITOUCH : chaque contrôle retient LE doigt qui l'a touché (l'InputObject
 	d'un toucher reste le même du début à la fin) et ne suit que lui. On peut
@@ -38,6 +39,7 @@ export type Actions = {
 	Restart: () -> (),
 	ToggleSetup: () -> (),
 	ToggleLeaderboard: () -> (),
+	ToggleRaceMenu: () -> (),
 	EnterCar: () -> (),
 	ExitCar: () -> (),
 }
@@ -62,6 +64,8 @@ export type TouchControls = typeof(setmetatable({}, TouchControls)) & {
 	SteerKnob: Frame,
 	SteerOrigin: number?,
 	Holds: { Hold },
+	ActionRow: Frame,
+	ActionButtons: { [string]: TextButton },
 }
 
 -- Dimensions de référence pour un écran de 400 points de haut (téléphone en
@@ -221,13 +225,15 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	shiftButton("−", -MARGIN, actions.ShiftDown)
 	shiftButton("+", -(MARGIN + 52 + GAP), actions.ShiftUp)
 
-	-- Rangée d'actions, en haut au centre
+	-- Rangée d'actions, en haut au centre (largeur ajustée par le UIListLayout)
 	local row = Instance.new("Frame")
 	row.AnchorPoint = Vector2.new(0.5, 0)
 	row.Position = UDim2.new(0.5, 0, 0, 6)
-	row.Size = UDim2.fromOffset(6 * 54 + 5 * 6, 34)
+	row.Size = UDim2.fromOffset(0, 34)
+	row.AutomaticSize = Enum.AutomaticSize.X
 	row.BackgroundTransparency = 1
 	row.Parent = driving
+	self.ActionRow = row
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Horizontal
 	layout.Padding = UDim.new(0, 6)
@@ -239,11 +245,15 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 		{ "BOÎTE", actions.ToggleMode },
 		{ "RÉGLAGES", actions.ToggleSetup },
 		{ "TEMPS", actions.ToggleLeaderboard },
+		{ "COURSES", actions.ToggleRaceMenu },
 		{ "SORTIR", actions.ExitCar },
 	}
+	self.ActionButtons = {}
 	for index, entry in ipairs(actionList) do
-		local button = actionButton(row, entry[1] :: string, entry[2] :: () -> ())
+		local name = entry[1] :: string
+		local button = actionButton(row, name, entry[2] :: () -> ())
 		button.LayoutOrder = index
+		self.ActionButtons[name] = button
 	end
 
 	-- À pied ------------------------------------------------------------------
@@ -265,6 +275,17 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	styled(enter, 12)
 	enter.Activated:Connect(actions.EnterCar)
 	enter.Parent = walking
+	local races = Instance.new("TextButton")
+	races.AnchorPoint = Vector2.new(0.5, 1)
+	races.Position = UDim2.new(0.5, 0, 1, -(MARGIN + 52 + GAP))
+	races.Size = UDim2.fromOffset(200, 40)
+	races.Text = "COURSES"
+	races.TextSize = 14
+	races.Font = Enum.Font.GothamBlack
+	races.TextColor3 = COLOR_TEXT
+	styled(races, 12)
+	races.Activated:Connect(actions.ToggleRaceMenu)
+	races.Parent = walking
 
 	-- Zones tenues ------------------------------------------------------------
 	local function pedalUpdate(color: Color3)
@@ -367,6 +388,19 @@ function TouchControls:SetDriving(driving: boolean)
 			self:_release(hold)
 		end
 		self:_push()
+	end
+end
+
+-- En course : pas de retour au départ de la spéciale, et on ne descend pas de
+-- voiture (on abandonne depuis le menu COURSES).
+function TouchControls:SetRaceMode(racing: boolean)
+	local restart = self.ActionButtons["DÉPART"]
+	local exit = self.ActionButtons["SORTIR"]
+	if restart then
+		restart.Visible = not racing
+	end
+	if exit then
+		exit.Visible = not racing
 	end
 end
 

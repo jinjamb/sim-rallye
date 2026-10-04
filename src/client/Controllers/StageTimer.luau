@@ -175,6 +175,10 @@ function StageTimer:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
 end
 
+function StageTimer:Destroy()
+	self.Gui:Destroy()
+end
+
 -- Disposition tactile : le volant occupe le coin bas-gauche, le chrono monte
 -- en haut à gauche (sous la barre de Roblox).
 function StageTimer:SetTouchLayout(enabled: boolean)

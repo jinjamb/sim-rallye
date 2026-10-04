@@ -36,6 +36,11 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	Weight: number,
 	SpringRate: number,
 	Setup: CarSetup.Setup,
+
+	-- Retenue sur la grille de départ (attribut Held du châssis, posé par le
+	-- serveur) : freins et frein à main serrés, embrayage ouvert, 1re engagée.
+	-- L'accélérateur fait seulement monter le régime, jusqu'à l'extinction des feux.
+	Held: boolean,
 }
 
 --[[
@@ -130,6 +135,7 @@ function Car.new(chassis: BasePart): Car
 	self.HandbrakeForce = weight * HANDBRAKE_FORCE_RATIO
 	self.BrakePressure = 0
 	self.HandbrakePressure = 0
+	self.Held = false
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -297,10 +303,22 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	applyAxleAntiRoll(self.WheelsByName.WheelFL, self.WheelsByName.WheelFR, self.AntiRollFront)
 	applyAxleAntiRoll(self.WheelsByName.WheelRL, self.WheelsByName.WheelRR, self.AntiRollRear)
 
-	-- Boîte : la logique auto voit les pédales telles que le joueur les appuie.
+	-- Voiture retenue sur la grille : on ne garde du joueur que l'accélérateur
+	-- (montée en régime) et le volant.
 	local gearbox = self.Powertrain.Gearbox
+	self.Powertrain.ClutchHeld = self.Held
+	if self.Held then
+		inputs = { throttle = inputs.throttle, brake = 1, steer = inputs.steer, handbrake = true }
+		gearbox.Gear = 1
+		gearbox.ShiftTimer = 0
+		gearbox.PendingDownshifts = 0
+	end
+
+	-- Boîte : la logique auto voit les pédales telles que le joueur les appuie.
 	local forwardSpeed = self:GetForwardSpeed()
-	if gearbox.Automatic then
+	if self.Held then
+		-- Rien à décider : 1re engagée, embrayage ouvert.
+	elseif gearbox.Automatic then
 		gearbox:UpdateAutomatic(forwardSpeed, inputs.throttle, inputs.brake)
 	else
 		gearbox:ProcessPendingDownshifts(dt, forwardSpeed)

@@ -21,16 +21,32 @@ export type Remotes = {
 	-- autres joueurs (son, roues, poussière). Voir CarService.
 	CarTelemetry: UnreliableRemoteEvent,
 
-	-- Serveur -> Client : (profile) meilleur temps, fantôme et réglages sauvegardés
+	-- Serveur -> Client : (profile) meilleur temps, fantôme, réglages, statistiques
 	ProfileLoaded: RemoteEvent,
+	-- Serveur -> Client : (stats, laps) statistiques et records du tour mis à jour
+	ProfileUpdated: RemoteEvent,
 	-- Serveur -> Client : (result) temps officiel d'une spéciale, mesuré par le serveur
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
-	-- Serveur -> Client : (entries) classement
+	-- Serveur -> Client : (entries) classement de la spéciale
 	Leaderboard: RemoteEvent,
 	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
 	SaveSetup: RemoteEvent,
+
+	-- RALLYCROSS (RaceService)
+	-- Client -> Serveur : (action: string, payload) créer, rejoindre, quitter, prêt, lancer, abandonner
+	RaceAction: RemoteEvent,
+	-- Serveur -> Clients : (races) les courses ouvertes et en cours, pour le menu
+	LobbyState: RemoteEvent,
+	-- Serveur -> Client : (race | nil) la course du joueur : membres, état, horaires
+	RaceState: RemoteEvent,
+	-- Serveur -> Client, ~4 Hz, perte tolérée : classement en direct
+	RaceLive: UnreliableRemoteEvent,
+	-- Serveur -> Client : (kind, data) tour bouclé, joker, pénalité, arrivée, résultats
+	RaceEvent: RemoteEvent,
+	-- Serveur -> Clients : (records) meilleurs tours par circuit
+	TrackRecords: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -38,12 +54,18 @@ local RELIABLE = {
 	"ReleaseCarControl",
 	"CarControlChanged",
 	"ProfileLoaded",
+	"ProfileUpdated",
 	"RunValidated",
 	"SubmitGhost",
 	"Leaderboard",
 	"SaveSetup",
+	"RaceAction",
+	"LobbyState",
+	"RaceState",
+	"RaceEvent",
+	"TrackRecords",
 }
-local UNRELIABLE = { "CarTelemetry" }
+local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 
 local function buildServer(): Remotes
 	local folder = ReplicatedStorage:FindFirstChild("Remotes")

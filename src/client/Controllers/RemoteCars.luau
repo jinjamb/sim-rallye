@@ -12,6 +12,14 @@
 		- POUSSIÈRE : le même CarEffects, sur les surfaces que touchent nos rayons.
 	Télémétrie : attributs posés sur le châssis par CarService (Rpm, Load,
 	Steer, Screech, GravelSlide, GravelShare, TarmacShare, Driven).
+
+	INSTANCES DE COURSE : on ne voit que les voitures du même "monde" que la
+	sienne -- même course (attribut RaceId de la voiture), ou toutes celles du
+	paddock. Plusieurs courses peuvent tourner sur le même circuit : sans ça, on y
+	verrait rouler les voitures des autres courses, au travers de la sienne.
+	Masquage purement local (LocalTransparencyModifier) : rien n'est modifié pour
+	les autres joueurs.
+	Le nom du pilote flotte au-dessus de chaque voiture visible.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -45,10 +53,13 @@ type View = {
 	Audio: CarAudio.CarAudio,
 	Effects: CarEffects.CarEffects,
 	RayParams: RaycastParams,
+	NameTag: BillboardGui,
+	Visible: boolean,
 }
 
 export type RemoteCars = typeof(setmetatable({}, RemoteCars)) & {
 	LocalUserId: number,
+	LocalRaceId: string?,
 	Views: { [BasePart]: View },
 }
 
@@ -61,6 +72,7 @@ local WHEEL_SUFFIXES = { "FL", "FR", "RL", "RR" }
 function RemoteCars.new(localUserId: number): RemoteCars
 	local self = (setmetatable({}, RemoteCars) :: any) :: RemoteCars
 	self.LocalUserId = localUserId
+	self.LocalRaceId = nil
 	self.Views = {}
 
 	for _, chassis in ipairs(CollectionService:GetTagged(CAR_TAG)) do
@@ -125,14 +137,37 @@ function RemoteCars:_add(instance: Instance)
 		params.CollisionGroup = CAR_COLLISION_GROUP
 	end
 
-	self.Views[chassis] = {
+	-- Nom du pilote, au-dessus de la voiture.
+	local tag = Instance.new("BillboardGui")
+	tag.Name = "NameTag"
+	tag.Size = UDim2.fromOffset(160, 28)
+	tag.StudsOffset = Vector3.new(0, 6.5, 0)
+	tag.MaxDistance = 350
+	tag.LightInfluence = 0
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Size = UDim2.fromScale(1, 1)
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 16
+	label.TextColor3 = Color3.new(1, 1, 1)
+	label.TextStrokeTransparency = 0.4
+	label.Text = tostring(model:GetAttribute("OwnerName") or "")
+	label.Parent = tag
+	tag.Adornee = chassis
+	tag.Parent = chassis
+
+	local view: View = {
 		Model = model,
 		Chassis = chassis,
 		Wheels = wheels,
 		Audio = CarAudio.new(chassis, attachments, false),
 		Effects = CarEffects.new(chassis, wheels :: any),
 		RayParams = params,
+		NameTag = tag,
+		Visible = true,
 	}
+	self.Views[chassis] = view
+	self:_applyVisibility(view)
 end
 
 function RemoteCars:_remove(instance: Instance)
@@ -143,6 +178,55 @@ function RemoteCars:_remove(instance: Instance)
 	self.Views[instance :: BasePart] = nil
 	view.Audio:Destroy()
 	view.Effects:Destroy()
+	view.NameTag:Destroy()
+end
+
+-- Même monde que soi : même course, ou tous les deux au paddock.
+function RemoteCars:_shouldShow(view: View): boolean
+	local raceId = view.Model:GetAttribute("RaceId")
+	return raceId == self.LocalRaceId
+end
+
+function RemoteCars:_applyVisibility(view: View)
+	local visible = self:_shouldShow(view)
+	view.Visible = visible
+	local modifier = if visible then 0 else 1
+	for _, item in ipairs(view.Model:GetDescendants()) do
+		if item:IsA("BasePart") or item:IsA("Decal") then
+			item.LocalTransparencyModifier = modifier
+		end
+	end
+	view.NameTag.Enabled = visible
+	if not visible then
+		view.Audio:SetActive(false)
+		view.Effects:SetActive(false)
+	end
+end
+
+-- Course de sa propre voiture (nil = paddock) : seules les voitures du même
+-- monde restent visibles.
+function RemoteCars:SetLocalRaceId(raceId: string?)
+	if raceId == self.LocalRaceId then
+		return
+	end
+	self.LocalRaceId = raceId
+	for _, view in pairs(self.Views) do
+		self:_applyVisibility(view)
+	end
+end
+
+-- Voitures visibles (autres que la sienne), pour la mini-carte et le mode spectateur.
+function RemoteCars:GetVisibleCars(): { [number]: BasePart }
+	local cars = {}
+	for chassis, view in pairs(self.Views) do
+		if view.Visible and chassis:IsDescendantOf(workspace) then
+			local owner = view.Model:GetAttribute("OwnerUserId")
+			if type(owner) == "number" then
+				cars[owner] = chassis
+			end
+		end
+	end
+	return cars
 end
 
 local function attributeNumber(part: BasePart, name: string, default: number): number
@@ -154,6 +238,13 @@ function RemoteCars:Update(dt: number)
 	for chassis, view in pairs(self.Views) do
 		if not chassis:IsDescendantOf(workspace) then
 			continue -- hors de portée (streaming) : on attend qu'elle revienne
+		end
+		-- Une voiture peut changer de course sans être recréée (rare) : on revérifie.
+		if self:_shouldShow(view) ~= view.Visible then
+			self:_applyVisibility(view)
+		end
+		if not view.Visible then
+			continue
 		end
 		local driven = chassis:GetAttribute("Driven") == true
 		view.Audio:SetActive(driven)

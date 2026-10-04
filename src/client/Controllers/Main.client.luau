@@ -1,4 +1,16 @@
 --!strict
+--[[
+	Main.client.luau
+	Point d'entrée du client.
+
+	Ce qui dure toute la partie vit ici : voitures des autres joueurs, menus
+	(réglages, rallycross), classement de la spéciale, commandes tactiles,
+	profil chargé. Ce qui dépend d'UNE voiture vit dans une session de conduite
+	(DrivingSession.luau) : le serveur recrée la voiture à chaque changement de
+	lieu (paddock -> grille de départ -> paddock), et une session neuve est
+	créée pour chaque nouvelle voiture.
+]]
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -7,19 +19,13 @@ local UserInputService = game:GetService("UserInputService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
-local CarClass = require(script.Parent.Parent.Physics.Car)
 local InputManager = require(script.Parent.InputManager)
-local Dashboard = require(script.Parent.Dashboard)
-local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
-local StageTimer = require(script.Parent.StageTimer)
-local ChaseCamera = require(script.Parent.ChaseCamera)
-local CarEffects = require(script.Parent.CarEffects)
-local Copilot = require(script.Parent.Copilot)
 local RemoteCars = require(script.Parent.RemoteCars)
-local Ghost = require(script.Parent.Ghost)
 local Leaderboard = require(script.Parent.Leaderboard)
 local SetupMenu = require(script.Parent.SetupMenu)
 local TouchControls = require(script.Parent.TouchControls)
+local DrivingSession = require(script.Parent.DrivingSession)
+local RaceClient = require(script.Parent.Parent.Race.RaceClient)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -38,49 +44,34 @@ if math.abs(workspace.Gravity - Units.REAL_GRAVITY) > 0.5 then
 	))
 end
 
+local isTouch = TouchControls.IsTouchDevice()
+
+--------------------------------------------------------------------------------
+-- Ce qui dure toute la partie
+--------------------------------------------------------------------------------
+
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)
-RunService.RenderStepped:Connect(function(dt: number)
-	remoteCars:Update(dt)
-end)
-
---------------------------------------------------------------------------------
--- Sa propre voiture : créée par le serveur (CarService) à l'arrivée du joueur
---------------------------------------------------------------------------------
-
-local function waitForOwnCar(): Model
-	while true do
-		for _, child in ipairs(workspace:GetChildren()) do
-			if child:IsA("Model") and child:GetAttribute("OwnerUserId") == player.UserId then
-				return child
-			end
-		end
-		workspace.ChildAdded:Wait()
-	end
-end
-
-local carModel = waitForOwnCar()
-local chassis = carModel:WaitForChild("Chassis") :: BasePart
-local myRallyCar = CarClass.new(chassis)
-
-local wheelAttachments: { Attachment } = {}
-for i, wheel in ipairs(myRallyCar.Wheels) do
-	wheelAttachments[i] = wheel.Attachment
-end
-
-local dashboard = Dashboard.new(myRallyCar, playerGui)
-local carAudio = CarAudio.new(chassis, wheelAttachments, true)
-local stageTimer = StageTimer.new(myRallyCar, playerGui)
-local copilot = Copilot.new(myRallyCar, playerGui)
-local chaseCamera = ChaseCamera.new(myRallyCar, camera)
-local carEffects = CarEffects.new(chassis, myRallyCar.Wheels :: any)
-local ghost = Ghost.new(chassis)
 local leaderboard = Leaderboard.new(playerGui, player.UserId)
 
--- Le client ne simule que s'il possède le NetworkOwnership du châssis :
--- sinon les impulsions sont écrasées par la réplication et la voiture "élastique".
-local hasControl = false
+local session: DrivingSession.DrivingSession? = nil
+local sessionToken = 0
 local debugEnabled = false
+
+-- Profil (chargé par le serveur), gardé d'une voiture à l'autre.
+local currentSetup: CarSetup.Setup = CarSetup.Default()
+local stageBestMs: number? = nil
+local stageGhost: any = nil
+
+local function hasControl(): boolean
+	local current = session
+	return current ~= nil and current.HasControl
+end
+
+local function isRacing(): boolean
+	local current = session
+	return current ~= nil and current:IsRacing()
+end
 
 --------------------------------------------------------------------------------
 -- Réglages de la voiture (menu P), sauvegardés côté serveur
@@ -90,7 +81,11 @@ local SETUP_SAVE_DELAY = 1.5 -- regroupe une rafale de clics en une seule sauveg
 local setupSaveToken = 0
 
 local setupMenu = SetupMenu.new(playerGui, function(setup: CarSetup.Setup)
-	myRallyCar:ApplySetup(setup)
+	currentSetup = setup
+	local current = session
+	if current then
+		current.Car:ApplySetup(setup)
+	end
 	setupSaveToken += 1
 	local token = setupSaveToken
 	task.delay(SETUP_SAVE_DELAY, function()
@@ -99,87 +94,6 @@ local setupMenu = SetupMenu.new(playerGui, function(setup: CarSetup.Setup)
 		end
 	end)
 end)
-
---------------------------------------------------------------------------------
--- Temps officiels, record perso, fantôme, classement (RecordService)
---------------------------------------------------------------------------------
-
--- Le verdict du serveur peut arriver juste AVANT que le chrono local ne voie la
--- ligne : l'envoi du fantôme attend alors la fin de l'enregistrement.
-local ghostUploadPending = false
-
-local function uploadGhost()
-	local recording = ghost.LastRecording
-	if recording then
-		Remotes.SubmitGhost:FireServer(recording)
-		ghost:SetBest(recording)
-	end
-end
-
-stageTimer.OnRunStarted = function()
-	ghostUploadPending = false
-	ghost:StartRun()
-end
-stageTimer.OnRunFinished = function(_seconds: number)
-	ghost:FinishRun()
-	if ghostUploadPending then
-		ghostUploadPending = false
-		uploadGhost()
-	end
-end
-stageTimer.OnRunCancelled = function()
-	ghostUploadPending = false
-	ghost:CancelRun()
-end
-
-Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
-	if type(profile) ~= "table" then
-		return
-	end
-	stageTimer:SetPersonalBest(if type(profile.BestMs) == "number" then profile.BestMs else nil)
-	if type(profile.Ghost) == "table" then
-		ghost:SetBest(profile.Ghost)
-	end
-	local setup = CarSetup.Sanitize(profile.Setup)
-	myRallyCar:ApplySetup(setup)
-	setupMenu:SetSetup(setup)
-end)
-
-Remotes.RunValidated.OnClientEvent:Connect(function(result: any)
-	stageTimer:SetOfficialResult(result)
-	if type(result) == "table" and result.Valid and result.PersonalBest then
-		if ghost.LastRecording then
-			uploadGhost()
-		else
-			ghostUploadPending = true
-		end
-	end
-end)
-
-Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
-	if type(entries) == "table" then
-		leaderboard:SetEntries(entries)
-	end
-end)
-
---------------------------------------------------------------------------------
--- Filtre des raycasts de suspension
---------------------------------------------------------------------------------
-
--- Roues visuelles, carrosserie, pilote soudé : tout ce qui est solidaire de la
--- voiture doit être exclu, sinon les rayons de suspension tapent dedans au lieu
--- de toucher le sol (un raycast ignore CanCollide). Les autres voitures sont
--- traversées grâce au groupe de collision (voir Wheel.luau).
-local function refreshIgnoreList()
-	local ignore: { Instance } = { carModel }
-	local character = player.Character
-	if character then
-		table.insert(ignore, character)
-	end
-	myRallyCar:SetIgnoreList(ignore)
-end
-
-refreshIgnoreList()
 
 --------------------------------------------------------------------------------
 -- Contrôles du personnage
@@ -196,7 +110,7 @@ task.spawn(function()
 	end)
 	if ok then
 		controls = result
-		if hasControl then
+		if hasControl() then
 			controls:Disable()
 		end
 	else
@@ -220,8 +134,8 @@ end
 --------------------------------------------------------------------------------
 
 local function exitDrivingCamera()
-	chaseCamera:Exit()
 	camera.CameraType = Enum.CameraType.Custom
+	camera.FieldOfView = 70
 	local character = player.Character
 	if character then
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
@@ -231,9 +145,34 @@ local function exitDrivingCamera()
 	end
 end
 
+--------------------------------------------------------------------------------
+-- Rallycross : menu, affichage de course, spectateur
+--------------------------------------------------------------------------------
+
+local raceClient = RaceClient.new({
+	PlayerGui = playerGui,
+	Camera = camera,
+	LocalUserId = player.UserId,
+	GetOtherCars = function()
+		return remoteCars:GetVisibleCars()
+	end,
+	OnSpectateStopped = function()
+		local current = session
+		if current and current.HasControl then
+			current.ChaseCamera:Enter()
+		else
+			exitDrivingCamera()
+		end
+	end,
+})
+
 RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, function(dt: number)
-	if hasControl then
-		chaseCamera:Update(dt)
+	if raceClient:UpdateCamera(dt) then
+		return
+	end
+	local current = session
+	if current and current.HasControl then
+		current.ChaseCamera:Update(dt)
 	end
 end)
 
@@ -241,31 +180,44 @@ end)
 -- Actions, communes au clavier, à la manette et à l'écran tactile
 --------------------------------------------------------------------------------
 
+local function drivingSession(): DrivingSession.DrivingSession?
+	local current = session
+	if current and current.HasControl and not current.Parked then
+		return current
+	end
+	return nil
+end
+
 local actions: TouchControls.Actions = {
 	ShiftUp = function()
-		if hasControl then
-			myRallyCar:ShiftUp()
+		local current = drivingSession()
+		if current then
+			current.Car:ShiftUp()
 		end
 	end,
 	ShiftDown = function()
-		if hasControl then
-			myRallyCar:ShiftDown()
+		local current = drivingSession()
+		if current then
+			current.Car:ShiftDown()
 		end
 	end,
 	ToggleMode = function()
-		if hasControl then
-			local automatic = myRallyCar:ToggleAutomatic()
+		local current = drivingSession()
+		if current then
+			local automatic = current.Car:ToggleAutomatic()
 			print("[Car] Boîte", if automatic then "automatique" else "manuelle")
 		end
 	end,
 	Recover = function()
-		if hasControl then
-			stageTimer:Recover()
+		local current = drivingSession()
+		if current then
+			current:Recover()
 		end
 	end,
 	Restart = function()
-		if hasControl then
-			stageTimer:Restart()
+		local current = drivingSession()
+		if current then
+			current:Restart()
 		end
 	end,
 	ToggleSetup = function()
@@ -274,85 +226,227 @@ local actions: TouchControls.Actions = {
 	ToggleLeaderboard = function()
 		leaderboard:Toggle()
 	end,
+	ToggleRaceMenu = function()
+		raceClient:ToggleMenu()
+	end,
 	EnterCar = function()
-		Remotes.RequestCarControl:FireServer(chassis)
+		local current = session
+		if current then
+			Remotes.RequestCarControl:FireServer(current.Chassis)
+		end
 	end,
 	ExitCar = function()
+		-- En course, on ne descend pas de voiture : on abandonne depuis le menu.
+		if isRacing() then
+			raceClient:ToggleMenu()
+			return
+		end
 		Remotes.ReleaseCarControl:FireServer()
 	end,
 }
 
 -- Téléphone ou tablette : commandes à l'écran, et l'interface se range autour.
 local touchControls: TouchControls.TouchControls? = nil
-if TouchControls.IsTouchDevice() then
+if isTouch then
 	local created = TouchControls.new(playerGui, actions)
 	created:SetDriving(false)
 	touchControls = created
-	dashboard:SetTouchLayout(true)
-	stageTimer:SetTouchLayout(true)
-	copilot:SetTouchLayout(true)
 	leaderboard:SetTouchLayout(true)
 	setupMenu:SetTouchLayout(true)
-	RunService.RenderStepped:Connect(function()
-		created:Update()
-	end)
+	raceClient:SetTouchLayout(true)
 end
 
 --------------------------------------------------------------------------------
--- Prise / perte de contrôle
+-- Prise / perte de contrôle, sessions de conduite
 --------------------------------------------------------------------------------
 
-Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart, granted: boolean)
-	if targetChassis ~= chassis then
+-- L'interface suit l'état : au volant ou à pied, au paddock ou en course.
+local function applyDrivingUi()
+	local current = session
+	local driving = hasControl()
+	local racing = isRacing()
+	leaderboard:SetVisible(driving and not racing)
+	local touch = touchControls
+	if touch then
+		touch:SetDriving(driving)
+		touch:SetRaceMode(racing)
+	end
+	remoteCars:SetLocalRaceId(if current then current.RaceId else nil)
+	raceClient:SetMyChassis(if current then current.Chassis else nil)
+end
+
+local function setControl(granted: boolean)
+	local current = session
+	if not current or current.HasControl == granted then
 		return
 	end
-	if granted == hasControl then
-		return
-	end
-
-	hasControl = granted
-	if touchControls then
-		touchControls:SetDriving(granted)
-	end
-
+	current:SetControl(granted)
 	if granted then
-		-- La caméra part de sa position actuelle et glisse vers la voiture.
-		refreshIgnoreList()
-		chaseCamera:Enter()
 		setCharacterControlsEnabled(false)
-		dashboard:SetVisible(true)
-		carAudio:SetActive(true)
-		carEffects:SetActive(true)
-		stageTimer:SetVisible(true)
-		copilot:SetVisible(true)
-		leaderboard:SetVisible(true)
-		ghost:SetVisible(true)
-		print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, Q descendre de voiture, F2 télémétrie, F3 journal")
+		if current:IsRacing() then
+			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
+		else
+			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C rallycross, Q descendre, F2 télémétrie, F3 journal")
+		end
 	else
-		exitDrivingCamera()
+		if not raceClient:IsSpectating() then
+			exitDrivingCamera()
+		end
 		setCharacterControlsEnabled(true)
-		dashboard:SetVisible(false)
-		carAudio:SetActive(false)
-		carEffects:SetActive(false)
-		stageTimer:SetVisible(false)
-		copilot:SetVisible(false)
-		leaderboard:SetVisible(false)
-		ghost:SetVisible(false)
-		print("[Car] Hors de la voiture — E pour reprendre le volant")
+		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le rallycross")
+	end
+	applyDrivingUi()
+end
+
+Remotes.CarControlChanged.OnClientEvent:Connect(function(targetChassis: BasePart?, granted: boolean)
+	-- Une voiture pas encore reçue (recréée à l'instant) arrive en nil : la
+	-- session la réclamera elle-même dès qu'elle sera prête.
+	local current = session
+	if current and targetChassis == current.Chassis then
+		setControl(granted)
 	end
 end)
+
+local function endSession()
+	local current = session
+	if not current then
+		return
+	end
+	session = nil
+	-- Le meilleur temps et le fantôme ont pu changer pendant cette session.
+	local timer, ghost = current.StageTimer, current.Ghost
+	if timer and timer.BestTime then
+		stageBestMs = math.floor((timer.BestTime :: number) * 1000 + 0.5)
+	end
+	if ghost and ghost.Best then
+		stageGhost = ghost.Best
+	end
+	raceClient:StopSpectating()
+	local hadControl = current.HasControl
+	current:Destroy()
+	if hadControl then
+		exitDrivingCamera()
+		setCharacterControlsEnabled(true)
+	end
+	applyDrivingUi()
+end
+
+local function startSession(model: Model)
+	endSession()
+	sessionToken += 1
+	local token = sessionToken
+	local ok, result = pcall(DrivingSession.new, model, {
+		PlayerGui = playerGui,
+		Camera = camera,
+		TouchLayout = isTouch,
+		Setup = currentSetup,
+		StageBestMs = stageBestMs,
+		StageGhost = stageGhost,
+	})
+	if not ok then
+		warn("[Car] Session de conduite impossible :", result)
+		return
+	end
+	local created = result :: DrivingSession.DrivingSession
+	-- Une voiture plus récente est arrivée, ou celle-ci a déjà disparu.
+	if token ~= sessionToken or model.Parent ~= workspace then
+		created:Destroy()
+		return
+	end
+	session = created
+	applyDrivingUi()
+	-- Le serveur donne le volant dès l'apparition, mais son message a pu
+	-- arriver avant la voiture : on le redemande (sans effet si déjà accordé).
+	Remotes.RequestCarControl:FireServer(created.Chassis)
+	task.delay(1.5, function()
+		if session == created and not created.HasControl then
+			Remotes.RequestCarControl:FireServer(created.Chassis)
+		end
+	end)
+end
+
+local function isOwnCar(instance: Instance): boolean
+	return instance:IsA("Model") and instance:GetAttribute("OwnerUserId") == player.UserId
+end
+
+workspace.ChildAdded:Connect(function(child: Instance)
+	if isOwnCar(child) then
+		task.spawn(startSession, child :: Model)
+	end
+end)
+workspace.ChildRemoved:Connect(function(child: Instance)
+	local current = session
+	if current and child == current.Model then
+		endSession()
+	end
+end)
+for _, child in ipairs(workspace:GetChildren()) do
+	if isOwnCar(child) then
+		task.spawn(startSession, child :: Model)
+		break
+	end
+end
 
 -- Personnage qui réapparaît : nouveau Humanoid pour la caméra, et la voiture
 -- vient le rechercher.
 player.CharacterAdded:Connect(function()
-	task.defer(refreshIgnoreList)
-	if not hasControl then
-		task.defer(exitDrivingCamera)
-	end
+	task.defer(function()
+		local current = session
+		if current then
+			current:RefreshIgnoreList()
+		end
+		if not hasControl() and not raceClient:IsSpectating() then
+			exitDrivingCamera()
+		end
+	end)
 	task.delay(1, function()
-		Remotes.RequestCarControl:FireServer(chassis)
+		local current = session
+		if current then
+			Remotes.RequestCarControl:FireServer(current.Chassis)
+		end
 	end)
 end)
+
+--------------------------------------------------------------------------------
+-- Profil, temps officiels, classements
+--------------------------------------------------------------------------------
+
+Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
+	if type(profile) ~= "table" then
+		return
+	end
+	stageBestMs = if type(profile.BestMs) == "number" then profile.BestMs else nil
+	stageGhost = if type(profile.Ghost) == "table" then profile.Ghost else nil
+	currentSetup = CarSetup.Sanitize(profile.Setup)
+	setupMenu:SetSetup(currentSetup)
+	local current = session
+	if current then
+		current.Car:ApplySetup(currentSetup)
+		current:SetStageProfile(stageBestMs, stageGhost)
+	end
+	raceClient:SetProfile(profile.Stats, profile.Laps)
+end)
+
+Remotes.ProfileUpdated.OnClientEvent:Connect(function(stats: any, laps: any)
+	raceClient:SetProfile(stats, laps)
+end)
+
+Remotes.RunValidated.OnClientEvent:Connect(function(result: any)
+	local current = session
+	if current then
+		current:OnRunValidated(result)
+	end
+end)
+
+Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
+	if type(entries) == "table" then
+		leaderboard:SetEntries(entries)
+	end
+end)
+
+--------------------------------------------------------------------------------
+-- Clavier et manette
+--------------------------------------------------------------------------------
 
 UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: boolean)
 	if gameProcessed then
@@ -364,7 +458,10 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	elseif key == Enum.KeyCode.Q or key == Enum.KeyCode.DPadDown then
 		actions.ExitCar()
 	elseif key == Enum.KeyCode.F2 then
-		dashboard:ToggleDetail()
+		local current = session
+		if current then
+			current.Dashboard:ToggleDetail()
+		end
 	elseif key == Enum.KeyCode.F3 then
 		-- Le journal reste utile pour garder une trace écrite d'un essai.
 		debugEnabled = not debugEnabled
@@ -373,6 +470,10 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.ToggleSetup()
 	elseif key == Enum.KeyCode.L or key == Enum.KeyCode.ButtonR3 then
 		actions.ToggleLeaderboard()
+	elseif key == Enum.KeyCode.C or key == Enum.KeyCode.DPadRight then
+		actions.ToggleRaceMenu()
+	elseif key == Enum.KeyCode.V then
+		raceClient:SpectateNext(1)
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		actions.ShiftUp()
@@ -387,47 +488,47 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	end
 end)
 
--- Demande initiale : le serveur ne laisse prendre que SA voiture, où qu'on soit.
-Remotes.RequestCarControl:FireServer(chassis)
-
 --------------------------------------------------------------------------------
--- Affichage, son, effets, fantôme, télémétrie
+-- Affichage, son, effets, télémétrie
 --------------------------------------------------------------------------------
 
 local TELEMETRY_INTERVAL = 0.1 -- 10 Hz : assez pour le son et les roues des autres
 local telemetryAccumulator = 0
 
 RunService.RenderStepped:Connect(function(dt: number)
-	if not hasControl then
-		return
-	end
-	local audioState = CarAudio.StateFromCar(myRallyCar)
-	dashboard:Update(dt)
-	carAudio:Update(dt, audioState)
-	carEffects:Update(dt)
-	stageTimer:Update(dt)
-	ghost:Update(dt)
-	-- Le copilote réutilise l'avancement que le chrono vient de calculer.
-	copilot:Update(dt, stageTimer.LastProgress)
-	leaderboard:Update()
+	remoteCars:Update(dt)
 
-	-- Ce que les autres joueurs entendent et voient de cette voiture (CarService).
-	telemetryAccumulator += dt
-	if telemetryAccumulator >= TELEMETRY_INTERVAL then
-		telemetryAccumulator = 0
-		local screech = 0
-		for _, level in ipairs(audioState.Screech) do
-			screech = math.max(screech, level)
+	local current = session
+	if current then
+		current.Parked = raceClient:IsSpectating()
+		local audioState = current:RenderUpdate(dt)
+		-- Ce que les autres joueurs entendent et voient de cette voiture (CarService).
+		if audioState then
+			telemetryAccumulator += dt
+			if telemetryAccumulator >= TELEMETRY_INTERVAL then
+				telemetryAccumulator = 0
+				local screech = 0
+				for _, level in ipairs(audioState.Screech) do
+					screech = math.max(screech, level)
+				end
+				Remotes.CarTelemetry:FireServer(
+					audioState.Rpm,
+					audioState.Load,
+					InputManager:GetInputs().steer,
+					screech,
+					audioState.GravelSlide,
+					audioState.GravelShare,
+					audioState.TarmacShare
+				)
+			end
 		end
-		Remotes.CarTelemetry:FireServer(
-			audioState.Rpm,
-			audioState.Load,
-			InputManager:GetInputs().steer,
-			screech,
-			audioState.GravelSlide,
-			audioState.GravelShare,
-			audioState.TarmacShare
-		)
+	end
+
+	leaderboard:Update()
+	raceClient:Update(dt)
+	local touch = touchControls
+	if touch then
+		touch:Update()
 	end
 end)
 
@@ -437,7 +538,8 @@ end)
 
 local debugAccumulator = 0
 RunService.Heartbeat:Connect(function(dt: number)
-	if not debugEnabled then
+	local current = session
+	if not debugEnabled or not current then
 		return
 	end
 	debugAccumulator += dt
@@ -446,12 +548,14 @@ RunService.Heartbeat:Connect(function(dt: number)
 	end
 	debugAccumulator = 0
 
+	local car = current.Car
+	local chassis = current.Chassis
 	local inputs = InputManager:GetInputs()
 	local grounded = 0
 	local totalLoad = 0
 	local maxSlip = 0
 	local maxUsage = 0
-	for _, wheel in ipairs(myRallyCar.Wheels) do
+	for _, wheel in ipairs(car.Wheels) do
 		if wheel.IsGrounded then
 			grounded += 1
 			totalLoad += wheel.NormalForce
@@ -465,7 +569,7 @@ RunService.Heartbeat:Connect(function(dt: number)
 	local surfaceNames: { string } = {}
 	local sameSurface = true
 	for i, suffix in ipairs({ "FL", "FR", "RL", "RR" }) do
-		local wheel = myRallyCar.WheelsByName["Wheel" .. suffix]
+		local wheel = car.WheelsByName["Wheel" .. suffix]
 		local name = if wheel.IsGrounded
 			then string.format("%s %.2f", wheel.Surface.Name, wheel.Surface.Grip)
 			else "en l'air"
@@ -478,12 +582,13 @@ RunService.Heartbeat:Connect(function(dt: number)
 		then surfaceNames[1]
 		else string.format("AVG %s / AVD %s / ARG %s / ARD %s", table.unpack(surfaceNames))
 
-	local powertrain = myRallyCar.Powertrain
+	local powertrain = car.Powertrain
 	local gearbox = powertrain.Gearbox
 	local gearLabel = if gearbox.Gear == -1 then "R" elseif gearbox.Gear == 0 then "N" else tostring(gearbox.Gear)
 	local flags = (if gearbox:IsShifting() then " passage" else "")
 		.. (if powertrain.ClutchSlipping then " embrayage-patine" else "")
 		.. (if powertrain.FuelCut then " RUPTEUR" else "")
+		.. (if car.Held then " RETENUE" else "")
 
 	print(string.format(
 		"[Car] %s throttle=%.2f brake=%.2f steer=%+.2f%s | sol=%d/4 charge=%.0f (poids=%.0f) | surface=%s | %.0f km/h | %s %s %.0f tr/min%s | glissement=%.2f | cercle=%.0f%%",
@@ -518,11 +623,8 @@ end)
 local MAX_PHYSICS_STEP = 1 / 30
 
 RunService.PreSimulation:Connect(function(dt: number)
-	if not hasControl then
-		return
+	local current = session
+	if current then
+		current:PhysicsStep(math.min(dt, MAX_PHYSICS_STEP))
 	end
-	local step = math.min(dt, MAX_PHYSICS_STEP)
-	-- Les rampes du clavier avancent ici, une seule fois par pas physique.
-	local inputs = InputManager:Update(step, myRallyCar:GetForwardSpeed())
-	myRallyCar:Update(step, inputs)
 end)

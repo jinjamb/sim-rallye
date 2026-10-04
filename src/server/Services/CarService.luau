@@ -1,6 +1,6 @@
 --!strict
 --[[
-	CarService.server.luau
+	CarService.luau
 	Une voiture par joueur, et l'attribution du NetworkOwnership.
 
 	GABARIT : la voiture construite dans Studio par tools/build-rig.luau
@@ -13,10 +13,21 @@
 	ApplyImpulse soient autoritaires, le serveur lui donne la propriété réseau
 	de l'assembly de SA voiture, et de celle-là seulement.
 
-	ENTRE JOUEURS : les voitures ne se percutent pas (groupe de collision "Cars",
-	qui ne collisionne pas avec lui-même) -- en contre-la-montre, tout le monde
-	part du même départ au même moment. Les rayons de suspension utilisent le
-	même groupe et traversent donc les autres voitures.
+	ENTRE JOUEURS : les voitures ne se percutent pas nativement (groupe de
+	collision "Cars", qui ne collisionne pas avec lui-même). En rallycross, le
+	contact est recalculé par chaque client sur sa propre voiture (CarContact.luau) :
+	les collisions natives entre deux voitures simulées par deux clients
+	différents, chacun voyant l'autre avec du retard, sont violentes et
+	asymétriques. Les rayons de suspension utilisent le même groupe et
+	traversent donc les autres voitures.
+
+	APPARITION (Spawn) : au paddock à l'arrivée, sur la grille au départ d'une
+	course, de retour au paddock ensuite. Chaque apparition recrée la voiture :
+	le client démarre une nouvelle session de conduite à chaque fois
+	(DrivingSession.luau), sans rien garder de l'ancienne (régime, pédales...).
+	La voiture porte l'attribut RaceId (course en cours, absent au paddock) et
+	Contacts (contact entre voitures activé) ; le châssis porte Held (voiture
+	retenue sur la grille, jusqu'à l'extinction des feux).
 
 	TÉLÉMÉTRIE : la physique fine (régime, glissements, braquage) n'existe que
 	chez le pilote. Il en envoie un résumé ~10 fois par seconde ; le serveur le
@@ -33,6 +44,8 @@ local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 
+local CarService = {}
+
 local CAR_TAG = "RallyCar"
 local CAR_COLLISION_GROUP = "Cars"
 local REQUEST_COOLDOWN = 0.5 -- anti-spam du RemoteEvent
@@ -40,8 +53,9 @@ local CHECK_INTERVAL = 1.0
 -- Filet de sécurité : le pilote étant soudé au châssis, cet écart doit rester nul.
 -- S'il explose, le weld a sauté (personnage détruit, téléportation).
 local MAX_KEEP_DISTANCE = 150 -- studs
+local STREAM_TIMEOUT = 8 -- secondes d'attente maximale du chargement d'une zone
 
--- Places de départ, sur la Baseplate, avant le départ de la spéciale (cap -Z).
+-- Places au paddock, sur la Baseplate, avant le départ de la spéciale (cap -Z).
 -- À gauche du spawn : la piste d'essai occupe la droite (x > 24).
 local SPAWN_Z = -180
 local SPAWN_HEIGHT = 6
@@ -53,12 +67,19 @@ local SPAWN_SLOTS = 12
 local TELEMETRY_MIN_INTERVAL = 0.05
 local MAX_RPM = 9000
 
+export type SpawnOptions = {
+	RaceId: string?,
+	Contacts: boolean?,
+	Held: boolean?,
+}
+
 --------------------------------------------------------------------------------
 -- Gabarit
 --------------------------------------------------------------------------------
 
 local template: Model? = nil
-do
+
+local function prepareTemplate()
 	local rig = workspace:FindFirstChild("RallyCar")
 	local stored = ReplicatedStorage:FindFirstChild("CarTemplate")
 	if rig and rig:IsA("Model") then
@@ -71,10 +92,11 @@ do
 	elseif stored and stored:IsA("Model") then
 		template = stored
 	end
-	if template then
+	local found = template
+	if found then
 		-- Le gabarit n'est pas une voiture en jeu : pas de tag (sinon on
 		-- tenterait de lui attribuer un propriétaire réseau hors du monde).
-		local chassis = template:FindFirstChild("Chassis")
+		local chassis = found:FindFirstChild("Chassis")
 		if chassis then
 			CollectionService:RemoveTag(chassis, CAR_TAG)
 		end
@@ -82,11 +104,6 @@ do
 		warn("[CarService] Pas de voiture modèle : lance tools/build-rig.luau dans Studio (workspace.RallyCar)")
 	end
 end
-
-if not PhysicsService:IsCollisionGroupRegistered(CAR_COLLISION_GROUP) then
-	PhysicsService:RegisterCollisionGroup(CAR_COLLISION_GROUP)
-end
-PhysicsService:CollisionGroupSetCollidable(CAR_COLLISION_GROUP, CAR_COLLISION_GROUP, false)
 
 --------------------------------------------------------------------------------
 -- État
@@ -97,6 +114,9 @@ local slotByPlayer: { [Player]: number } = {}
 local driverByChassis: { [BasePart]: Player } = {}
 local lastRequestAt: { [Player]: number } = {}
 local lastTelemetryAt: { [Player]: number } = {}
+-- En course, on ne descend pas de voiture (Q) : on abandonne depuis le menu.
+local lockedInCar: { [Player]: boolean } = {}
+local spawnGeneration: { [Player]: number } = {}
 
 --[[
 	Embarquement du pilote.
@@ -204,6 +224,19 @@ local function chassisOf(car: Model?): BasePart?
 	return if chassis and chassis:IsA("BasePart") then chassis else nil
 end
 
+local function getAlivePosition(player: Player): Vector3?
+	local character = player.Character
+	if not character then
+		return nil
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if not humanoid or not root or humanoid.Health <= 0 then
+		return nil
+	end
+	return root.Position
+end
+
 --------------------------------------------------------------------------------
 -- Contrôle
 --------------------------------------------------------------------------------
@@ -264,42 +297,18 @@ local function freeSlot(): number
 	return 0 -- serveur plein : on empile (les voitures ne se percutent pas)
 end
 
-local function spawnCar(player: Player): Model?
-	if not template then
-		return nil
+local function paddockFrame(player: Player): CFrame
+	local slot = slotByPlayer[player]
+	if slot == nil then
+		slot = freeSlot()
+		slotByPlayer[player] = slot
 	end
-	local slot = freeSlot()
-	slotByPlayer[player] = slot
-
-	local car = template:Clone()
-	car.Name = "Car_" .. player.UserId
-	car:SetAttribute("OwnerUserId", player.UserId)
-	car:SetAttribute("OwnerName", player.DisplayName)
-	car:PivotTo(CFrame.new(SPAWN_FIRST_X - slot * SPAWN_SPACING, SPAWN_HEIGHT, SPAWN_Z))
-
-	local chassis = chassisOf(car)
-	if not chassis then
-		car:Destroy()
-		warn("[CarService] La voiture modèle n'a pas de Chassis")
-		return nil
-	end
-	chassis.CollisionGroup = CAR_COLLISION_GROUP
-	chassis:SetAttribute("Driven", false)
-
-	car.Parent = workspace
-	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
-	chassis:SetNetworkOwnershipAuto(false)
-	chassis:SetNetworkOwner(nil)
-	CollectionService:AddTag(chassis, CAR_TAG)
-
-	carByPlayer[player] = car
-	return car
+	return CFrame.new(SPAWN_FIRST_X - slot * SPAWN_SPACING, SPAWN_HEIGHT, SPAWN_Z)
 end
 
 local function removeCar(player: Player)
 	local car = carByPlayer[player]
 	carByPlayer[player] = nil
-	slotByPlayer[player] = nil
 	local chassis = chassisOf(car)
 	if chassis and driverByChassis[chassis] then
 		release(chassis)
@@ -309,75 +318,128 @@ local function removeCar(player: Player)
 	end
 end
 
+-- Fait charger la zone chez le joueur avant d'y poser sa voiture : avec le
+-- streaming, un circuit lointain n'existe pas encore chez lui, et les rayons de
+-- suspension ne toucheraient rien.
+local function streamAround(player: Player, position: Vector3)
+	if not workspace.StreamingEnabled then
+		return
+	end
+	local ok, err = pcall(function()
+		player:RequestStreamAroundAsync(position, STREAM_TIMEOUT)
+	end)
+	if not ok then
+		warn("[CarService] Chargement de la zone impossible :", err)
+	end
+end
+
+--[[
+	(Re)crée la voiture du joueur. frame nil = au paddock. Le joueur en reprend
+	aussitôt le volant s'il est en vie (son personnage est soudé au châssis, il
+	voyage avec). Peut attendre quelques secondes (chargement de la zone).
+]]
+function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?): Model?
+	local source = template
+	if not source then
+		return nil
+	end
+	local opts: SpawnOptions = options or {}
+	local target = frame or paddockFrame(player)
+
+	-- Deux apparitions peuvent se chevaucher (retour au paddock demandé pendant
+	-- la mise en grille) : seule la plus récente aboutit.
+	local generation = (spawnGeneration[player] or 0) + 1
+	spawnGeneration[player] = generation
+
+	removeCar(player)
+	streamAround(player, target.Position)
+	if not player.Parent or spawnGeneration[player] ~= generation then
+		return nil -- parti pendant le chargement, ou une apparition plus récente a pris le relais
+	end
+	removeCar(player)
+
+	local car = source:Clone()
+	car.Name = "Car_" .. player.UserId
+	car:SetAttribute("OwnerUserId", player.UserId)
+	car:SetAttribute("OwnerName", player.DisplayName)
+	car:SetAttribute("RaceId", opts.RaceId)
+	car:SetAttribute("Contacts", opts.Contacts == true)
+	car:PivotTo(target)
+
+	local chassis = chassisOf(car)
+	if not chassis then
+		car:Destroy()
+		warn("[CarService] La voiture modèle n'a pas de Chassis")
+		return nil
+	end
+	chassis.CollisionGroup = CAR_COLLISION_GROUP
+	chassis:SetAttribute("Driven", false)
+	chassis:SetAttribute("Held", opts.Held == true)
+
+	-- Sa propre voiture est toujours chargée chez son pilote, où qu'elle soit ;
+	-- chez les autres, elle apparaît d'un bloc (pas de roue sans châssis).
+	pcall(function()
+		car.ModelStreamingMode = Enum.ModelStreamingMode.PersistentPerPlayer
+		car:AddPersistentPlayer(player)
+	end)
+
+	car.Parent = workspace
+	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
+	chassis:SetNetworkOwnershipAuto(false)
+	chassis:SetNetworkOwner(nil)
+	CollectionService:AddTag(chassis, CAR_TAG)
+
+	carByPlayer[player] = car
+	if getAlivePosition(player) ~= nil then
+		grant(player, chassis)
+	end
+	return car
+end
+
+function CarService.ReturnToPaddock(player: Player)
+	lockedInCar[player] = nil
+	CarService.Spawn(player, nil, nil)
+end
+
+function CarService.GetCar(player: Player): Model?
+	return carByPlayer[player]
+end
+
+function CarService.GetChassis(player: Player): BasePart?
+	return chassisOf(carByPlayer[player])
+end
+
+-- Le joueur est-il au volant de sa voiture ?
+function CarService.IsDriving(player: Player): boolean
+	local chassis = chassisOf(carByPlayer[player])
+	return chassis ~= nil and driverByChassis[chassis] == player
+end
+
+-- Voiture retenue sur la grille (freins serrés, embrayage ouvert : voir Car.luau).
+function CarService.SetHeld(player: Player, held: boolean)
+	local chassis = chassisOf(carByPlayer[player])
+	if chassis then
+		chassis:SetAttribute("Held", held)
+	end
+end
+
+function CarService.SetLocked(player: Player, locked: boolean)
+	lockedInCar[player] = if locked then true else nil
+end
+
+--------------------------------------------------------------------------------
+-- Démarrage
+--------------------------------------------------------------------------------
+
 local function onPlayerAdded(player: Player)
 	-- La voiture attend le premier personnage : le pilote y est soudé.
-	if player.Character then
-		spawnCar(player)
-	else
-		player.CharacterAdded:Once(function()
-			spawnCar(player)
-		end)
+	if not player.Character then
+		player.CharacterAdded:Wait()
+	end
+	if player.Parent and not carByPlayer[player] then
+		CarService.Spawn(player, nil, nil)
 	end
 end
-
-for _, player in ipairs(Players:GetPlayers()) do
-	task.spawn(onPlayerAdded, player)
-end
-Players.PlayerAdded:Connect(onPlayerAdded)
-
-Players.PlayerRemoving:Connect(function(player: Player)
-	removeCar(player)
-	lastRequestAt[player] = nil
-	lastTelemetryAt[player] = nil
-	driverStateByPlayer[player] = nil
-end)
-
---------------------------------------------------------------------------------
--- Demandes des clients
---------------------------------------------------------------------------------
-
-local function getAlivePosition(player: Player): Vector3?
-	local character = player.Character
-	if not character then
-		return nil
-	end
-	local humanoid = character:FindFirstChildOfClass("Humanoid")
-	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart?
-	if not humanoid or not root or humanoid.Health <= 0 then
-		return nil
-	end
-	return root.Position
-end
-
--- Seul le propriétaire peut prendre le volant, où qu'il soit : sa voiture
--- vient le chercher (le pilote est soudé au châssis à l'embarquement).
-Remotes.RequestCarControl.OnServerEvent:Connect(function(player: Player, target: any)
-	local now = os.clock()
-	if now - (lastRequestAt[player] or 0) < REQUEST_COOLDOWN then
-		return
-	end
-	lastRequestAt[player] = now
-
-	local chassis = chassisOf(carByPlayer[player])
-	if not chassis or target ~= chassis then
-		return
-	end
-	if getAlivePosition(player) == nil then
-		return
-	end
-	if driverByChassis[chassis] == player then
-		Remotes.CarControlChanged:FireClient(player, chassis, true)
-		return
-	end
-	grant(player, chassis)
-end)
-
-Remotes.ReleaseCarControl.OnServerEvent:Connect(function(player: Player)
-	local chassis = chassisOf(carByPlayer[player])
-	if chassis and driverByChassis[chassis] == player then
-		release(chassis)
-	end
-end)
 
 --[[
 	Télémétrie : uniquement de la voiture qu'on pilote, à cadence bornée, valeurs
@@ -392,40 +454,99 @@ local function finiteIn(value: any, low: number, high: number): number
 	return math.clamp(value, low, high)
 end
 
-Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any)
-	local now = os.clock()
-	if now - (lastTelemetryAt[player] or 0) < TELEMETRY_MIN_INTERVAL then
-		return
-	end
-	lastTelemetryAt[player] = now
+function CarService.Start()
+	prepareTemplate()
 
-	local chassis = chassisOf(carByPlayer[player])
-	if not chassis or driverByChassis[chassis] ~= player then
-		return
+	if not PhysicsService:IsCollisionGroupRegistered(CAR_COLLISION_GROUP) then
+		PhysicsService:RegisterCollisionGroup(CAR_COLLISION_GROUP)
 	end
-	chassis:SetAttribute("Rpm", math.floor(finiteIn(rpm, 0, MAX_RPM)))
-	chassis:SetAttribute("Load", finiteIn(load, 0, 1))
-	chassis:SetAttribute("Steer", finiteIn(steer, -1, 1))
-	chassis:SetAttribute("Screech", finiteIn(screech, 0, 1))
-	chassis:SetAttribute("GravelSlide", finiteIn(gravelSlide, 0, 1))
-	chassis:SetAttribute("GravelShare", finiteIn(gravelShare, 0, 1))
-	chassis:SetAttribute("TarmacShare", finiteIn(tarmacShare, 0, 1))
-end)
+	PhysicsService:CollisionGroupSetCollidable(CAR_COLLISION_GROUP, CAR_COLLISION_GROUP, false)
 
--- Filet de sécurité : mort, respawn, joueur téléporté loin de sa voiture.
-local accumulator = 0
-RunService.Heartbeat:Connect(function(dt: number)
-	accumulator += dt
-	if accumulator < CHECK_INTERVAL then
-		return
+	for _, player in ipairs(Players:GetPlayers()) do
+		task.spawn(onPlayerAdded, player)
 	end
-	accumulator = 0
+	Players.PlayerAdded:Connect(onPlayerAdded)
 
-	for chassis, player in pairs(driverByChassis) do
-		local position = getAlivePosition(player)
-		local tooFar = position ~= nil and ((position :: Vector3) - chassis.Position).Magnitude > MAX_KEEP_DISTANCE
-		if position == nil or tooFar then
+	Players.PlayerRemoving:Connect(function(player: Player)
+		removeCar(player)
+		slotByPlayer[player] = nil
+		lastRequestAt[player] = nil
+		lastTelemetryAt[player] = nil
+		driverStateByPlayer[player] = nil
+		lockedInCar[player] = nil
+		spawnGeneration[player] = nil
+	end)
+
+	-- Seul le propriétaire peut prendre le volant, où qu'il soit : sa voiture
+	-- vient le chercher (le pilote est soudé au châssis à l'embarquement).
+	Remotes.RequestCarControl.OnServerEvent:Connect(function(player: Player, target: any)
+		local now = os.clock()
+		if now - (lastRequestAt[player] or 0) < REQUEST_COOLDOWN then
+			return
+		end
+		lastRequestAt[player] = now
+
+		local chassis = chassisOf(carByPlayer[player])
+		if not chassis or target ~= chassis then
+			return
+		end
+		if getAlivePosition(player) == nil then
+			return
+		end
+		if driverByChassis[chassis] == player then
+			Remotes.CarControlChanged:FireClient(player, chassis, true)
+			return
+		end
+		grant(player, chassis)
+	end)
+
+	Remotes.ReleaseCarControl.OnServerEvent:Connect(function(player: Player)
+		if lockedInCar[player] then
+			return
+		end
+		local chassis = chassisOf(carByPlayer[player])
+		if chassis and driverByChassis[chassis] == player then
 			release(chassis)
 		end
-	end
-end)
+	end)
+
+	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any)
+		local now = os.clock()
+		if now - (lastTelemetryAt[player] or 0) < TELEMETRY_MIN_INTERVAL then
+			return
+		end
+		lastTelemetryAt[player] = now
+
+		local chassis = chassisOf(carByPlayer[player])
+		if not chassis or driverByChassis[chassis] ~= player then
+			return
+		end
+		chassis:SetAttribute("Rpm", math.floor(finiteIn(rpm, 0, MAX_RPM)))
+		chassis:SetAttribute("Load", finiteIn(load, 0, 1))
+		chassis:SetAttribute("Steer", finiteIn(steer, -1, 1))
+		chassis:SetAttribute("Screech", finiteIn(screech, 0, 1))
+		chassis:SetAttribute("GravelSlide", finiteIn(gravelSlide, 0, 1))
+		chassis:SetAttribute("GravelShare", finiteIn(gravelShare, 0, 1))
+		chassis:SetAttribute("TarmacShare", finiteIn(tarmacShare, 0, 1))
+	end)
+
+	-- Filet de sécurité : mort, respawn, joueur téléporté loin de sa voiture.
+	local accumulator = 0
+	RunService.Heartbeat:Connect(function(dt: number)
+		accumulator += dt
+		if accumulator < CHECK_INTERVAL then
+			return
+		end
+		accumulator = 0
+
+		for chassis, player in pairs(driverByChassis) do
+			local position = getAlivePosition(player)
+			local tooFar = position ~= nil and ((position :: Vector3) - chassis.Position).Magnitude > MAX_KEEP_DISTANCE
+			if position == nil or tooFar then
+				release(chassis)
+			end
+		end
+	end)
+end
+
+return CarService

@@ -152,6 +152,16 @@ function Ghost:CancelRun()
 	self:_hide()
 end
 
+function Ghost:Destroy()
+	local model = self.Model
+	if model then
+		model:Destroy()
+		self.Model = nil
+	end
+	self.Recording = nil
+	self.RunClock = nil
+end
+
 function Ghost:_hide()
 	local model = self.Model
 	if model then

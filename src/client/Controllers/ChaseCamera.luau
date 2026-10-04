@@ -46,6 +46,7 @@ local LOOK_HEIGHT = 3.0
 local LOOK_AHEAD_BASE = 4
 local LOOK_AHEAD_PER_SPEED = 0.06 -- studs de regard en avant par stud/s
 local SMOOTHING = 9 -- plus haut = caméra plus rigide
+local TELEPORT_DISTANCE = 200 -- au-delà, la caméra rejoint la voiture sans glisser
 local DRIFT_BLEND_SPEED = 15 -- studs/s à partir desquels la caméra suit la trajectoire
 
 local BASE_FOV = 70
@@ -100,6 +101,13 @@ function ChaseCamera:Enter()
 	self.Active = true
 	self.Camera.CameraType = Enum.CameraType.Scriptable
 	self.Base = self.Camera.CFrame
+	-- Voiture loin de la caméra (apparition sur un circuit, retour au paddock) :
+	-- on se place directement derrière elle au lieu de traverser la carte.
+	local carFrame = self.Car.Chassis.CFrame
+	if (self.Base.Position - carFrame.Position).Magnitude > TELEPORT_DISTANCE then
+		local eye = carFrame.Position - carFrame.LookVector * BASE_DISTANCE + Vector3.yAxis * HEIGHT
+		self.Base = CFrame.lookAt(eye, carFrame.Position + Vector3.yAxis * LOOK_HEIGHT)
+	end
 	self.Fov = self.Camera.FieldOfView
 	self.DistanceOffset = 0
 	self.PreviousForwardSpeed = self.Car:GetForwardSpeed()
