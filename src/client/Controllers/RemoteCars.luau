@@ -54,8 +54,16 @@ type View = {
 	Effects: CarEffects.CarEffects,
 	RayParams: RaycastParams,
 	NameTag: BillboardGui,
+	NameLabel: TextLabel,
 	Visible: boolean,
 }
+
+-- "#7 Pilote" : numéro de course (livrée, posé par le serveur) et nom.
+local function nameText(model: Model): string
+	local name = tostring(model:GetAttribute("OwnerName") or "")
+	local number = model:GetAttribute("RaceNumber")
+	return if type(number) == "number" then string.format("#%d %s", number, name) else name
+end
 
 export type RemoteCars = typeof(setmetatable({}, RemoteCars)) & {
 	LocalUserId: number,
@@ -66,7 +74,9 @@ export type RemoteCars = typeof(setmetatable({}, RemoteCars)) & {
 local CAR_TAG = "RallyCar"
 local CAR_COLLISION_GROUP = "Cars"
 local SUSPENSION_LENGTH = 1.6 -- doit correspondre à Wheel.luau
-local MAX_STEER = math.rad(35) -- doit correspondre à Car.luau (MaxSteerAngle)
+-- La télémétrie envoie le braquage rapporté à 60° (Main.client.luau) : l'angle
+-- maximal de chaque voiture est un réglage du joueur.
+local MAX_STEER = math.rad(60)
 local WHEEL_SUFFIXES = { "FL", "FR", "RL", "RR" }
 
 function RemoteCars.new(localUserId: number): RemoteCars
@@ -151,7 +161,7 @@ function RemoteCars:_add(instance: Instance)
 	label.TextSize = 16
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextStrokeTransparency = 0.4
-	label.Text = tostring(model:GetAttribute("OwnerName") or "")
+	label.Text = nameText(model)
 	label.Parent = tag
 	tag.Adornee = chassis
 	tag.Parent = chassis
@@ -164,10 +174,22 @@ function RemoteCars:_add(instance: Instance)
 		Effects = CarEffects.new(chassis, wheels :: any),
 		RayParams = params,
 		NameTag = tag,
+		NameLabel = label,
 		Visible = true,
 	}
 	self.Views[chassis] = view
 	self:_applyVisibility(view)
+	-- Numéros reposés après coup (livrée modifiée) : masqués eux aussi si besoin.
+	model.DescendantAdded:Connect(function(item: Instance)
+		if view.Visible then
+			return
+		end
+		if item:IsA("BasePart") or item:IsA("Decal") then
+			item.LocalTransparencyModifier = 1
+		elseif item:IsA("SurfaceGui") then
+			item.Enabled = false
+		end
+	end)
 end
 
 function RemoteCars:_remove(instance: Instance)
@@ -194,6 +216,9 @@ function RemoteCars:_applyVisibility(view: View)
 	for _, item in ipairs(view.Model:GetDescendants()) do
 		if item:IsA("BasePart") or item:IsA("Decal") then
 			item.LocalTransparencyModifier = modifier
+		elseif item:IsA("SurfaceGui") then
+			-- Numéros de course : un SurfaceGui ignore la transparence de sa pièce.
+			item.Enabled = visible
 		end
 	end
 	view.NameTag.Enabled = visible
@@ -245,6 +270,11 @@ function RemoteCars:Update(dt: number)
 		end
 		if not view.Visible then
 			continue
+		end
+		-- La livrée peut changer en cours de route (menu) : numéro à jour.
+		local text = nameText(view.Model)
+		if view.NameLabel.Text ~= text then
+			view.NameLabel.Text = text
 		end
 		local driven = chassis:GetAttribute("Driven") == true
 		view.Audio:SetActive(driven)

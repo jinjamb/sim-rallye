@@ -21,8 +21,10 @@
 	asymétriques. Les rayons de suspension utilisent le même groupe et
 	traversent donc les autres voitures.
 
-	APPARITION (Spawn) : au paddock à l'arrivée, sur la grille au départ d'une
-	course, de retour au paddock ensuite. Chaque apparition recrée la voiture :
+	APPARITION (Spawn) : on arrive À PIED au paddock. La voiture apparaît à sa
+	place au paddock quand on passe sur la zone VOITURE (essais libres,
+	spéciale), sur la grille au départ d'une course ; après la course, elle
+	disparaît et le pilote revient à pied au paddock. Chaque apparition recrée la voiture :
 	le client démarre une nouvelle session de conduite à chaque fois
 	(DrivingSession.luau), sans rien garder de l'ancienne (régime, pédales...).
 	La voiture porte l'attribut RaceId (course en cours, absent au paddock) et
@@ -43,6 +45,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
+local RecordService = require(script.Parent.RecordService)
+local LiveryPainter = require(script.Parent.LiveryPainter)
 
 local CarService = {}
 
@@ -100,6 +105,7 @@ local function prepareTemplate()
 		if chassis then
 			CollectionService:RemoveTag(chassis, CAR_TAG)
 		end
+		LiveryPainter.PrepareTemplate(found)
 	else
 		warn("[CarService] Pas de voiture modèle : lance tools/build-rig.luau dans Studio (workspace.RallyCar)")
 	end
@@ -386,6 +392,9 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	end)
 
 	car.Parent = workspace
+	-- Couleur et numéro du joueur (les rayons qui placent les numéros exigent
+	-- une voiture dans le monde).
+	LiveryPainter.Apply(car, RecordService.GetLivery(player))
 	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
 	chassis:SetNetworkOwnershipAuto(false)
 	chassis:SetNetworkOwner(nil)
@@ -398,9 +407,51 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	return car
 end
 
+-- Voiture des essais libres (zone VOITURE du paddock) : à sa place au paddock.
+function CarService.GiveFreeCar(player: Player)
+	CarService.Spawn(player, nil, nil)
+end
+
+--[[
+	Retour au paddock, À PIED (fin de course, abandon) : la voiture disparaît et
+	le pilote est posé près du point d'apparition, d'où il rejoint les zones.
+]]
 function CarService.ReturnToPaddock(player: Player)
 	lockedInCar[player] = nil
-	CarService.Spawn(player, nil, nil)
+	-- Annule une apparition en cours (mise en grille pas encore terminée).
+	spawnGeneration[player] = (spawnGeneration[player] or 0) + 1
+	removeCar(player)
+	local spread = PaddockLayout.SPAWN_SPREAD
+	local position = PaddockLayout.SPAWN + Vector3.new(
+		(math.random() * 2 - 1) * spread,
+		4,
+		(math.random() * 2 - 1) * spread
+	)
+	streamAround(player, position)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if root then
+		root.CFrame = CFrame.lookAt(position, position + Vector3.new(0, 0, -1))
+		root.AssemblyLinearVelocity = Vector3.zero
+	end
+end
+
+-- Livrée modifiée (menu) : la voiture actuelle est repeinte aussitôt.
+function CarService.RefreshLivery(player: Player)
+	local car = carByPlayer[player]
+	if car then
+		LiveryPainter.Apply(car, RecordService.GetLivery(player))
+	end
+end
+
+-- Pose un personnage (sans voiture) à un endroit : podium.
+function CarService.PlaceCharacter(player: Player, frame: CFrame)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart") :: BasePart?
+	if root and not carByPlayer[player] then
+		root.CFrame = frame
+		root.AssemblyLinearVelocity = Vector3.zero
+	end
 end
 
 function CarService.GetCar(player: Player): Model?
@@ -433,16 +484,6 @@ end
 -- Démarrage
 --------------------------------------------------------------------------------
 
-local function onPlayerAdded(player: Player)
-	-- La voiture attend le premier personnage : le pilote y est soudé.
-	if not player.Character then
-		player.CharacterAdded:Wait()
-	end
-	if player.Parent and not carByPlayer[player] then
-		CarService.Spawn(player, nil, nil)
-	end
-end
-
 --[[
 	Télémétrie : uniquement de la voiture qu'on pilote, à cadence bornée, valeurs
 	bornées. Ce n'est que de l'affichage pour les autres -- aucune décision de
@@ -464,11 +505,8 @@ function CarService.Start()
 	end
 	PhysicsService:CollisionGroupSetCollidable(CAR_COLLISION_GROUP, CAR_COLLISION_GROUP, false)
 
-	for _, player in ipairs(Players:GetPlayers()) do
-		task.spawn(onPlayerAdded, player)
-	end
-	Players.PlayerAdded:Connect(onPlayerAdded)
-
+	-- Pas de voiture à l'arrivée : on apparaît à pied au paddock, et la voiture
+	-- se prend sur la zone VOITURE (PaddockService) ou vient sur la grille.
 	Players.PlayerRemoving:Connect(function(player: Player)
 		removeCar(player)
 		slotByPlayer[player] = nil

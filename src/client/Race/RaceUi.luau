@@ -23,10 +23,11 @@ export type LobbyRace = {
 	State: string,
 }
 
-export type RaceMember = { UserId: number, Name: string, Ready: boolean }
+export type RaceMember = { UserId: number, Name: string }
 
 export type RaceSnapshot = {
 	Id: string,
+	PadId: string,
 	TrackId: string,
 	Laps: number,
 	Format: string,

@@ -63,11 +63,16 @@ local KEYBOARD_THROTTLE_TIME = 0.15
 local KEYBOARD_THROTTLE_RELEASE_TIME = 0.08
 
 -- Braquage clavier selon la vitesse (studs/s ~ km/h) : complet jusqu'à
--- FULL, réduit linéairement jusqu'à MIN atteint à FADE. Le plancher reste
--- assez haut pour contre-braquer une glissade.
-local KEYBOARD_STEER_FULL_SPEED = 20
+-- FULL, réduit linéairement jusqu'au plancher atteint à FADE. Le plancher
+-- (réglage "Braquage à haute vitesse", CarSetup) reste assez haut pour
+-- contre-braquer une glissade.
+local KEYBOARD_STEER_FULL_SPEED = 25
 local KEYBOARD_STEER_FADE_SPEED = 120
-local KEYBOARD_STEER_MIN = 0.35
+local highSpeedSteer = 0.55
+
+function InputManager:SetHighSpeedSteer(value: number)
+	highSpeedSteer = math.clamp(value, 0.1, 1)
+end
 
 --------------------------------------------------------------------------------
 -- État de la manette, tenu à jour par événements (évite de relire tout
@@ -189,7 +194,7 @@ function InputManager:Update(dt: number, forwardSpeed: number): CarInputs
 		0,
 		1
 	)
-	local steerLimit = 1 - (1 - KEYBOARD_STEER_MIN) * speedFactor
+	local steerLimit = 1 - (1 - highSpeedSteer) * speedFactor
 
 	keyboardThrottle = approach(keyboardThrottle, wantThrottle, dt, KEYBOARD_THROTTLE_TIME, KEYBOARD_THROTTLE_RELEASE_TIME)
 	-- Le frein garde son entrée franche : Car.luau lui applique déjà la montée

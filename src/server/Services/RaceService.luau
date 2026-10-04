@@ -4,16 +4,21 @@
 	Courses de rallycross : salles d'attente, grille, départ, suivi, résultats.
 
 	CYCLE D'UNE COURSE
-		Lobby     : salle d'attente. On crée (circuit, tours, format, contacts), on
-		            rejoint, on se déclare prêt. 2 à 6 joueurs. Départ quand tout le
-		            monde est prêt (après AUTO_START_DELAY), ou quand l'hôte lance.
+		Lobby     : salle d'attente, liée à une ZONE du paddock (un circuit par
+		            zone, PaddockService). Entrer dans la zone fait rejoindre la
+		            salle (créée au besoin), en sortir la fait quitter. 2 à 6
+		            joueurs. Compte à rebours dès le 2e pilote (PAD_COUNTDOWN),
+		            raccourci quand la salle est pleine ; l'hôte (le premier
+		            arrivé) peut lancer tout de suite et choisir tours, format,
+		            contacts.
 		Grid      : les voitures sont recréées sur la grille, retenues (attribut Held).
 		Countdown : cinq feux rouges s'allument un à un, puis s'éteignent après un
 		            délai aléatoire : c'est le départ. Bouger avant = faux départ.
 		Racing    : suivi des tours, du joker, des positions.
 		Results   : classement de la manche. Format "Qualif + Finale" : la finale
 		            suit, grille dans l'ordre de la qualification. Puis tout le monde
-		            revient au paddock, dans la même salle d'attente (revanche possible).
+		            revient au paddock À PIED, les trois premiers sur le podium ; la
+		            salle est dissoute (pour une revanche, on retourne sur la zone).
 
 	INSTANCES : plusieurs courses peuvent tourner en même temps, même sur le même
 	circuit. Chaque client ne montre que les voitures de sa propre course
@@ -57,7 +62,11 @@ local MAX_RACES = 8
 local MIN_LAPS, MAX_LAPS = 2, 8
 local ACTION_COOLDOWN = 0.25
 
-local AUTO_START_DELAY = 5 -- tout le monde prêt : départ dans 5 s
+local PAD_COUNTDOWN = 20 -- départ 20 s après l'arrivée du 2e pilote
+local STUDIO_COUNTDOWN = 10 -- dans Studio, seul : on n'attend personne
+local FULL_COUNTDOWN = 5 -- salle pleine : départ dans 5 s au plus
+local RETURN_TIMEOUT = 10 -- attente maximale du retour au paddock avant le podium
+local FINISHED_RETURN_DELAY = 6 -- après l'arrivée, retour à pied au paddock
 local SPAWN_TIMEOUT = 15 -- attente maximale de la mise en grille
 local GRID_SETTLE = 2.5 -- les voitures se posent avant les feux
 local LIGHT_COUNT = 5
@@ -89,7 +98,6 @@ type Member = {
 	Player: Player,
 	UserId: number,
 	Name: string,
-	Ready: boolean,
 }
 
 type Runner = {
@@ -124,6 +132,11 @@ type Runner = {
 
 	Milestones: { [number]: number },
 	LastMilestone: number,
+
+	-- Après l'arrivée : ramené à pied au paddock (Returned), sauf s'il a choisi
+	-- de rester regarder la course (Watching).
+	Watching: boolean,
+	Returned: boolean,
 }
 
 type ResultRow = {
@@ -140,6 +153,7 @@ type ResultRow = {
 
 type Race = {
 	Id: string,
+	PadId: string, -- zone du paddock d'où vient la course
 	TrackId: string,
 	Circuit: Circuit.Circuit,
 	Laps: number,
@@ -176,15 +190,6 @@ local function roundName(race: Race, round: number): string
 		return if round == 1 then "MANCHE QUALIFICATIVE" else "FINALE"
 	end
 	return "COURSE"
-end
-
-local function memberOf(race: Race, player: Player): Member?
-	for _, member in ipairs(race.Members) do
-		if member.Player == player then
-			return member
-		end
-	end
-	return nil
 end
 
 local function runnerOf(race: Race, player: Player): Runner?
@@ -234,10 +239,11 @@ end
 local function raceSnapshot(race: Race)
 	local members = {}
 	for _, member in ipairs(race.Members) do
-		table.insert(members, { UserId = member.UserId, Name = member.Name, Ready = member.Ready })
+		table.insert(members, { UserId = member.UserId, Name = member.Name })
 	end
 	return {
 		Id = race.Id,
+		PadId = race.PadId,
 		TrackId = race.TrackId,
 		Laps = race.Laps,
 		Format = race.Format,
@@ -355,27 +361,62 @@ end
 local startRound: (Race, number) -> ()
 local updateAutoStart: (Race) -> ()
 
-local function backToLobby(race: Race)
+local function deleteRace(race: Race)
 	race.Token += 1
-	race.State = "Lobby"
-	race.Round = 1
-	race.Runners = {}
-	race.AutoStartAt = nil
-	race.LightsStart = nil
-	race.StartTime = nil
-	race.FinishDeadline = nil
-	race.Timeout = nil
-	race.GridOrder = nil
-	for _, member in ipairs(race.Members) do
-		member.Ready = false
+	races[race.Id] = nil
+	local index = table.find(raceOrder, race.Id)
+	if index then
+		table.remove(raceOrder, index)
+	end
+end
+
+--[[
+	Fin de la course : tout le monde revient à pied au paddock, la salle est
+	dissoute. Après la dernière manche, les trois premiers montent sur le
+	podium (PodiumHandler, branché par Main.server.luau sur PaddockService).
+]]
+local function dissolve(race: Race, podium: { ResultRow }?)
+	deleteRace(race)
+	local members = table.clone(race.Members)
+	race.Members = {}
+	local pending = #members
+	for _, member in ipairs(members) do
 		local player = member.Player
+		raceOf[player] = nil
+		-- Déjà revenu au paddock après son arrivée : on ne le redéplace pas.
+		local runner = runnerOf(race, player)
+		local alreadyBack = runner ~= nil and runner.Returned
 		task.spawn(function()
-			CarService.ReturnToPaddock(player)
+			if player.Parent then
+				Remotes.RaceState:FireClient(player, nil)
+				if not alreadyBack then
+					CarService.ReturnToPaddock(player)
+				end
+			end
+			pending -= 1
 		end)
 	end
-	sendRaceState(race)
 	broadcastLobby()
+
+	if podium and #podium > 0 then
+		task.spawn(function()
+			local waited = 0
+			while pending > 0 and waited < RETURN_TIMEOUT do
+				waited += task.wait(0.1)
+			end
+			local players: { Player } = {}
+			for _, member in ipairs(members) do
+				if member.Player.Parent then
+					table.insert(players, member.Player)
+				end
+			end
+			RaceService.PodiumHandler(players, podium)
+		end)
+	end
 end
+
+-- Cérémonie du podium : (pilotes de la course, trois premiers arrivés).
+RaceService.PodiumHandler = function(_players: { Player }, _podium: { ResultRow }) end
 
 local function endRound(race: Race)
 	if race.State ~= "Racing" then
@@ -431,8 +472,27 @@ local function endRound(race: Race)
 		if not final and #race.Members > 0 then
 			startRound(race, race.Round + 1)
 		else
-			backToLobby(race)
+			local podium: { ResultRow } = {}
+			for _, row in ipairs(rows) do
+				if not row.Dnf and #podium < 3 then
+					table.insert(podium, row)
+				end
+			end
+			dissolve(race, if final then podium else nil)
 		end
+	end)
+end
+
+-- Pilote arrivé, ramené à pied au paddock ; il reste membre de la course
+-- (classement en direct, résultats, podium).
+local function returnRunner(runner: Runner)
+	if runner.Returned or not runner.Player.Parent then
+		return
+	end
+	runner.Returned = true
+	local player = runner.Player
+	task.spawn(function()
+		CarService.ReturnToPaddock(player)
 	end)
 end
 
@@ -454,7 +514,18 @@ local function finishRunner(race: Race, runner: Runner, crossing: number)
 			position = index
 		end
 	end
-	sendEvent(race, runner.Player, "Finished", { Position = position, TotalTime = runner.TotalTime, Penalty = runner.Penalty })
+	sendEvent(race, runner.Player, "Finished", {
+		Position = position,
+		TotalTime = runner.TotalTime,
+		Penalty = runner.Penalty,
+		ReturnIn = FINISHED_RETURN_DELAY,
+	})
+	-- Retour au paddock, sauf s'il a choisi entre-temps de regarder la course.
+	task.delay(FINISHED_RETURN_DELAY, function()
+		if raceOf[runner.Player] == race and table.find(race.Runners, runner) and not runner.Watching then
+			returnRunner(runner)
+		end
+	end)
 end
 
 local function markDnf(race: Race, runner: Runner, reason: string)
@@ -565,6 +636,8 @@ startRound = function(race: Race, round: number)
 			DnfReason = nil,
 			Milestones = {},
 			LastMilestone = -math.huge,
+			Watching = false,
+			Returned = false,
 		})
 	end
 	sendRaceState(race)
@@ -622,39 +695,44 @@ local function startRace(race: Race)
 	task.spawn(startRound, race, 1)
 end
 
+local function minimumPlayers(): number
+	return if RunService:IsStudio() then 1 else MIN_PLAYERS
+end
+
+local function scheduleStart(race: Race, at: number)
+	race.Token += 1
+	local token = race.Token
+	race.AutoStartAt = at
+	task.delay(math.max(0, at - serverNow()), function()
+		if race.Token == token and race.State == "Lobby" and races[race.Id] == race then
+			startRace(race)
+		end
+	end)
+end
+
+--[[
+	Compte à rebours de la salle : il démarre quand il y a assez de pilotes, et
+	ne repart pas de zéro à chaque nouvel arrivant (ceux qui attendent depuis le
+	début ne patientent pas plus). Salle pleine : départ dans FULL_COUNTDOWN au plus.
+]]
 updateAutoStart = function(race: Race)
 	if race.State ~= "Lobby" then
 		return
 	end
-	local allReady = #race.Members >= MIN_PLAYERS
-	for _, member in ipairs(race.Members) do
-		if not member.Ready then
-			allReady = false
-		end
-	end
-	if allReady then
-		if race.AutoStartAt == nil then
+	local now = serverNow()
+	if #race.Members < minimumPlayers() then
+		if race.AutoStartAt ~= nil then
 			race.Token += 1
-			local token = race.Token
-			race.AutoStartAt = serverNow() + AUTO_START_DELAY
-			task.delay(AUTO_START_DELAY, function()
-				if race.Token == token and race.State == "Lobby" and races[race.Id] == race then
-					startRace(race)
-				end
-			end)
+			race.AutoStartAt = nil
 		end
-	elseif race.AutoStartAt ~= nil then
-		race.Token += 1
-		race.AutoStartAt = nil
+		return
 	end
-end
-
-local function deleteRace(race: Race)
-	race.Token += 1
-	races[race.Id] = nil
-	local index = table.find(raceOrder, race.Id)
-	if index then
-		table.remove(raceOrder, index)
+	local countdown = if RunService:IsStudio() and #race.Members == 1 then STUDIO_COUNTDOWN else PAD_COUNTDOWN
+	local current = race.AutoStartAt
+	if current == nil then
+		scheduleStart(race, now + countdown)
+	elseif #race.Members >= MAX_PLAYERS and current - now > FULL_COUNTDOWN then
+		scheduleStart(race, now + FULL_COUNTDOWN)
 	end
 end
 
@@ -696,8 +774,6 @@ local function removeMember(race: Race, player: Player)
 		race.HostUserId = race.Members[1].UserId
 	end
 	if race.State == "Lobby" then
-		race.Token += 1
-		race.AutoStartAt = nil
 		updateAutoStart(race)
 	elseif race.State == "Racing" then
 		checkRoundEnd(race)
@@ -715,41 +791,26 @@ local function addMember(race: Race, player: Player)
 		Player = player,
 		UserId = player.UserId,
 		Name = player.DisplayName,
-		Ready = false,
 	})
 	raceOf[player] = race
 end
 
-local function onCreate(player: Player, payload: any)
-	if raceOf[player] or type(payload) ~= "table" then
-		return
-	end
-	if #raceOrder >= MAX_RACES then
-		Remotes.RaceEvent:FireClient(player, "Error", { Message = "Trop de courses en même temps : rejoins-en une." })
-		return
-	end
-	local trackId = payload.TrackId
-	local circuit = if type(trackId) == "string" then Tracks.Get(trackId) else nil
-	if not circuit then
-		return
-	end
-	local laps = if type(payload.Laps) == "number" then math.clamp(math.floor(payload.Laps), MIN_LAPS, MAX_LAPS) else circuit.DefaultLaps
-	local format: Format = if payload.Format == "Event" then "Event" else "Sprint"
-
+local function createRace(padId: string, circuit: Circuit.Circuit, host: Player): Race
 	local id = tostring(nextRaceId)
 	nextRaceId += 1
 	local race: Race = {
 		Id = id,
+		PadId = padId,
 		TrackId = circuit.Id,
 		Circuit = circuit,
-		Laps = laps,
-		Format = format,
-		Contacts = payload.Contacts == true,
-		HostUserId = player.UserId,
+		Laps = circuit.DefaultLaps,
+		Format = "Sprint",
+		Contacts = true,
+		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
 		Round = 1,
-		RoundCount = if format == "Event" then 2 else 1,
+		RoundCount = 1,
 		Token = 0,
 		AutoStartAt = nil,
 		LightsStart = nil,
@@ -762,47 +823,144 @@ local function onCreate(player: Player, payload: any)
 	}
 	races[id] = race
 	table.insert(raceOrder, id)
-	addMember(race, player)
-	sendRaceState(race)
-	broadcastLobby()
+	return race
 end
 
-local function onJoin(player: Player, payload: any)
-	if raceOf[player] or type(payload) ~= "table" or type(payload.RaceId) ~= "string" then
-		return
+--[[
+	Entrée dans la zone d'un circuit (PaddockService) : rejoint la salle
+	d'attente de cette zone, ou en ouvre une si elle est pleine ou déjà partie
+	(plusieurs courses peuvent tourner sur le même circuit).
+]]
+function RaceService.JoinPad(player: Player, padId: string): boolean
+	if raceOf[player] then
+		return false
 	end
-	local race = races[payload.RaceId]
+	local circuit = Tracks.Get(padId)
+	if not circuit then
+		return false
+	end
+	local race: Race? = nil
+	for _, id in ipairs(raceOrder) do
+		local candidate = races[id]
+		if candidate and candidate.PadId == padId and candidate.State == "Lobby" and #candidate.Members < MAX_PLAYERS then
+			race = candidate
+			break
+		end
+	end
 	if not race then
-		return
+		if #raceOrder >= MAX_RACES then
+			Remotes.RaceEvent:FireClient(player, "Error", { Message = "Trop de courses en même temps : patiente un peu." })
+			return false
+		end
+		race = createRace(padId, circuit, player)
 	end
-	if race.State ~= "Lobby" then
-		Remotes.RaceEvent:FireClient(player, "Error", { Message = "Cette course a déjà commencé." })
-		return
-	end
-	if #race.Members >= MAX_PLAYERS then
-		Remotes.RaceEvent:FireClient(player, "Error", { Message = "Cette course est complète." })
-		return
-	end
-	addMember(race, player)
-	race.Token += 1
-	race.AutoStartAt = nil
-	updateAutoStart(race)
-	sendRaceState(race)
+	local joined = race :: Race
+	addMember(joined, player)
+	updateAutoStart(joined)
+	sendRaceState(joined)
 	broadcastLobby()
+	return true
 end
 
-local function onReady(player: Player, payload: any)
+-- Zone de la salle d'attente du joueur, s'il attend un départ (nil sinon).
+function RaceService.GetLobbyPad(player: Player): string?
 	local race = raceOf[player]
-	if not race or race.State ~= "Lobby" then
+	if race and race.State == "Lobby" then
+		return race.PadId
+	end
+	return nil
+end
+
+function RaceService.IsInRace(player: Player): boolean
+	return raceOf[player] ~= nil
+end
+
+-- En piste : course partie, et pas encore revenu au paddock après son arrivée.
+function RaceService.IsRacing(player: Player): boolean
+	local race = raceOf[player]
+	if not race or race.State == "Lobby" then
+		return false
+	end
+	local runner = runnerOf(race, player)
+	return runner == nil or not runner.Returned
+end
+
+--[[
+	Demande de retour au paddock (touche H, menu, bouton tactile) :
+		"free"    : hors course ou en salle d'attente, retour normal ;
+		"handled" : arrivé, ramené au paddock en restant membre de la course ;
+		"blocked" : en pleine course, on passe par "Abandonner".
+]]
+function RaceService.PaddockRequest(player: Player): string
+	local race = raceOf[player]
+	if not race or race.State == "Lobby" then
+		return "free"
+	end
+	local runner = runnerOf(race, player)
+	if runner and (runner.Finished or race.State == "Results") then
+		runner.Watching = false
+		returnRunner(runner)
+		return "handled"
+	end
+	return "blocked"
+end
+
+-- Arrivé, il préfère rester regarder la course plutôt que rentrer au paddock.
+local function onWatch(player: Player)
+	local race = raceOf[player]
+	local runner = race and runnerOf(race, player)
+	if runner and runner.Finished and not runner.Returned then
+		runner.Watching = true
+	end
+end
+
+-- Sortie de la zone : quitte la salle d'attente (sans effet une fois la course partie).
+function RaceService.LeavePad(player: Player)
+	local race = raceOf[player]
+	if race and race.State == "Lobby" then
+		removeMember(race, player)
+	end
+end
+
+export type PadStatus = { Waiting: number, Max: number, AutoStartAt: number?, Racing: number }
+
+-- Pour le panneau de la zone : pilotes en attente, départ, pilotes en course.
+function RaceService.GetPadStatus(padId: string): PadStatus
+	local status: PadStatus = { Waiting = 0, Max = MAX_PLAYERS, AutoStartAt = nil, Racing = 0 }
+	for _, id in ipairs(raceOrder) do
+		local race = races[id]
+		if race and race.PadId == padId then
+			if race.State == "Lobby" then
+				if #race.Members >= status.Waiting then
+					status.Waiting = #race.Members
+					status.AutoStartAt = race.AutoStartAt
+				end
+			else
+				status.Racing += #race.Members
+			end
+		end
+	end
+	return status
+end
+
+-- Réglages de la course, par l'hôte, avant le départ.
+local function onSettings(player: Player, payload: any)
+	local race = raceOf[player]
+	if not race or race.State ~= "Lobby" or race.HostUserId ~= player.UserId or type(payload) ~= "table" then
 		return
 	end
-	local member = memberOf(race, player)
-	if not member then
-		return
+	if type(payload.Laps) == "number" and payload.Laps == payload.Laps then
+		race.Laps = math.clamp(math.floor(payload.Laps), MIN_LAPS, MAX_LAPS)
 	end
-	member.Ready = type(payload) == "table" and payload.Ready == true
-	updateAutoStart(race)
+	if payload.Format == "Event" or payload.Format == "Sprint" then
+		race.Format = payload.Format
+		race.RoundCount = if race.Format == "Event" then 2 else 1
+	end
+	if type(payload.Contacts) == "boolean" then
+		race.Contacts = payload.Contacts
+	end
 	sendRaceState(race)
+	broadcastLobby()
 end
 
 local function onStart(player: Player)
@@ -810,8 +968,7 @@ local function onStart(player: Player)
 	if not race or race.State ~= "Lobby" or race.HostUserId ~= player.UserId then
 		return
 	end
-	local minimum = if RunService:IsStudio() then 1 else MIN_PLAYERS
-	if #race.Members < minimum then
+	if #race.Members < minimumPlayers() then
 		Remotes.RaceEvent:FireClient(player, "Error", { Message = string.format("Il faut au moins %d pilotes.", MIN_PLAYERS) })
 		return
 	end
@@ -960,16 +1117,14 @@ function RaceService.Start()
 			return
 		end
 		lastActionAt[player] = now
-		if action == "Create" then
-			onCreate(player, payload)
-		elseif action == "Join" then
-			onJoin(player, payload)
-		elseif action == "Leave" or action == "Abandon" then
+		if action == "Leave" or action == "Abandon" then
 			onLeave(player)
-		elseif action == "Ready" then
-			onReady(player, payload)
 		elseif action == "Start" then
 			onStart(player)
+		elseif action == "Settings" then
+			onSettings(player, payload)
+		elseif action == "Watch" then
+			onWatch(player)
 		end
 	end)
 

@@ -125,7 +125,7 @@ function Car.new(chassis: BasePart): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
-	self.MaxSteerAngle = 35
+	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
 	self.Wheels = {}
 	self.WheelsByName = {}
@@ -196,6 +196,9 @@ end
 function Car:ApplySetup(input: CarSetup.Setup)
 	local setup = CarSetup.Sanitize(input)
 	self.Setup = setup
+
+	self.MaxSteerAngle = setup.SteerAngle
+	InputManager:SetHighSpeedSteer(setup.HighSpeedSteer)
 
 	self.BrakeBiasFront = setup.BrakeBias
 	self.MaxBrakeForce = self.Weight * setup.BrakeForce

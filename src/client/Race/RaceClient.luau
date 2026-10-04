@@ -44,7 +44,15 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Stats: RaceUi.Stats?,
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
+	Livery: any,
+	LiverySaveToken: number,
+	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
+	PodiumUntil: number,
+	PodiumEye: Vector3,
+	PodiumFocus: Vector3,
 }
+
+local LIVERY_SAVE_DELAY = 1 -- regroupe une rafale de clics en une seule sauvegarde
 
 local function serverNow(): number
 	return workspace:GetServerTimeNow()
@@ -60,9 +68,21 @@ function RaceClient.new(options: Options): RaceClient
 	self.Stats = nil
 	self.LapBests = {}
 	self.MyChassis = nil
+	self.Livery = nil
+	self.LiverySaveToken = 0
+	self.PodiumUntil = 0
+	self.PodiumEye = Vector3.zero
+	self.PodiumFocus = Vector3.zero
 
 	self.Menu = RaceMenu.new(options.PlayerGui, options.LocalUserId, function(action: string, payload: any)
-		Remotes.RaceAction:FireServer(action, payload)
+		if action == "Livery" then
+			self:SaveLivery(payload)
+		elseif action == "Paddock" then
+			Remotes.ReturnToPaddock:FireServer()
+			self.Menu:SetOpen(false)
+		else
+			Remotes.RaceAction:FireServer(action, payload)
+		end
 	end)
 	self.Hud = RaceHud.new(options.PlayerGui, options.LocalUserId, {
 		Spectate = function()
@@ -72,7 +92,9 @@ function RaceClient.new(options: Options): RaceClient
 			self:SpectateNext(direction)
 		end,
 		StopSpectate = function()
+			-- Fin de la vue choisie par le joueur : direction le paddock.
 			self:StopSpectating()
+			Remotes.ReturnToPaddock:FireServer()
 		end,
 	})
 	self.Spectator = SpectatorCamera.new(options.Camera)
@@ -111,7 +133,37 @@ function RaceClient:_refreshMenu()
 		Records = self.Records,
 		Stats = self.Stats,
 		Laps = self.LapBests,
+		Livery = self.Livery,
 	})
+end
+
+-- Livrée choisie dans le menu : sauvegardée (et repeinte par le serveur) après
+-- une courte pause, pour ne pas repeindre à chaque clic.
+function RaceClient:SaveLivery(livery: any)
+	local changed = self.Livery ~= livery
+	self.Livery = livery
+	if changed then
+		self:_refreshMenu() -- le garage a pu la changer : le menu suit
+	end
+	self.LiverySaveToken += 1
+	local token = self.LiverySaveToken
+	task.delay(LIVERY_SAVE_DELAY, function()
+		if token == self.LiverySaveToken then
+			Remotes.SaveLivery:FireServer(livery)
+		end
+	end)
+end
+
+function RaceClient:GetLivery(): any
+	return self.Livery
+end
+
+-- Livrée chargée avec le profil.
+function RaceClient:SetLivery(livery: any)
+	if type(livery) == "table" then
+		self.Livery = livery
+		self:_refreshMenu()
+	end
 end
 
 function RaceClient:_setRace(snapshot: RaceUi.RaceSnapshot?)
@@ -171,10 +223,23 @@ function RaceClient:_onEvent(kind: string, data: any)
 	elseif kind == "Chequered" then
 		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", RaceUi.COLOR_TEXT, 3)
 	elseif kind == "Finished" then
-		hud:ShowMessage(string.format("ARRIVÉE — P%d", tonumber(data.Position) or 0), RaceUi.COLOR_ACCENT, 4)
+		local returnIn = tonumber(data.ReturnIn) or 6
+		hud:ShowMessage(
+			string.format("ARRIVÉE — P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
+			RaceUi.COLOR_ACCENT,
+			returnIn
+		)
 	elseif kind == "Results" then
 		self:StopSpectating()
 		hud:ShowResults(data :: any)
+	elseif kind == "Podium" then
+		local duration = tonumber(data.Duration) or 8
+		if typeof(data.Eye) == "Vector3" and typeof(data.Focus) == "Vector3" then
+			self.PodiumEye = data.Eye
+			self.PodiumFocus = data.Focus
+			self.PodiumUntil = os.clock() + duration
+		end
+		hud:ShowPodium(if type(data.Names) == "table" then data.Names else {}, duration)
 	end
 end
 
@@ -220,11 +285,14 @@ end
 -- Spectateur
 --------------------------------------------------------------------------------
 
--- Possible une fois arrivé, tant que d'autres roulent encore.
+-- Possible une fois arrivé, tant que d'autres roulent encore et qu'on est
+-- encore sur le circuit (pas encore ramené au paddock).
 function RaceClient:CanSpectate(): boolean
 	local race = self.Race
 	local me = self:_myRow()
+	local mine = self.MyChassis
 	return race ~= nil and race.State == "Racing" and me ~= nil and me.F
+		and mine ~= nil and mine:IsDescendantOf(workspace)
 end
 
 function RaceClient:IsSpectating(): boolean
@@ -257,6 +325,8 @@ function RaceClient:StartSpectating()
 	local targets = self:_targets()
 	local first = targets[1]
 	if first then
+		-- Le serveur ne nous ramène pas au paddock tant qu'on regarde.
+		Remotes.RaceAction:FireServer("Watch", nil)
 		self.Spectator:SetTarget(first.Chassis, first.Name, first.UserId)
 	end
 end
@@ -289,6 +359,18 @@ end
 
 -- Caméra : renvoie true si la vue spectateur l'a prise en charge.
 function RaceClient:UpdateCamera(dt: number): boolean
+	-- Cérémonie du podium : plan fixe, puis la caméra revient au joueur.
+	if self.PodiumUntil > 0 then
+		local camera = self.Options.Camera
+		if os.clock() < self.PodiumUntil then
+			camera.CameraType = Enum.CameraType.Scriptable
+			camera.FieldOfView = 60
+			camera.CFrame = CFrame.lookAt(self.PodiumEye, self.PodiumFocus)
+			return true
+		end
+		self.PodiumUntil = 0
+		self.Options.OnSpectateStopped()
+	end
 	local spectator = self.Spectator
 	if not spectator.Active then
 		return false
@@ -321,8 +403,16 @@ function RaceClient:Update(dt: number)
 		if mine and mine:IsDescendantOf(workspace) then
 			table.insert(cars, { Position = mine.Position, Me = true })
 		end
-		for _, chassis in pairs(self.Options.GetOtherCars()) do
-			table.insert(cars, { Position = chassis.Position, Me = false })
+		-- Seulement les pilotes de la course (revenu à pied au paddock après son
+		-- arrivée, on voit aussi les voitures du paddock, qui n'ont rien à faire ici).
+		local members: { [number]: boolean } = {}
+		for _, member in ipairs(race.Members) do
+			members[member.UserId] = true
+		end
+		for userId, chassis in pairs(self.Options.GetOtherCars()) do
+			if members[userId] then
+				table.insert(cars, { Position = chassis.Position, Me = false })
+			end
 		end
 	end
 	self.Hud:Update(dt, cars, serverNow())

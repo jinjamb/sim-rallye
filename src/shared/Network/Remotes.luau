@@ -33,9 +33,14 @@ export type Remotes = {
 	Leaderboard: RemoteEvent,
 	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
 	SaveSetup: RemoteEvent,
+	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
+	SaveLivery: RemoteEvent,
+	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
+	ReturnToPaddock: RemoteEvent,
 
 	-- RALLYCROSS (RaceService)
-	-- Client -> Serveur : (action: string, payload) créer, rejoindre, quitter, prêt, lancer, abandonner
+	-- Client -> Serveur : (action: string, payload) quitter, abandonner, lancer, réglages de la course
+	-- (on rejoint une course en entrant dans sa zone du paddock : PaddockService)
 	RaceAction: RemoteEvent,
 	-- Serveur -> Clients : (races) les courses ouvertes et en cours, pour le menu
 	LobbyState: RemoteEvent,
@@ -59,6 +64,8 @@ local RELIABLE = {
 	"SubmitGhost",
 	"Leaderboard",
 	"SaveSetup",
+	"SaveLivery",
+	"ReturnToPaddock",
 	"RaceAction",
 	"LobbyState",
 	"RaceState",

@@ -40,6 +40,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
+local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 
 local RecordService = {}
@@ -70,6 +71,7 @@ export type Stats = { Races: number, Wins: number, Podiums: number, Points: numb
 type Profile = {
 	Records: { [string]: StageRecord },
 	Setup: CarSetup.Setup,
+	Livery: Livery.Livery,
 	Laps: { [string]: number }, -- meilleur tour (ms) par circuit (Circuit.Key)
 	Stats: Stats,
 }
@@ -169,11 +171,18 @@ local function count(value: any): number
 	return if type(value) == "number" and value == value and value >= 0 then math.floor(value) else 0
 end
 
-local function sanitizeProfile(data: any): Profile
-	local profile: Profile = { Records = {}, Setup = CarSetup.Default(), Laps = {}, Stats = emptyStats() }
+local function sanitizeProfile(data: any, userId: number): Profile
+	local profile: Profile = {
+		Records = {},
+		Setup = CarSetup.Default(),
+		Livery = Livery.Default(userId),
+		Laps = {},
+		Stats = emptyStats(),
+	}
 	if type(data) ~= "table" then
 		return profile
 	end
+	profile.Livery = Livery.Sanitize(data.Livery, userId)
 	if type(data.Records) == "table" then
 		for stageId, record in pairs(data.Records) do
 			if type(stageId) == "string" and type(record) == "table" and type(record.Ms) == "number" then
@@ -213,7 +222,7 @@ local function updateStoredProfile(userId: number, context: string, change: (Pro
 	task.spawn(function()
 		local ok, err = pcall(function()
 			store:UpdateAsync(profileKey(userId), function(old: any)
-				local profile = sanitizeProfile(old)
+				local profile = sanitizeProfile(old, userId)
 				if not change(profile) then
 					return nil -- rien à écrire
 				end
@@ -342,7 +351,11 @@ local function refreshLapBoards()
 		end
 	end
 	Remotes.TrackRecords:FireAllClients(lapBoards)
+	RecordService.TrackRecordsChanged(lapBoards)
 end
+
+-- Appelée à chaque mise à jour des records du tour (panneaux du paddock).
+RecordService.TrackRecordsChanged = function(_boards: any) end
 
 local lapRefreshScheduled = false
 local function scheduleLapRefresh()
@@ -491,6 +504,7 @@ end
 
 local lastSetupAt: { [Player]: number } = {}
 
+-- Réglages et livrée : écrits ensemble, regroupés (toutes les 30 s, au départ).
 local function flushSetup(player: Player)
 	local profile = profiles[player]
 	if not profile or not setupDirty[player] then
@@ -498,11 +512,22 @@ local function flushSetup(player: Player)
 	end
 	setupDirty[player] = nil
 	local setup = profile.Setup
+	local livery = profile.Livery
 	updateStoredProfile(player.UserId, "réglages", function(stored)
 		stored.Setup = setup
+		stored.Livery = livery
 		return true
 	end)
 end
+
+function RecordService.GetLivery(player: Player): Livery.Livery
+	local profile = profiles[player]
+	return if profile then profile.Livery else Livery.Default(player.UserId)
+end
+
+-- Appelée quand la livrée d'un joueur change (ou au chargement du profil) :
+-- branchée par Main.server.luau sur CarService, qui repeint la voiture.
+RecordService.LiveryChanged = function(_player: Player) end
 
 --------------------------------------------------------------------------------
 -- Joueurs
@@ -526,7 +551,7 @@ local function onPlayerAdded(player: Player)
 	if not player.Parent then
 		return -- parti pendant le chargement
 	end
-	local profile = sanitizeProfile(data)
+	local profile = sanitizeProfile(data, player.UserId)
 	profiles[player] = profile
 	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0 }
 	nameCache[player.UserId] = player.DisplayName
@@ -548,9 +573,11 @@ local function onPlayerAdded(player: Player)
 		BestMs = if record then record.Ms else nil,
 		Ghost = if record then record.Ghost else nil,
 		Setup = profile.Setup,
+		Livery = profile.Livery,
 		Stats = profile.Stats,
 		Laps = profile.Laps,
 	})
+	RecordService.LiveryChanged(player)
 	Remotes.Leaderboard:FireClient(player, leaderboard)
 	Remotes.TrackRecords:FireClient(player, lapBoards)
 end
@@ -630,6 +657,25 @@ function RecordService.Start()
 		lastSetupAt[player] = now
 		profile.Setup = CarSetup.Sanitize(input)
 		setupDirty[player] = true
+	end)
+
+	local lastLiveryAt: { [Player]: number } = {}
+	Remotes.SaveLivery.OnServerEvent:Connect(function(player: Player, input: any)
+		local profile = profiles[player]
+		if not profile then
+			return
+		end
+		local now = os.clock()
+		if now - (lastLiveryAt[player] or 0) < 0.5 then
+			return
+		end
+		lastLiveryAt[player] = now
+		profile.Livery = Livery.Sanitize(input, player.UserId)
+		setupDirty[player] = true
+		RecordService.LiveryChanged(player)
+	end)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		lastLiveryAt[player] = nil
 	end)
 
 	task.spawn(function()

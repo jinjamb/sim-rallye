@@ -78,6 +78,10 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 	SpectateButtons: Frame,
 	WatchButton: TextButton,
 
+	LobbyBanner: Frame,
+	LobbyLabel: TextLabel,
+	PodiumUntil: number,
+
 	Race: RaceUi.RaceSnapshot?,
 	Live: RaceUi.LivePayload?,
 }
@@ -102,6 +106,7 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.LocalUserId = localUserId
 	self.TouchLayout = false
 	self.MessageUntil = 0
+	self.PodiumUntil = 0
 	self.GantryLights = {}
 	self.Race = nil
 	self.Live = nil
@@ -218,6 +223,11 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	message.Size = UDim2.fromOffset(900, 50)
 	message.TextXAlignment = Enum.TextXAlignment.Center
 	message.TextStrokeTransparency = 0.3
+	-- Messages longs (arrivée, podium) : réduits pour tenir sur une ligne.
+	message.TextScaled = true
+	local sizeLimit = Instance.new("UITextSizeConstraint")
+	sizeLimit.MaxTextSize = 36
+	sizeLimit.Parent = message
 	message.Visible = false
 	self.Message = message
 
@@ -241,6 +251,20 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.ResultsFooter.Position = UDim2.new(0, 16, 1, -28)
 	self.ResultsFooter.Size = UDim2.new(1, -32, 0, 18)
 	self.ResultsData = nil
+
+	-- Salle d'attente (on est dans la zone d'un circuit, au paddock) -------------------
+	local banner = RaceUi.Panel(root, 0.15)
+	banner.AnchorPoint = Vector2.new(0.5, 0)
+	banner.Position = UDim2.new(0.5, 0, 0, 12)
+	banner.Size = UDim2.fromOffset(560, 62)
+	banner.Visible = false
+	self.LobbyBanner = banner
+	local lobbyLabel = RaceUi.Label(banner, "", 18, Enum.Font.GothamBold)
+	lobbyLabel.RichText = true
+	lobbyLabel.TextXAlignment = Enum.TextXAlignment.Center
+	lobbyLabel.Position = UDim2.fromOffset(12, 0)
+	lobbyLabel.Size = UDim2.new(1, -24, 1, 0)
+	self.LobbyLabel = lobbyLabel
 
 	-- Spectateur ------------------------------------------------------------------
 	local bar = RaceUi.Panel(root, 0.2)
@@ -295,6 +319,7 @@ function RaceHud:SetTouchLayout(enabled: boolean)
 	self.TouchLayout = enabled
 	-- Mobile : la rangée de boutons tactiles occupe le haut, le volant le bas gauche.
 	self.Info.Position = UDim2.new(0.5, 0, 0, if enabled then 52 else 12)
+	self.LobbyBanner.Position = UDim2.new(0.5, 0, 0, if enabled then 52 else 12)
 	self.Standings.Visible = not enabled
 	if enabled then
 		self.MinimapHolder.AnchorPoint = Vector2.new(0, 0)
@@ -333,14 +358,24 @@ end
 -- La course du joueur (nil : pas de course, HUD masqué).
 function RaceHud:SetRace(race: RaceUi.RaceSnapshot?)
 	self.Race = race
-	local racing = race ~= nil and race.State ~= "Lobby"
-	self.Gui.Enabled = racing
+	self.Gui.Enabled = race ~= nil or os.clock() < self.PodiumUntil
 	if not race then
 		self.Live = nil
 		self:HideResults()
+		self.LobbyBanner.Visible = false
+		self.Info.Visible = false
+		self.Standings.Visible = false
+		self.MinimapHolder.Visible = false
+		self.Lights.Visible = false
 		return
 	end
-	if race.State == "Lobby" then
+	-- En salle d'attente : seulement le bandeau ; en course : tout le reste.
+	local inLobby = race.State == "Lobby"
+	self.LobbyBanner.Visible = inLobby
+	self.Info.Visible = not inLobby
+	self.Standings.Visible = not inLobby and not self.TouchLayout
+	self.MinimapHolder.Visible = not inLobby
+	if inLobby then
 		self.Live = nil
 		self:HideResults()
 	end
@@ -409,6 +444,17 @@ function RaceHud:ShowResults(results: RaceUi.Results)
 	self.Results.Visible = true
 end
 
+-- Cérémonie du podium (après le retour au paddock, hors course).
+function RaceHud:ShowPodium(names: { string }, duration: number)
+	self.PodiumUntil = os.clock() + duration
+	self.Gui.Enabled = true
+	local parts = {}
+	for index, name in ipairs(names) do
+		table.insert(parts, string.format("%d. %s", index, name))
+	end
+	self:ShowMessage("PODIUM — " .. table.concat(parts, "   "), RaceUi.COLOR_ACCENT, duration)
+end
+
 function RaceHud:HideResults()
 	self.ResultsData = nil
 	self.Results.Visible = false
@@ -470,9 +516,30 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 	if self.Message.Visible and os.clock() > self.MessageUntil then
 		self.Message.Visible = false
 	end
+	-- Hors course, le HUD ne reste affiché que pendant la cérémonie du podium.
+	if self.Race == nil then
+		self.Gui.Enabled = os.clock() < self.PodiumUntil
+	end
 
 	local race = self.Race
 	if not race or not self.Gui.Enabled then
+		return
+	end
+	if race.State == "Lobby" then
+		local circuit = Tracks.Get(race.TrackId)
+		local name = if circuit then string.upper(circuit.Name) else race.TrackId
+		local countdown = if race.AutoStartAt
+			then string.format("départ dans <b>%d s</b>", math.max(0, math.ceil((race.AutoStartAt :: number) - serverNow)))
+			else string.format("en attente d'un %de pilote", race.MinPlayers)
+		self.LobbyLabel.Text = string.format(
+			'%s · %d/%d pilotes · %s\n<font size="13" color="#8288A0">%d tours · %s · C : options · sors de la zone pour quitter</font>',
+			name,
+			#race.Members,
+			race.MaxPlayers,
+			countdown,
+			race.Laps,
+			if race.Format == "Event" then "qualif + finale" else "course simple"
+		)
 		return
 	end
 	self:_updateLights(race, serverNow)

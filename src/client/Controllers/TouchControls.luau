@@ -40,6 +40,7 @@ export type Actions = {
 	ToggleSetup: () -> (),
 	ToggleLeaderboard: () -> (),
 	ToggleRaceMenu: () -> (),
+	ReturnToPaddock: () -> (),
 	EnterCar: () -> (),
 	ExitCar: () -> (),
 }
@@ -66,6 +67,7 @@ export type TouchControls = typeof(setmetatable({}, TouchControls)) & {
 	Holds: { Hold },
 	ActionRow: Frame,
 	ActionButtons: { [string]: TextButton },
+	EnterButton: TextButton,
 }
 
 -- Dimensions de référence pour un écran de 400 points de haut (téléphone en
@@ -246,6 +248,7 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 		{ "RÉGLAGES", actions.ToggleSetup },
 		{ "TEMPS", actions.ToggleLeaderboard },
 		{ "COURSES", actions.ToggleRaceMenu },
+		{ "PADDOCK", actions.ReturnToPaddock },
 		{ "SORTIR", actions.ExitCar },
 	}
 	self.ActionButtons = {}
@@ -274,7 +277,9 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	enter.TextColor3 = COLOR_TEXT
 	styled(enter, 12)
 	enter.Activated:Connect(actions.EnterCar)
+	enter.Visible = false -- sans voiture (arrivée au paddock), rien à prendre
 	enter.Parent = walking
+	self.EnterButton = enter
 	local races = Instance.new("TextButton")
 	races.AnchorPoint = Vector2.new(0.5, 1)
 	races.Position = UDim2.new(0.5, 0, 1, -(MARGIN + 52 + GAP))
@@ -286,6 +291,19 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	styled(races, 12)
 	races.Activated:Connect(actions.ToggleRaceMenu)
 	races.Parent = walking
+	-- À pied loin du paddock (descendu de voiture sur la spéciale) : retour direct.
+	-- Colonne centrale (le coin bas-droit est au bouton de saut de Roblox).
+	local home = Instance.new("TextButton")
+	home.AnchorPoint = Vector2.new(0.5, 1)
+	home.Position = UDim2.new(0.5, 0, 1, -(MARGIN + 52 + GAP + 40 + GAP))
+	home.Size = UDim2.fromOffset(200, 40)
+	home.Text = "PADDOCK"
+	home.TextSize = 13
+	home.Font = Enum.Font.GothamBlack
+	home.TextColor3 = COLOR_TEXT
+	styled(home, 12)
+	home.Activated:Connect(actions.ReturnToPaddock)
+	home.Parent = walking
 
 	-- Zones tenues ------------------------------------------------------------
 	local function pedalUpdate(color: Color3)
@@ -391,16 +409,19 @@ function TouchControls:SetDriving(driving: boolean)
 	end
 end
 
--- En course : pas de retour au départ de la spéciale, et on ne descend pas de
--- voiture (on abandonne depuis le menu COURSES).
+-- À pied : "Prendre le volant" seulement si on a une voiture (zone VOITURE du paddock).
+function TouchControls:SetCarAvailable(available: boolean)
+	self.EnterButton.Visible = available
+end
+
+-- En course : pas de retour au départ de la spéciale ni au paddock, et on ne
+-- descend pas de voiture (on abandonne depuis le menu COURSES).
 function TouchControls:SetRaceMode(racing: boolean)
-	local restart = self.ActionButtons["DÉPART"]
-	local exit = self.ActionButtons["SORTIR"]
-	if restart then
-		restart.Visible = not racing
-	end
-	if exit then
-		exit.Visible = not racing
+	for _, name in ipairs({ "DÉPART", "SORTIR", "PADDOCK" }) do
+		local button = self.ActionButtons[name]
+		if button then
+			button.Visible = not racing
+		end
 	end
 end
 

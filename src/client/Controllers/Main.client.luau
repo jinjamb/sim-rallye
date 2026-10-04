@@ -26,6 +26,7 @@ local SetupMenu = require(script.Parent.SetupMenu)
 local TouchControls = require(script.Parent.TouchControls)
 local DrivingSession = require(script.Parent.DrivingSession)
 local RaceClient = require(script.Parent.Parent.Race.RaceClient)
+local Garage = require(script.Parent.Parent.Race.Garage)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -166,6 +167,19 @@ local raceClient = RaceClient.new({
 	end,
 })
 
+-- Garage du paddock (zone violette) : livrée et réglages, voiture en aperçu.
+local garage = Garage.new(playerGui, {
+	GetLivery = function()
+		return raceClient:GetLivery()
+	end,
+	SetLivery = function(livery)
+		raceClient:SaveLivery(livery)
+	end,
+	OpenSetup = function()
+		setupMenu:SetOpen(true)
+	end,
+})
+
 RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, function(dt: number)
 	if raceClient:UpdateCamera(dt) then
 		return
@@ -229,10 +243,21 @@ local actions: TouchControls.Actions = {
 	ToggleRaceMenu = function()
 		raceClient:ToggleMenu()
 	end,
+	-- Essais libres, spéciale, ou à pied loin : retour à pied au paddock.
+	-- En course, le serveur l'ignore (on abandonne depuis le menu).
+	ReturnToPaddock = function()
+		if isRacing() then
+			raceClient:ToggleMenu()
+			return
+		end
+		Remotes.ReturnToPaddock:FireServer()
+	end,
 	EnterCar = function()
 		local current = session
 		if current then
 			Remotes.RequestCarControl:FireServer(current.Chassis)
+		else
+			print("[Paddock] Pas de voiture : passe sur la zone jaune TA VOITURE, ou sur la zone d'un circuit pour courir")
 		end
 	end,
 	ExitCar = function()
@@ -254,6 +279,7 @@ if isTouch then
 	leaderboard:SetTouchLayout(true)
 	setupMenu:SetTouchLayout(true)
 	raceClient:SetTouchLayout(true)
+	garage:SetTouchLayout(true)
 end
 
 --------------------------------------------------------------------------------
@@ -270,6 +296,7 @@ local function applyDrivingUi()
 	if touch then
 		touch:SetDriving(driving)
 		touch:SetRaceMode(racing)
+		touch:SetCarAvailable(current ~= nil)
 	end
 	remoteCars:SetLocalRaceId(if current then current.RaceId else nil)
 	raceClient:SetMyChassis(if current then current.Chassis else nil)
@@ -286,14 +313,14 @@ local function setControl(granted: boolean)
 		if current:IsRacing() then
 			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C rallycross, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C rallycross, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
 			exitDrivingCamera()
 		end
 		setCharacterControlsEnabled(true)
-		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le rallycross")
+		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le menu rallycross")
 	end
 	applyDrivingUi()
 end
@@ -425,7 +452,10 @@ Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
 		current:SetStageProfile(stageBestMs, stageGhost)
 	end
 	raceClient:SetProfile(profile.Stats, profile.Laps)
+	raceClient:SetLivery(profile.Livery)
 end)
+
+print("[Paddock] Bienvenue ! Zones au sol : un circuit chacune (2 à 6 pilotes), zone jaune = ta voiture pour les essais libres, zone violette = garage (couleur, numéro, réglages). C : menu rallycross, records. H : retour au paddock")
 
 Remotes.ProfileUpdated.OnClientEvent:Connect(function(stats: any, laps: any)
 	raceClient:SetProfile(stats, laps)
@@ -474,6 +504,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.ToggleRaceMenu()
 	elseif key == Enum.KeyCode.V then
 		raceClient:SpectateNext(1)
+	elseif key == Enum.KeyCode.H then
+		actions.ReturnToPaddock()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		actions.ShiftUp()
@@ -514,7 +546,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 				Remotes.CarTelemetry:FireServer(
 					audioState.Rpm,
 					audioState.Load,
-					InputManager:GetInputs().steer,
+					-- Braquage rapporté à 60° (RemoteCars) : l'angle maximal est réglable.
+					InputManager:GetInputs().steer * current.Car.MaxSteerAngle / 60,
 					screech,
 					audioState.GravelSlide,
 					audioState.GravelShare,
@@ -526,6 +559,9 @@ RunService.RenderStepped:Connect(function(dt: number)
 
 	leaderboard:Update()
 	raceClient:Update(dt)
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	garage:Update(dt, if root and root:IsA("BasePart") then root.Position else nil)
 	local touch = touchControls
 	if touch then
 		touch:Update()

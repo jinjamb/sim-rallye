@@ -1,19 +1,20 @@
 --!strict
 --[[
 	RaceMenu.luau
-	Le lobby du rallycross : C (ou croix directionnelle droite, ou bouton
-	COURSES sur mobile) ouvre et ferme.
+	Menu du rallycross : C (ou croix directionnelle droite, ou bouton COURSES
+	sur mobile) ouvre et ferme. On rejoint une course en marchant dans sa zone
+	au paddock ; ce menu sert au reste.
 
 	HORS COURSE :
-		- créer une course : circuit, nombre de tours, format (course simple, ou
-		  manche qualificative + finale), contacts entre voitures ;
-		- rejoindre une course ouverte (2 à 6 pilotes) ;
-		- records du tour de chaque circuit, et sa carrière (courses, victoires,
-		  podiums, points).
-	DANS UNE COURSE :
-		- salle d'attente : pilotes, prêts ou non, hôte ; PRÊT, LANCER (hôte),
-		  QUITTER. Départ automatique quand tout le monde est prêt ;
-		- pendant la course : ABANDONNER.
+		- où rejoindre une course, et les courses en attente ou en cours ;
+		- sa livrée : couleur de carrosserie et numéro ;
+		- records du tour de chaque circuit, et sa carrière.
+	EN SALLE D'ATTENTE :
+		- pilotes, compte à rebours ;
+		- l'hôte (premier arrivé) règle tours, format, contacts, et peut lancer
+		  sans attendre ;
+		- QUITTER (ou sortir de la zone).
+	PENDANT LA COURSE : ABANDONNER.
 
 	Le contenu est reconstruit à chaque changement d'état (il change rarement) ;
 	seuls les comptes à rebours sont rafraîchis à chaque frame.
@@ -23,6 +24,7 @@ local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local RaceUi = require(script.Parent.RaceUi)
 
 local RaceMenu = {}
@@ -34,6 +36,7 @@ export type Data = {
 	Records: { [string]: RaceUi.TrackBoard },
 	Stats: RaceUi.Stats?,
 	Laps: { [string]: number },
+	Livery: Livery.Livery?,
 }
 
 export type RaceMenu = typeof(setmetatable({}, RaceMenu)) & {
@@ -47,13 +50,6 @@ export type RaceMenu = typeof(setmetatable({}, RaceMenu)) & {
 	Data: Data,
 	Status: string,
 	StatusColor: Color3,
-
-	-- Formulaire de création
-	TrackIndex: number,
-	Laps: number,
-	Format: string,
-	Contacts: boolean,
-
 	CountdownLabel: TextLabel?,
 	FirstButton: GuiButton?,
 }
@@ -83,14 +79,9 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Action = action
 	self.LocalUserId = localUserId
 	self.TouchLayout = false
-	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Laps = {} }
+	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Laps = {}, Livery = nil }
 	self.Status = ""
 	self.StatusColor = RaceUi.COLOR_DIM
-	self.TrackIndex = 1
-	local first = Tracks.Get(Tracks.List()[1])
-	self.Laps = if first then first.DefaultLaps else 4
-	self.Format = "Sprint"
-	self.Contacts = true
 	self.CountdownLabel = nil
 	self.FirstButton = nil
 
@@ -197,8 +188,8 @@ function RaceMenu:_button(parent: Instance, text: string, x: number, width: numb
 	return button
 end
 
--- Ligne "libellé  [−] valeur [+]".
-function RaceMenu:_stepper(b: Builder, label: string, value: string, onStep: (number) -> ())
+-- Ligne "libellé  [◀] valeur [▶]". Renvoie l'étiquette de la valeur.
+function RaceMenu:_stepper(b: Builder, label: string, value: string, onStep: (number) -> ()): TextLabel
 	local row = b:Row()
 	local text = RaceUi.Label(row, label, 14)
 	text.Size = UDim2.new(0, 200, 1, 0)
@@ -213,6 +204,7 @@ function RaceMenu:_stepper(b: Builder, label: string, value: string, onStep: (nu
 	self:_button(row, "▶", width - 40, 40, function()
 		onStep(1)
 	end)
+	return valueLabel
 end
 
 function RaceMenu:_records(b: Builder, trackId: string)
@@ -234,74 +226,68 @@ function RaceMenu:_records(b: Builder, trackId: string)
 	end
 end
 
-function RaceMenu:_buildLobby(b: Builder)
-	local ids = Tracks.List()
-	self.TrackIndex = math.clamp(self.TrackIndex, 1, #ids)
-	local trackId = ids[self.TrackIndex]
-	local circuit = Tracks.Get(trackId)
-
-	b:Section("Créer une course")
-	self:_stepper(b, "Circuit", if circuit then circuit.Name else trackId, function(direction)
-		self.TrackIndex = ((self.TrackIndex - 1 + direction) % #ids) + 1
-		local selected = Tracks.Get(ids[self.TrackIndex])
-		if selected then
-			self.Laps = selected.DefaultLaps
-		end
-		self:_rebuild()
-	end)
-	if circuit then
-		b:Text(circuit.Description, 13, RaceUi.COLOR_DIM)
+-- Couleur et numéro de sa voiture.
+function RaceMenu:_livery(b: Builder)
+	local livery = self.Data.Livery
+	if not livery then
+		b:Text("Chargement…", 13, RaceUi.COLOR_DIM)
+		return
 	end
-	self:_stepper(b, "Tours", tostring(self.Laps), function(direction)
-		self.Laps = math.clamp(self.Laps + direction, MIN_LAPS, MAX_LAPS)
+	local current: Livery.Livery = livery
+	local function send(changed: Livery.Livery)
+		self.Data.Livery = changed
+		self.Action("Livery", changed)
 		self:_rebuild()
+	end
+	local colorValue = self:_stepper(b, "Couleur", Livery.NameOf(current), function(direction)
+		local count = #Livery.COLORS
+		send({ Color = ((current.Color - 1 + direction) % count) + 1, Number = current.Number })
 	end)
-	self:_stepper(b, "Format", formatName(self.Format), function(_direction)
-		self.Format = if self.Format == "Sprint" then "Event" else "Sprint"
-		self:_rebuild()
+	-- Pastille de la couleur, derrière le nom.
+	local swatch = Livery.ColorOf(current)
+	colorValue.BackgroundTransparency = 0
+	colorValue.BackgroundColor3 = swatch
+	colorValue.TextColor3 = Livery.ContrastOf(swatch)
+	RaceUi.Corner(colorValue, 6)
+	self:_stepper(b, "Numéro", "#" .. tostring(current.Number), function(direction)
+		local range = Livery.MAX_NUMBER - Livery.MIN_NUMBER + 1
+		local number = ((current.Number - Livery.MIN_NUMBER + direction) % range) + Livery.MIN_NUMBER
+		send({ Color = current.Color, Number = number })
 	end)
-	self:_stepper(b, "Contacts entre voitures", if self.Contacts then "Oui" else "Non", function(_direction)
-		self.Contacts = not self.Contacts
-		self:_rebuild()
-	end)
-	local createRow = b:Row(36)
-	local create = self:_button(createRow, "CRÉER LA COURSE", 0, PANEL_WIDTH - 32, function()
-		self.Action("Create", { TrackId = trackId, Laps = self.Laps, Format = self.Format, Contacts = self.Contacts })
-	end)
-	create.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Aperçu au GARAGE (zone violette du paddock).", 12, RaceUi.COLOR_DIM)
+end
 
-	b:Section("Courses")
+function RaceMenu:_buildOutside(b: Builder)
+	local homeRow = b:Row(36)
+	self:_button(homeRow, "RETOUR AU PADDOCK (H)", 0, PANEL_WIDTH - 32, function()
+		self.Action("Paddock", nil)
+	end)
+
+	b:Section("Rejoindre une course")
+	b:Text("Marche (ou roule) jusqu'à la zone d'un circuit, au paddock : tu rejoins sa salle d'attente. Le départ est donné 20 s après l'arrivée du 2e pilote. Sortir de la zone, c'est quitter la salle.", 13, RaceUi.COLOR_TEXT)
+
 	local lobby = self.Data.Lobby
-	if #lobby == 0 then
-		b:Text("Aucune course pour l'instant : crée la première !", 13, RaceUi.COLOR_DIM)
+	if #lobby > 0 then
+		b:Section("Courses")
+		for _, race in ipairs(lobby) do
+			local stateText = if race.State == "Lobby" then "en attente" else "en course"
+			b:Text(string.format(
+				"%s · %d tours · %s · %d/%d pilotes · %s",
+				trackName(race.TrackId),
+				race.Laps,
+				formatName(race.Format),
+				race.Count,
+				race.Max,
+				stateText
+			), 13, if race.State == "Lobby" then RaceUi.COLOR_GREEN else RaceUi.COLOR_DIM)
+		end
 	end
-	for _, race in ipairs(lobby) do
-		local row = b:Row(34)
-		local open = race.State == "Lobby" and race.Count < race.Max
-		local stateText = if race.State == "Lobby" then "en attente" else "en course"
-		local text = RaceUi.Label(row, string.format(
-			"%s · %d tours · %s%s\n%d/%d pilotes · hôte %s · %s",
-			trackName(race.TrackId),
-			race.Laps,
-			formatName(race.Format),
-			if race.Contacts then " · contacts" else "",
-			race.Count,
-			race.Max,
-			race.Host,
-			stateText
-		), 13)
-		text.Size = UDim2.new(1, -130, 1, 0)
-		local join = self:_button(row, if open then "REJOINDRE" else "—", PANEL_WIDTH - 32 - 120, 120, function()
-			if open then
-				self.Action("Join", { RaceId = race.Id })
-			end
-		end)
-		join.AutoButtonColor = open
-		join.TextColor3 = if open then RaceUi.COLOR_TEXT else RaceUi.COLOR_DIM
-	end
+
+	b:Section("Ta voiture")
+	self:_livery(b)
 
 	b:Section("Records du tour")
-	for _, id in ipairs(ids) do
+	for _, id in ipairs(Tracks.List()) do
 		self:_records(b, id)
 	end
 
@@ -323,17 +309,32 @@ end
 
 function RaceMenu:_buildRace(b: Builder, race: RaceUi.RaceSnapshot)
 	local isHost = race.HostUserId == self.LocalUserId
+	local inLobby = race.State == "Lobby"
 	b:Section(trackName(race.TrackId))
-	b:Text(string.format(
-		"%d tours · %s · contacts %s",
-		race.Laps,
-		formatName(race.Format),
-		if race.Contacts then "activés" else "désactivés"
-	), 14)
+
+	if inLobby and isHost then
+		b:Text("Tu es l'hôte : tu règles la course et peux la lancer sans attendre.", 13, RaceUi.COLOR_DIM)
+		self:_stepper(b, "Tours", tostring(race.Laps), function(direction)
+			self.Action("Settings", { Laps = math.clamp(race.Laps + direction, MIN_LAPS, MAX_LAPS) })
+		end)
+		self:_stepper(b, "Format", formatName(race.Format), function(_direction)
+			self.Action("Settings", { Format = if race.Format == "Event" then "Sprint" else "Event" })
+		end)
+		self:_stepper(b, "Contacts entre voitures", if race.Contacts then "Oui" else "Non", function(_direction)
+			self.Action("Settings", { Contacts = not race.Contacts })
+		end)
+	else
+		b:Text(string.format(
+			"%d tours · %s · contacts %s",
+			race.Laps,
+			formatName(race.Format),
+			if race.Contacts then "activés" else "désactivés"
+		), 14)
+	end
 
 	local stateText: string
-	if race.State == "Lobby" then
-		stateText = string.format("En attente des pilotes (%d/%d)", #race.Members, race.MaxPlayers)
+	if inLobby then
+		stateText = string.format("Salle d'attente (%d/%d pilotes)", #race.Members, race.MaxPlayers)
 	elseif race.State == "Grid" or race.State == "Countdown" then
 		stateText = race.RoundName .. " — départ imminent"
 	elseif race.State == "Racing" then
@@ -346,46 +347,28 @@ function RaceMenu:_buildRace(b: Builder, race: RaceUi.RaceSnapshot)
 
 	b:Section("Pilotes")
 	for _, member in ipairs(race.Members) do
-		local ready = if race.State == "Lobby" then (if member.Ready then "  ✓ prêt" else "  pas prêt") else ""
 		local host = if member.UserId == race.HostUserId then "★ " else "   "
 		local color = if member.UserId == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
-		b:Text(host .. member.Name .. ready, 15, color)
+		b:Text(host .. member.Name, 15, color)
 	end
 
 	local row = b:Row(36)
 	local width = PANEL_WIDTH - 32
-	if race.State == "Lobby" then
-		local me: RaceUi.RaceMember? = nil
-		for _, member in ipairs(race.Members) do
-			if member.UserId == self.LocalUserId then
-				me = member
-			end
-		end
-		local ready = me ~= nil and me.Ready
-		local third = (width - 16) / 3
-		local readyButton = self:_button(row, if ready then "PAS PRÊT" else "PRÊT", 0, third, function()
-			self.Action("Ready", { Ready = not ready })
-		end)
-		readyButton.BackgroundColor3 = if ready then RaceUi.COLOR_BUTTON else Color3.fromRGB(40, 120, 60)
+	if inLobby then
+		local half = (width - 8) / 2
 		if isHost then
 			local canStart = #race.Members >= race.MinPlayers
-			local start = self:_button(row, "LANCER", third + 8, third, function()
+			local start = self:_button(row, "LANCER MAINTENANT", 0, half, function()
 				if canStart then
 					self.Action("Start", nil)
 				end
 			end)
+			start.BackgroundColor3 = if canStart then Color3.fromRGB(40, 120, 60) else RaceUi.COLOR_BUTTON
 			start.TextColor3 = if canStart then RaceUi.COLOR_TEXT else RaceUi.COLOR_DIM
 		end
-		self:_button(row, "QUITTER", 2 * (third + 8), third, function()
+		self:_button(row, "QUITTER", if isHost then half + 8 else 0, if isHost then half else width, function()
 			self.Action("Leave", nil)
 		end)
-		b:Text(
-			if isHost
-				then "Tu es l'hôte : LANCER part sans attendre que tout le monde soit prêt."
-				else "Le départ est donné quand tout le monde est prêt, ou par l'hôte.",
-			12,
-			RaceUi.COLOR_DIM
-		)
 	else
 		local abandon = self:_button(row, "ABANDONNER", 0, width, function()
 			self.Action("Abandon", nil)
@@ -413,7 +396,7 @@ function RaceMenu:_rebuild()
 	if race then
 		self:_buildRace(b, race)
 	else
-		self:_buildLobby(b)
+		self:_buildOutside(b)
 	end
 	if self.Gui.Enabled and not self.TouchLayout then
 		GuiService.SelectedObject = self.FirstButton
@@ -468,7 +451,7 @@ function RaceMenu:Toggle()
 	self:SetOpen(not self:IsOpen())
 end
 
--- Comptes à rebours (départ automatique).
+-- Compte à rebours de la salle d'attente.
 function RaceMenu:Update()
 	local label = self.CountdownLabel
 	local race = self.Data.Race
@@ -476,9 +459,9 @@ function RaceMenu:Update()
 		return
 	end
 	if race.State == "Lobby" and race.AutoStartAt then
-		label.Text = string.format("Tout le monde est prêt : départ dans %d s", math.max(0, math.ceil((race.AutoStartAt :: number) - serverNow())))
+		label.Text = string.format("Départ dans %d s", math.max(0, math.ceil((race.AutoStartAt :: number) - serverNow())))
 	elseif race.State == "Lobby" and #race.Members < race.MinPlayers then
-		label.Text = string.format("Il faut au moins %d pilotes.", race.MinPlayers)
+		label.Text = string.format("En attente d'un %de pilote…", race.MinPlayers)
 	else
 		label.Text = ""
 	end

@@ -95,8 +95,10 @@ local BY_MATERIAL: { [Enum.Material]: SurfaceProperties } = {
 	[Enum.Material.Slate] = { Name = "Ardoise", Grip = 0.86, RollingResistance = 0.020, DustColor = Color3.fromRGB(110, 110, 115), Sound = "Gravel", Tire = LOOSE },
 	[Enum.Material.Pebble] = { Name = "Gravier", Grip = 0.70, RollingResistance = 0.035, DustColor = Color3.fromRGB(170, 160, 140), Sound = "Gravel", Tire = LOOSE },
 	[Enum.Material.Ground] = { Name = "Terre", Grip = 0.72, RollingResistance = 0.032, DustColor = Color3.fromRGB(120, 95, 70), Sound = "Gravel", Tire = LOOSE },
-	[Enum.Material.Grass] = { Name = "Herbe", Grip = 0.62, RollingResistance = 0.045, DustColor = Color3.fromRGB(95, 130, 70), Sound = "Gravel", Tire = LOOSE },
-	[Enum.Material.LeafyGrass] = { Name = "Herbe haute", Grip = 0.55, RollingResistance = 0.060, DustColor = Color3.fromRGB(80, 115, 60), Sound = "Gravel", Tire = LOOSE },
+	-- Dans l'herbe, les pneus arrachent la terre en dessous : poussière brune,
+	-- pas verte (une poussière verte sur fond vert ne se voit pas).
+	[Enum.Material.Grass] = { Name = "Herbe", Grip = 0.62, RollingResistance = 0.045, DustColor = Color3.fromRGB(135, 115, 80), Sound = "Gravel", Tire = LOOSE },
+	[Enum.Material.LeafyGrass] = { Name = "Herbe haute", Grip = 0.55, RollingResistance = 0.060, DustColor = Color3.fromRGB(125, 108, 75), Sound = "Gravel", Tire = LOOSE },
 	[Enum.Material.Mud] = { Name = "Boue", Grip = 0.50, RollingResistance = 0.075, DustColor = Color3.fromRGB(90, 70, 50), Sound = "Gravel", Tire = LOOSE },
 	[Enum.Material.Sand] = { Name = "Sable", Grip = 0.48, RollingResistance = 0.090, DustColor = Color3.fromRGB(200, 180, 130), Sound = "Gravel", Tire = LOOSE },
 	[Enum.Material.Snow] = { Name = "Neige", Grip = 0.35, RollingResistance = 0.055, DustColor = Color3.fromRGB(235, 240, 245), Sound = "Gravel", Tire = LOOSE },

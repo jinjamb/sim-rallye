@@ -31,6 +31,16 @@ export type Field = {
 
 CarSetup.FIELDS = {
 	{
+		Key = "SteerAngle", Label = "Angle de braquage", Group = "Direction",
+		Min = 30, Max = 60, Step = 1, Default = 45, Format = "%.0f°", Scale = 1,
+		Hint = "Braquage maximal des roues avant. Plus grand : épingles plus serrées, contre-braquage plus ample.",
+	},
+	{
+		Key = "HighSpeedSteer", Label = "Braquage à haute vitesse", Group = "Direction",
+		Min = 0.30, Max = 1, Step = 0.05, Default = 0.55, Format = "%.0f %%", Scale = 100,
+		Hint = "Clavier et tactile : part du braquage gardée à 120 km/h (la manette n'est jamais limitée).",
+	},
+	{
 		Key = "BrakeBias", Label = "Répartition AV", Group = "Freins",
 		Min = 0.50, Max = 0.80, Step = 0.01, Default = 0.65, Format = "%.0f %%", Scale = 100,
 		Hint = "Moins à l'avant : l'arrière décroche au freinage, la voiture pivote.",
