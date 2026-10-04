@@ -261,7 +261,9 @@ local function grant(player: Player, chassis: BasePart)
 	Remotes.CarControlChanged:FireClient(player, chassis, true)
 end
 
-local function release(chassis: BasePart)
+-- notify = false : la voiture va être détruite (remplacée), sa disparition suffit
+-- à terminer la session de conduite du client ; inutile de le faire passer à pied.
+local function release(chassis: BasePart, notify: boolean?)
 	local player = driverByChassis[chassis]
 	if not player then
 		return
@@ -275,7 +277,7 @@ local function release(chassis: BasePart)
 		chassis:SetNetworkOwner(nil) -- le serveur reprend la simulation
 	end
 
-	if player.Parent then
+	if player.Parent and notify ~= false then
 		Remotes.CarControlChanged:FireClient(player, chassis, false)
 	end
 end
@@ -311,7 +313,7 @@ local function removeCar(player: Player)
 	carByPlayer[player] = nil
 	local chassis = chassisOf(car)
 	if chassis and driverByChassis[chassis] then
-		release(chassis)
+		release(chassis, false)
 	end
 	if car then
 		car:Destroy()
