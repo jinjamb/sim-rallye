@@ -48,6 +48,13 @@
 	Spéciales terminées et points de style sont sauvegardés par lots, avec
 	les réglages (toutes les 30 s et au départ du joueur).
 
+	DÉFI DE LA SEMAINE (Weekly.luau) : la voiture lancée pour le défi porte
+	l'attribut Weekly (clé de la semaine). Son temps va dans le classement de
+	la semaine (un OrderedDataStore par semaine : remis à zéro le lundi), et
+	dans le meilleur temps de la semaine du profil -- pas dans le record
+	habituel, ni son fantôme, ni ses médailles. La première fois de la
+	semaine, il compte pour l'XP (WeeklyCompleted).
+
 	DÉFI DU FANTÔME : un joueur peut demander le fantôme d'un autre pilote pour
 	courir contre lui -- le rival juste devant lui au classement, le recordman,
 	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
@@ -67,6 +74,7 @@ local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
+local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 
 local RecordService = {}
 
@@ -74,6 +82,7 @@ local STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
 local PROFILE_STORE_NAME = "RallyProfiles_v1"
 local LEADERBOARD_STORE_NAME = "RallyBest_" .. STAGE_ID
 local LAP_STORE_PREFIX = "RallyLap_"
+local WEEKLY_STORE_PREFIX = "RallyWeekly_" .. STAGE_ID .. "_"
 
 local SAMPLE_INTERVAL = 0.1 -- secondes entre deux mesures de position
 local MAX_PLAUSIBLE_SPEED = 250 -- studs/s (~250 km/h) : au-delà, ce n'est pas de la conduite
@@ -113,6 +122,8 @@ type Profile = {
 	Stats: Stats,
 	StageRuns: number, -- spéciales terminées (temps validés)
 	Style: number, -- points de style cumulés
+	Weekly: { Key: string, Ms: number }?, -- meilleur temps au défi de la semaine
+	WeeklyCompleted: number, -- semaines où le défi a été terminé
 }
 
 type Run = {
@@ -222,12 +233,19 @@ local function sanitizeProfile(data: any, userId: number): Profile
 		Stats = emptyStats(),
 		StageRuns = 0,
 		Style = 0,
+		Weekly = nil,
+		WeeklyCompleted = 0,
 	}
 	if type(data) ~= "table" then
 		return profile
 	end
 	profile.StageRuns = count(data.StageRuns)
 	profile.Style = count(data.Style)
+	profile.WeeklyCompleted = count(data.WeeklyCompleted)
+	local weekly = data.Weekly
+	if type(weekly) == "table" and type(weekly.Key) == "string" and type(weekly.Ms) == "number" and weekly.Ms > 0 then
+		profile.Weekly = { Key = weekly.Key, Ms = weekly.Ms }
+	end
 	profile.Livery = Livery.Sanitize(data.Livery, userId)
 	if type(data.Records) == "table" then
 		for stageId, record in pairs(data.Records) do
@@ -309,6 +327,7 @@ local function snapshotOf(profile: Profile): Progression.Snapshot
 		Points = profile.Stats.Points,
 		StageRuns = profile.StageRuns,
 		Style = profile.Style,
+		WeeklyCompleted = profile.WeeklyCompleted,
 		Medals = medalsOf(profile),
 	})
 end
@@ -486,6 +505,75 @@ local function scheduleLeaderboardRefresh()
 end
 
 --------------------------------------------------------------------------------
+-- Défi de la semaine (Weekly.luau)
+--------------------------------------------------------------------------------
+
+local weeklyStores: { [string]: OrderedDataStore } = {}
+local sessionWeekly: { [string]: { [number]: number } } = {} -- par clé de semaine
+local weeklyEntries: { Entry } = {}
+local weeklyKey = ""
+
+local function weeklyStore(key: string): OrderedDataStore?
+	if not storesAvailable then
+		return nil
+	end
+	local existing = weeklyStores[key]
+	if existing then
+		return existing
+	end
+	local ok, result = pcall(function()
+		return DataStoreService:GetOrderedDataStore(WEEKLY_STORE_PREFIX .. key)
+	end)
+	if not ok then
+		storeFailed("défi de la semaine", result)
+		return nil
+	end
+	weeklyStores[key] = result
+	return result
+end
+
+-- Ce qu'on envoie à un joueur : la semaine, sa contrainte, le classement, son temps.
+local function weeklyPayload(player: Player): any
+	local week = Weekly.Current()
+	local profile = profiles[player]
+	local mine = if profile and profile.Weekly and profile.Weekly.Key == week.Key then profile.Weekly.Ms else nil
+	return {
+		Key = week.Key,
+		Modifier = week.Modifier.Id,
+		EndsAt = week.EndsAt,
+		Entries = if weeklyKey == week.Key then weeklyEntries else {},
+		Mine = mine,
+	}
+end
+
+local function sendWeekly(player: Player)
+	if player.Parent then
+		Remotes.WeeklyBoard:FireClient(player, weeklyPayload(player))
+	end
+end
+
+local function refreshWeekly()
+	local week = Weekly.Current()
+	weeklyEntries = mergeBoard(weeklyStore(week.Key), sessionWeekly[week.Key] or {}, LEADERBOARD_SIZE, "défi de la semaine")
+	weeklyKey = week.Key
+	for _, player in ipairs(Players:GetPlayers()) do
+		sendWeekly(player)
+	end
+end
+
+local weeklyRefreshScheduled = false
+local function scheduleWeeklyRefresh()
+	if weeklyRefreshScheduled then
+		return
+	end
+	weeklyRefreshScheduled = true
+	task.delay(2, function()
+		weeklyRefreshScheduled = false
+		refreshWeekly()
+	end)
+end
+
+--------------------------------------------------------------------------------
 -- Records du tour (rallycross)
 --------------------------------------------------------------------------------
 
@@ -606,9 +694,80 @@ end
 
 local pendingGhost: { [Player]: { Ms: number, Expires: number } } = {}
 
+--[[
+	Arrivée d'un passage du défi de la semaine `key` : classement de la semaine
+	et meilleur temps de la semaine du joueur ; la première fois de la semaine,
+	le défi compte comme terminé (XP).
+]]
+local function onWeeklyFinish(player: Player, ms: number, key: string)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	local current = profile.Weekly
+	local sameWeek = current ~= nil and current.Key == key
+	local previous = if current and sameWeek then current.Ms else nil
+	local isBest = previous == nil or ms < previous
+	if isBest then
+		if not sameWeek then
+			profile.WeeklyCompleted += 1
+		end
+		profile.Weekly = { Key = key, Ms = ms }
+		local session = sessionWeekly[key]
+		if not session then
+			session = {}
+			sessionWeekly[key] = session
+		end
+		session[player.UserId] = ms
+		updateStoredProfile(player.UserId, "défi de la semaine", function(stored)
+			local storedWeekly = stored.Weekly
+			if storedWeekly == nil or storedWeekly.Key ~= key then
+				stored.WeeklyCompleted += 1
+			elseif storedWeekly.Ms <= ms then
+				return false
+			end
+			stored.Weekly = { Key = key, Ms = ms }
+			return true
+		end)
+		local store = weeklyStore(key)
+		if store then
+			task.spawn(function()
+				local ok, err = pcall(function()
+					store:UpdateAsync(tostring(player.UserId), function(old: any)
+						if type(old) == "number" and old <= ms then
+							return nil
+						end
+						return ms
+					end)
+				end)
+				if not ok then
+					storeFailed("défi de la semaine", err)
+				end
+			end)
+		end
+		scheduleWeeklyRefresh()
+	end
+	Remotes.RunValidated:FireClient(player, {
+		Valid = true,
+		Ms = ms,
+		Weekly = true,
+		WeeklyBest = isBest,
+		PreviousMs = previous,
+	})
+	addCounters(player, 1, 0)
+	sendWeekly(player)
+end
+
 local function onFinish(player: Player, ms: number)
 	local profile = profiles[player]
 	if not profile then
+		return
+	end
+	-- Défi de la semaine : son propre classement, pas le record habituel.
+	local car = workspace:FindFirstChild("Car_" .. player.UserId)
+	local weeklyKeyOfCar = if car then car:GetAttribute("Weekly") else nil
+	if type(weeklyKeyOfCar) == "string" then
+		onWeeklyFinish(player, ms, weeklyKeyOfCar)
 		return
 	end
 	local previous = profile.Records[STAGE_ID]
@@ -899,6 +1058,7 @@ local function onPlayerAdded(player: Player)
 	RecordService.LiveryChanged(player)
 	Remotes.Leaderboard:FireClient(player, leaderboard)
 	Remotes.TrackRecords:FireClient(player, lapBoards)
+	sendWeekly(player)
 	pushProgress(player, false)
 end
 
@@ -1104,9 +1264,12 @@ function RecordService.Start()
 
 	task.spawn(function()
 		refreshLeaderboard()
+		refreshWeekly()
 		while true do
 			task.wait(LEADERBOARD_REFRESH)
 			refreshLeaderboard()
+			-- Aussi au passage du lundi : nouvelle semaine, nouvelle contrainte.
+			refreshWeekly()
 		end
 	end)
 	task.spawn(function()

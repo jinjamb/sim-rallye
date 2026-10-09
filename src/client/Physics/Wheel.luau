@@ -361,7 +361,7 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongitudinalVelocity = longitudinalVelocity
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
-	local mu = self.Surface.Grip
+	local mu = self.Surface.Grip * Surfaces.GripScale
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 

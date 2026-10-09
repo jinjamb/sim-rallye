@@ -20,6 +20,8 @@
 	MENU (C, ou bouton MENU sur mobile ; ouvert à l'arrivée) : le raccourci de
 	tout ça, d'où qu'on soit :
 		- Lancer une spéciale : la voiture est posée sur la ligne de départ ;
+		- Défi de la semaine : pareil, avec la contrainte de la semaine
+		  (Weekly.luau ; attributs Weekly et Modifier sur la voiture) ;
 		- Rallycross : rejoindre (ou ouvrir) la salle d'attente d'un circuit ;
 		  on y reste sans avoir à se tenir dans la zone ;
 		- Essais libres : la voiture à sa place au paddock.
@@ -42,6 +44,7 @@ local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
@@ -387,7 +390,7 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		if RaceService.GetLobbyTrack(player) == trackId then
 			return -- déjà dans cette salle d'attente
 		end
-	elseif mode ~= "Stage" and mode ~= "Practice" then
+	elseif mode ~= "Stage" and mode ~= "Practice" and mode ~= "Weekly" then
 		return
 	end
 	local ok, reason = RaceService.ReleaseForMode(player)
@@ -399,6 +402,11 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 
 	if mode == "Stage" then
 		CarService.Spawn(player, StageTrack.StartFrame(), nil)
+	elseif mode == "Weekly" then
+		local week = Weekly.Current()
+		CarService.Spawn(player, StageTrack.StartFrame(), {
+			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id },
+		})
 	elseif mode == "Practice" then
 		CarService.GiveFreeCar(player)
 	elseif RaceService.IsInRace(player) then

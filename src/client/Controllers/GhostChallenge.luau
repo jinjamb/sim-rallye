@@ -200,7 +200,8 @@ end
 -- Temps officiel validé : un rival battu fait monter d'un cran.
 function GhostChallenge:OnRunValidated(result: any)
 	local opponent = self.Opponent
-	if type(result) ~= "table" or not result.Valid or type(result.Ms) ~= "number" or not opponent then
+	-- Le défi de la semaine se court sans fantôme, sous une contrainte : il ne compte pas ici.
+	if type(result) ~= "table" or not result.Valid or type(result.Ms) ~= "number" or not opponent or result.Weekly then
 		return
 	end
 	if result.Ms >= opponent.Ms then

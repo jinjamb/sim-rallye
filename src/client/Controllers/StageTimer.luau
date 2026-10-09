@@ -64,6 +64,10 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	NextDeltaAt: number,
 	-- Meilleur temps OFFICIEL (ms) : celui qui donne la médaille.
 	OfficialBestMs: number?,
+	-- Défi de la semaine : nom de la contrainte (nil : spéciale habituelle), et
+	-- meilleur temps de la semaine (pas de médailles ici).
+	Weekly: string?,
+	WeeklyBestMs: number?,
 	Ghost: Ghost.Ghost?,
 	InvalidReason: string,
 	-- Verdict du serveur sur le dernier passage (temps officiel), affiché à l'arrivée.
@@ -135,6 +139,8 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.LiveDelta = nil
 	self.NextDeltaAt = 0
 	self.OfficialBestMs = nil
+	self.Weekly = nil
+	self.WeeklyBestMs = nil
 	self.Ghost = nil
 	self.InvalidReason = ""
 	self.OfficialText = nil
@@ -271,6 +277,13 @@ function StageTimer:SetPersonalBest(ms: number?)
 	self.OfficialBestMs = ms
 end
 
+-- Défi de la semaine : la contrainte (affichée), son meilleur temps de la semaine.
+function StageTimer:SetWeekly(modifierName: string, bestMs: number?)
+	self.Weekly = modifierName
+	self.WeeklyBestMs = bestMs
+	self.BestTime = if bestMs then bestMs / 1000 else nil
+end
+
 -- Le fantôme qui sert de référence (écarts).
 function StageTimer:SetGhost(ghost: Ghost.Ghost?)
 	self.Ghost = ghost
@@ -321,7 +334,24 @@ function StageTimer:SetOfficialResult(result: any)
 	if type(result) ~= "table" then
 		return
 	end
-	if result.Valid and type(result.Ms) == "number" then
+	if result.Valid and type(result.Ms) == "number" and result.Weekly then
+		-- Défi de la semaine : son classement à lui, pas de médaille.
+		local text = "OFFICIEL " .. formatTime(result.Ms / 1000)
+		if result.WeeklyBest then
+			text ..= " — MEILLEUR DE TA SEMAINE !"
+			self.WeeklyBestMs = result.Ms
+			self.BestTime = result.Ms / 1000
+			Banner.Show(
+				"DÉFI DE LA SEMAINE",
+				formatTime(result.Ms / 1000) .. "  ·  nouveau meilleur temps de ta semaine (classement : L)",
+				COLOR_FASTER,
+				4,
+				true
+			)
+		end
+		self.OfficialText = text
+		self.OfficialColor = if result.WeeklyBest then COLOR_FASTER else COLOR_DIM
+	elseif result.Valid and type(result.Ms) == "number" then
 		local text = "OFFICIEL " .. formatTime(result.Ms / 1000)
 		if result.PersonalBest then
 			text ..= " — RECORD PERSO !"
@@ -436,8 +466,10 @@ function StageTimer:_refresh(now: number)
 	local state = self.State
 	-- Couleur de l'étiquette de statut : jaune par défaut.
 	local tone = Theme.ACCENT
+	local weekly = self.Weekly
+	local title = if weekly then "DÉFI · " .. string.upper(weekly) else "SPÉCIALE"
 	if state == "Running" then
-		self.StatusLabel.Text = "SPÉCIALE · EN COURSE"
+		self.StatusLabel.Text = title .. " · EN COURSE"
 		self.TimeLabel.Text = formatTime(now - self.StartClock)
 		self.TimeLabel.TextColor3 = COLOR_TEXT
 	elseif state == "Finished" then
@@ -459,7 +491,7 @@ function StageTimer:_refresh(now: number)
 		self.TimeLabel.Text = formatTime(self.FinalTime)
 		self.TimeLabel.TextColor3 = COLOR_INVALID
 	else
-		self.StatusLabel.Text = "SPÉCIALE · FRANCHIS LE DÉPART"
+		self.StatusLabel.Text = title .. " · FRANCHIS LE DÉPART"
 		self.TimeLabel.Text = formatTime(0)
 		self.TimeLabel.TextColor3 = COLOR_DIM
 	end
@@ -495,6 +527,13 @@ function StageTimer:_refresh(now: number)
 		self.DeltaLabel.Text = ""
 		self.DeltaLabel.BackgroundTransparency = 1
 		self.VersusLabel.Text = if state ~= "Running" and ghost and self:_hasGhost() then "VS " .. ghost:Describe() else ""
+	end
+
+	-- Défi de la semaine : son meilleur temps de la semaine, pas de médailles.
+	if weekly then
+		local weeklyBest = self.WeeklyBestMs
+		self.BestLabel.Text = if weeklyBest then "Ta semaine " .. formatTime(weeklyBest / 1000) else "Pas encore de temps cette semaine"
+		return
 	end
 
 	-- Meilleur temps officiel, sa médaille, la prochaine à décrocher.

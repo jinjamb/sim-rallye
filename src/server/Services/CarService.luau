@@ -76,6 +76,9 @@ export type SpawnOptions = {
 	RaceId: string?,
 	Contacts: boolean?,
 	Held: boolean?,
+	-- Attributs posés sur la voiture (défi de la semaine : Weekly, Modifier ;
+	-- école de pilotage : Lesson). Le client les lit à la création de sa session.
+	Attributes: { [string]: any }?,
 }
 
 --------------------------------------------------------------------------------
@@ -383,6 +386,9 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	tagProgress(car, player)
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
+	for name, value in pairs(opts.Attributes or {}) do
+		car:SetAttribute(name, value)
+	end
 	car:PivotTo(target)
 
 	local chassis = chassisOf(car)

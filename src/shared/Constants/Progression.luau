@@ -36,6 +36,7 @@ Progression.XP = {
 	PODIUM = 75,
 	POINT = 5, -- par point de championnat
 	STAGE_RUN = 20, -- spéciale terminée, temps validé
+	WEEKLY = 150, -- défi de la semaine terminé (une fois par semaine)
 	STYLE_PER_XP = 200, -- 200 points de style = 1 XP (un beau dérapage : ~1 000 points)
 }
 -- XP d'une médaille sur un tracé, cumulée : platine = 1000 au total.
@@ -93,6 +94,7 @@ export type Record = {
 	Points: number,
 	StageRuns: number,
 	Style: number,
+	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	Medals: { [string]: number },
 }
 
@@ -102,6 +104,7 @@ function Progression.XpOf(record: Record): number
 		+ record.Podiums * Progression.XP.PODIUM
 		+ record.Points * Progression.XP.POINT
 		+ record.StageRuns * Progression.XP.STAGE_RUN
+		+ record.WeeklyCompleted * Progression.XP.WEEKLY
 		+ record.Style // Progression.XP.STYLE_PER_XP
 	for _, tier in pairs(record.Medals) do
 		xp += Progression.MEDAL_XP[tier] or 0

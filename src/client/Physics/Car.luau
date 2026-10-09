@@ -41,6 +41,10 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	-- serveur) : freins et frein à main serrés, embrayage ouvert, 1re engagée.
 	-- L'accélérateur fait seulement monter le régime, jusqu'à l'extinction des feux.
 	Held: boolean,
+	-- Contraintes du défi de la semaine (StageModifier.luau) : un seul rapport
+	-- engagé (nil = boîte libre), frein à main hors service.
+	GearLock: number?,
+	HandbrakeDisabled: boolean,
 }
 
 --[[
@@ -136,6 +140,8 @@ function Car.new(chassis: BasePart): Car
 	self.BrakePressure = 0
 	self.HandbrakePressure = 0
 	self.Held = false
+	self.GearLock = nil
+	self.HandbrakeDisabled = false
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -258,12 +264,18 @@ end
 	auto à palettes ; ToggleAutomatic la rend à l'électronique.
 ]]
 function Car:ShiftUp(): boolean
+	if self.GearLock then
+		return false
+	end
 	local gearbox = self.Powertrain.Gearbox
 	gearbox:SetAutomatic(false)
 	return gearbox:ShiftUp(self:GetForwardSpeed())
 end
 
 function Car:ShiftDown(): boolean
+	if self.GearLock then
+		return false
+	end
 	local gearbox = self.Powertrain.Gearbox
 	gearbox:SetAutomatic(false)
 	return gearbox:ShiftDown(self:GetForwardSpeed())
@@ -271,6 +283,9 @@ end
 
 function Car:ToggleAutomatic(): boolean
 	local gearbox = self.Powertrain.Gearbox
+	if self.GearLock then
+		return gearbox.Automatic
+	end
 	gearbox:SetAutomatic(not gearbox.Automatic)
 	return gearbox.Automatic
 end
@@ -316,6 +331,13 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		gearbox.ShiftTimer = 0
 		gearbox.PendingDownshifts = 0
 	end
+	-- Boîte bloquée (défi de la semaine) : ce rapport et aucun autre.
+	local lock = self.GearLock
+	if lock and not self.Held then
+		gearbox.Automatic = false
+		gearbox.Gear = lock
+		gearbox.PendingDownshifts = 0
+	end
 
 	-- Boîte : la logique auto voit les pédales telles que le joueur les appuie.
 	local forwardSpeed = self:GetForwardSpeed()
@@ -337,7 +359,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	self.BrakePressure = approachPressure(self.BrakePressure, brake, dt, BRAKE_APPLY_TIME, BRAKE_RELEASE_TIME)
 	self.HandbrakePressure = approachPressure(
 		self.HandbrakePressure,
-		if inputs.handbrake then 1 else 0,
+		if inputs.handbrake and not self.HandbrakeDisabled then 1 else 0,
 		dt,
 		HANDBRAKE_APPLY_TIME,
 		HANDBRAKE_RELEASE_TIME

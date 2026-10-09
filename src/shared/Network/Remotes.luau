@@ -36,6 +36,8 @@ export type Remotes = {
 	GhostOpponent: RemoteEvent,
 	-- Serveur -> Client : (entries) classement de la spéciale
 	Leaderboard: RemoteEvent,
+	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
+	WeeklyBoard: RemoteEvent,
 	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
@@ -78,6 +80,7 @@ local RELIABLE = {
 	"RequestGhost",
 	"GhostOpponent",
 	"Leaderboard",
+	"WeeklyBoard",
 	"SaveSetup",
 	"SaveLivery",
 	"Progress",

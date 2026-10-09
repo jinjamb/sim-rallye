@@ -110,6 +110,10 @@ local BY_MATERIAL: { [Enum.Material]: SurfaceProperties } = {
 
 Surfaces.Default = DEFAULT
 
+-- Adhérence de TOUTES les surfaces, multipliée (pluie du défi de la semaine :
+-- StageModifier.luau). 1 = sec. Côté client seulement : la physique est là.
+Surfaces.GripScale = 1
+
 function Surfaces.Get(material: Enum.Material): SurfaceProperties
 	return BY_MATERIAL[material] or DEFAULT
 end

@@ -26,6 +26,7 @@ local SetupMenu = require(script.Parent.SetupMenu)
 local TouchControls = require(script.Parent.TouchControls)
 local DrivingSession = require(script.Parent.DrivingSession)
 local GhostChallenge = require(script.Parent.GhostChallenge)
+local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local RaceClient = require(script.Parent.Parent.Race.RaceClient)
 local Garage = require(script.Parent.Parent.Race.Garage)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -74,6 +75,10 @@ local debugEnabled = false
 local currentSetup: CarSetup.Setup = CarSetup.Default()
 local stageBestMs: number? = nil
 local stageGhost: any = nil
+
+-- Classements : la spéciale habituelle, et le défi de la semaine (WeeklyBoard).
+local stageEntries: { any } = {}
+local weeklyBoard: any = nil
 
 -- Défi du fantôme : contre qui on roule sur la spéciale. Le choix dure toute
 -- la partie et suit le joueur d'une voiture à l'autre.
@@ -321,11 +326,25 @@ end
 --------------------------------------------------------------------------------
 
 -- L'interface suit l'état : au volant ou à pied, au paddock ou en course.
+-- Le classement affiché (L) : celui du défi pendant le défi, sinon la spéciale.
+local function refreshLeaderboard()
+	local current = session
+	if current and current.Weekly and weeklyBoard then
+		local modifier = Weekly.ModifierById(weeklyBoard.Modifier)
+		leaderboard:SetTitle("DÉFI · " .. string.upper(if modifier then modifier.Name else "SEMAINE"))
+		leaderboard:SetEntries(weeklyBoard.Entries or {}, false)
+	else
+		leaderboard:SetTitle("CLASSEMENT · SPÉCIALE")
+		leaderboard:SetEntries(stageEntries, true)
+	end
+end
+
 local function applyDrivingUi()
 	local current = session
 	local driving = hasControl()
 	local racing = isRacing()
 	leaderboard:SetVisible(driving and not racing)
+	refreshLeaderboard()
 	local touch = touchControls
 	if touch then
 		touch:SetDriving(driving)
@@ -403,6 +422,7 @@ local function startSession(model: Model)
 		Setup = currentSetup,
 		StageBestMs = stageBestMs,
 		StageGhost = stageGhost,
+		WeeklyBestMs = if weeklyBoard then weeklyBoard.Mine else nil,
 		GhostOpponent = ghostChallenge.Opponent,
 		GhostHidden = ghostChallenge:IsHidden(),
 	})
@@ -521,7 +541,17 @@ end)
 
 Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
 	if type(entries) == "table" then
-		leaderboard:SetEntries(entries)
+		stageEntries = entries
+		refreshLeaderboard()
+	end
+end)
+
+-- Défi de la semaine : contrainte, fin, classement, son temps (menu et L).
+Remotes.WeeklyBoard.OnClientEvent:Connect(function(board: any)
+	if type(board) == "table" and type(board.Entries) == "table" then
+		weeklyBoard = board
+		raceClient:SetWeekly(board)
+		refreshLeaderboard()
 	end
 end)
 

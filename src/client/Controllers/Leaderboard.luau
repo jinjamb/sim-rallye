@@ -25,6 +25,7 @@ export type Leaderboard = typeof(setmetatable({}, Leaderboard)) & {
 	Gui: ScreenGui,
 	Panel: Frame,
 	Scale: UIScale,
+	Title: TextLabel,
 	Rows: { TextButton },
 	Dots: { Frame },
 	RowUserIds: { [number]: number },
@@ -96,6 +97,7 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	title.TextXAlignment = Enum.TextXAlignment.Left
 	title.Text = "CLASSEMENT · SPÉCIALE"
 	title.Parent = panel
+	self.Title = title
 	-- Filet à damier sous le titre, comme un tableau de chronométrage TV.
 	local checker = Theme.Checker(panel, PANEL_WIDTH, 3, 2)
 	checker.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 9)
@@ -168,14 +170,20 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	return self
 end
 
-function Leaderboard:SetEntries(entries: { Entry })
+-- Titre du panneau (le défi de la semaine a son propre classement).
+function Leaderboard:SetTitle(text: string)
+	self.Title.Text = text
+end
+
+-- `medals` : pastilles de médaille (la spéciale habituelle ; pas le défi).
+function Leaderboard:SetEntries(entries: { Entry }, medals: boolean?)
 	self.Empty.Visible = #entries == 0
 	local limits = Medals.ForStage()
 	for i, row in ipairs(self.Rows) do
 		local entry = entries[i]
 		local dot = self.Dots[i]
 		self.RowUserIds[i] = if entry then entry.UserId else nil
-		local tier = if entry then Medals.Get(Medals.TierOf(entry.Ms, limits)) else nil
+		local tier = if entry and medals ~= false then Medals.Get(Medals.TierOf(entry.Ms, limits)) else nil
 		dot.Visible = tier ~= nil
 		if tier then
 			dot.BackgroundColor3 = tier.Color

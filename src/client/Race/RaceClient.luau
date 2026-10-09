@@ -48,6 +48,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Records: { [string]: RaceUi.TrackBoard },
 	Stats: RaceUi.Stats?,
 	Progress: Progression.Snapshot?,
+	Weekly: any, -- défi de la semaine (RecordService : WeeklyBoard)
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
 	Livery: any,
@@ -76,6 +77,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Records = {}
 	self.Stats = nil
 	self.Progress = nil
+	self.Weekly = nil
 	self.LapBests = {}
 	self.MyChassis = nil
 	self.Livery = nil
@@ -153,6 +155,7 @@ function RaceClient:_refreshMenu()
 		Records = self.Records,
 		Stats = self.Stats,
 		Progress = self.Progress,
+		Weekly = self.Weekly,
 		Laps = self.LapBests,
 		Livery = self.Livery,
 	})
@@ -356,6 +359,12 @@ function RaceClient:SetProgress(snapshot: any, news: any)
 			end
 		end
 	end
+end
+
+-- Défi de la semaine : pour le menu.
+function RaceClient:SetWeekly(board: any)
+	self.Weekly = board
+	self:_refreshMenu()
 end
 
 function RaceClient:GetProgress(): Progression.Snapshot?

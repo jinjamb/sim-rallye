@@ -5,7 +5,8 @@
 	poussière, caméra de poursuite, points de style (dérapages, sauts), et
 	selon le contexte :
 		- au paddock (pas d'attribut RaceId) : chrono de la spéciale, copilote,
-		  fantôme ;
+		  fantôme ; pour le défi de la semaine (attribut Weekly), la contrainte
+		  (StageModifier), sans fantôme ;
 		- en course de rallycross : contact avec les autres voitures de la course
 		  (si la course l'active), remise en piste sur le circuit.
 
@@ -31,6 +32,8 @@ local CarEffects = require(script.Parent.CarEffects)
 local Copilot = require(script.Parent.Copilot)
 local Ghost = require(script.Parent.Ghost)
 local StylePoints = require(script.Parent.StylePoints)
+local StageModifier = require(script.Parent.StageModifier)
+local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local CarContact = require(script.Parent.Parent.Race.CarContact)
 
 local DrivingSession = {}
@@ -46,6 +49,8 @@ export type Context = {
 	-- Défi du fantôme (GhostChallenge.luau) : adversaire choisi, ou fantôme masqué.
 	GhostOpponent: Ghost.Opponent?,
 	GhostHidden: boolean,
+	-- Défi de la semaine : son meilleur temps de la semaine.
+	WeeklyBestMs: number?,
 }
 
 export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
@@ -62,6 +67,9 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Copilot: Copilot.Copilot?,
 	Ghost: Ghost.Ghost?,
 	Contact: CarContact.CarContact?,
+	-- Défi de la semaine (clé de semaine) et de quoi défaire sa contrainte.
+	Weekly: string?,
+	UndoModifier: (() -> ())?,
 	HasControl: boolean,
 	GhostUploadPending: boolean,
 	LastRecoverAt: number,
@@ -83,6 +91,9 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	self.Parked = false
 	local raceId = model:GetAttribute("RaceId")
 	self.RaceId = if type(raceId) == "string" then raceId else nil
+	local weekly = model:GetAttribute("Weekly")
+	self.Weekly = if type(weekly) == "string" and self.RaceId == nil then weekly else nil
+	self.UndoModifier = nil
 
 	local car = CarClass.new(self.Chassis)
 	car:ApplySetup(context.Setup)
@@ -124,6 +135,16 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 		ghost:SetOpponent(context.GhostOpponent)
 		ghost:SetHidden(context.GhostHidden)
 		timer:SetGhost(ghost)
+		-- Défi de la semaine : la contrainte, sans fantôme (il a roulé sans elle).
+		if self.Weekly then
+			local modifierId = model:GetAttribute("Modifier")
+			local modifier = Weekly.ModifierById(if type(modifierId) == "string" then modifierId else nil)
+			if modifier then
+				self.UndoModifier = StageModifier.Apply(car, modifier.Id)
+				timer:SetWeekly(modifier.Name, context.WeeklyBestMs)
+			end
+			ghost:SetHidden(true)
+		end
 
 		-- Le verdict du serveur peut arriver juste AVANT que le chrono local ne
 		-- voie la ligne : l'envoi du fantôme attend alors la fin de l'enregistrement.
@@ -216,7 +237,8 @@ function DrivingSession:SetGhostChoice(opponent: Ghost.Opponent?, hidden: boolea
 	local ghost = self.Ghost
 	if ghost then
 		ghost:SetOpponent(opponent)
-		ghost:SetHidden(hidden)
+		-- Au défi de la semaine, le fantôme reste masqué quoi qu'on choisisse.
+		ghost:SetHidden(hidden or self.Weekly ~= nil)
 	end
 end
 
@@ -347,6 +369,11 @@ end
 function DrivingSession:Destroy()
 	if self.HasControl then
 		self.ChaseCamera:Exit()
+	end
+	local undo: (() -> ())? = self.UndoModifier
+	self.UndoModifier = nil
+	if undo then
+		undo()
 	end
 	self.HasControl = false
 	self.Dashboard:Destroy()

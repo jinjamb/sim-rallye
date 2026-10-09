@@ -6,6 +6,8 @@
 	retour d'une course.
 
 	HORS COURSE :
+		- DÉFI DE LA SEMAINE : la contrainte, le temps qu'il reste, le podium
+		  de la semaine, son temps, et RELEVER LE DÉFI ;
 		- JOUER : lancer une spéciale ; une course de rallycross (un bouton par
 		  circuit : on ouvre la salle d'attente, ou on rejoint celle qui attend) ;
 		  des essais libres ; retour au paddock ;
@@ -30,6 +32,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
+local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local RaceUi = require(script.Parent.RaceUi)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -42,6 +45,7 @@ export type Data = {
 	Records: { [string]: RaceUi.TrackBoard },
 	Stats: RaceUi.Stats?,
 	Progress: Progression.Snapshot?,
+	Weekly: any, -- { Key, Modifier, EndsAt, Entries, Mine } (RecordService)
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
 }
@@ -88,7 +92,7 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Action = action
 	self.LocalUserId = localUserId
 	self.TouchLayout = false
-	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Progress = nil, Laps = {}, Livery = nil }
+	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Progress = nil, Weekly = nil, Laps = {}, Livery = nil }
 	self.Status = ""
 	self.StatusColor = RaceUi.COLOR_DIM
 	self.CountdownLabel = nil
@@ -400,8 +404,58 @@ function RaceMenu:_circuitRow(b: Builder, id: string)
 	end
 end
 
+-- Défi de la semaine : la contrainte, la fin, le podium, son temps, le bouton.
+function RaceMenu:_weekly(b: Builder)
+	local board: any = self.Data.Weekly
+	local modifier = if board then Weekly.ModifierById(board.Modifier) else nil
+	if not board or not modifier then
+		return
+	end
+	local width = PANEL_WIDTH - 32
+	b:Section("Défi de la semaine")
+	local row = b:Row(28)
+	local tag = Theme.Tag(row, string.upper(modifier.Name), Theme.ACCENT, Theme.ON_ACCENT, 16)
+	tag.Position = UDim2.fromOffset(0, 2)
+	local remaining = RaceUi.Label(
+		row,
+		"fin dans " .. Weekly.FormatRemaining(board.EndsAt - workspace:GetServerTimeNow()),
+		13,
+		Enum.Font.GothamBold,
+		RaceUi.COLOR_DIM
+	)
+	remaining.Size = UDim2.fromScale(1, 1)
+	remaining.TextXAlignment = Enum.TextXAlignment.Right
+	b:Text(modifier.Description .. " La spéciale, ce seul changement, et un classement remis à zéro chaque lundi.", 13, RaceUi.COLOR_DIM)
+
+	local entries = board.Entries or {}
+	if #entries == 0 then
+		b:Text("Personne n'a encore relevé le défi cette semaine : à toi !", 13, RaceUi.COLOR_GREEN)
+	end
+	for index = 1, math.min(3, #entries) do
+		local entry = entries[index]
+		local color = if entry.UserId == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
+		local label = b:Text(string.format("   %d. %s  %s", index, entry.Name, RaceUi.FormatTime(entry.Ms / 1000)), 14, color)
+		label.Font = Enum.Font.RobotoMono
+	end
+	local mine: number? = board.Mine
+	b:Text(
+		if mine
+			then "Ton meilleur temps cette semaine : " .. RaceUi.FormatTime(mine / 1000)
+			else string.format("Pas encore de temps cette semaine · +%d XP à ta première arrivée", Progression.XP.WEEKLY),
+		13,
+		if mine then RaceUi.COLOR_TEXT else RaceUi.COLOR_ACCENT
+	)
+	local buttonRow = b:Row(40)
+	local go = self:_button(buttonRow, "RELEVER LE DÉFI", 0, width, function()
+		self.Action("Play", { Mode = "Weekly" })
+	end)
+	RaceUi.Primary(go)
+	go.TextSize = 16
+end
+
 function RaceMenu:_buildOutside(b: Builder)
 	local width = PANEL_WIDTH - 32
+	self:_weekly(b)
 
 	b:Section("Spéciale")
 	b:Text("1,6 km chronométrés, terre et asphalte, un saut et deux épingles. Bats ton record et grimpe au classement (L).", 13, RaceUi.COLOR_DIM)
