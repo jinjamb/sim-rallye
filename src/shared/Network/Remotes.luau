@@ -37,6 +37,9 @@ export type Remotes = {
 	SaveLivery: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
+	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
+	-- menu principal : lancer une spéciale, des essais libres, une course de rallycross
+	PlayMode: RemoteEvent,
 
 	-- RALLYCROSS (RaceService)
 	-- Client -> Serveur : (action: string, payload) quitter, abandonner, lancer, réglages de la course
@@ -66,6 +69,7 @@ local RELIABLE = {
 	"SaveSetup",
 	"SaveLivery",
 	"ReturnToPaddock",
+	"PlayMode",
 	"RaceAction",
 	"LobbyState",
 	"RaceState",

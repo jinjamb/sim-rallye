@@ -64,8 +64,7 @@ local MAX_PROGRESS_JUMP = 60
 -- (pas en passant à côté du portique).
 local START_LATERAL_TOLERANCE = StageTrack.ROAD_WIDTH / 2 + 6
 -- Remise en piste : un peu au-dessus de la chaussée, la suspension se pose.
-local DROP_HEIGHT = 4
-local RESTART_BEFORE_LINE = 10 -- studs avant la ligne : départ quasi arrêté
+local DROP_HEIGHT = StageTrack.DROP_HEIGHT
 
 -- Gabarit identique au bloc principal du tableau de bord (Dashboard.luau).
 local PANEL_WIDTH = 380
@@ -198,8 +197,7 @@ end
 
 -- Retour au départ, chrono remis à zéro.
 function StageTimer:Restart()
-	local sample = StageTrack.SampleAt(StageTrack.START_DISTANCE - RESTART_BEFORE_LINE)
-	self.Car:Teleport(dropFrame(sample))
+	self.Car:Teleport(StageTrack.StartFrame())
 	self.State = "Idle"
 	self.SplitTimes = {}
 	self.Grace = true

@@ -1,12 +1,14 @@
 --!strict
 --[[
 	RaceMenu.luau
-	Menu du rallycross : C (ou croix directionnelle droite, ou bouton COURSES
-	sur mobile) ouvre et ferme. On rejoint une course en marchant dans sa zone
-	au paddock ; ce menu sert au reste.
+	Le menu principal : C (ou croix directionnelle droite, ou bouton MENU sur
+	mobile) ouvre et ferme ; il s'ouvre aussi à l'arrivée dans le jeu, et au
+	retour d'une course.
 
 	HORS COURSE :
-		- où rejoindre une course, et les courses en attente ou en cours ;
+		- JOUER : lancer une spéciale ; une course de rallycross (un bouton par
+		  circuit : on ouvre la salle d'attente, ou on rejoint celle qui attend) ;
+		  des essais libres ; retour au paddock ;
 		- sa livrée : couleur de carrosserie et numéro ;
 		- records du tour de chaque circuit, et sa carrière.
 	EN SALLE D'ATTENTE :
@@ -101,7 +103,7 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Panel = panel
 	self.Scale = scale
 
-	local title = RaceUi.Label(panel, "RALLYCROSS", 18, Enum.Font.GothamBlack)
+	local title = RaceUi.Label(panel, "MENU", 18, Enum.Font.GothamBlack)
 	title.Position = UDim2.fromOffset(16, 10)
 	title.Size = UDim2.new(1, -70, 0, 24)
 	local close = RaceUi.Button(panel, "×", function()
@@ -257,31 +259,79 @@ function RaceMenu:_livery(b: Builder)
 	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Aperçu au GARAGE (zone violette du paddock).", 12, RaceUi.COLOR_DIM)
 end
 
-function RaceMenu:_buildOutside(b: Builder)
-	local homeRow = b:Row(36)
-	self:_button(homeRow, "RETOUR AU PADDOCK (H)", 0, PANEL_WIDTH - 32, function()
-		self.Action("Paddock", nil)
-	end)
-
-	b:Section("Rejoindre une course")
-	b:Text("Marche (ou roule) jusqu'à la zone d'un circuit, au paddock : tu rejoins sa salle d'attente. Le départ est donné 20 s après l'arrivée du 2e pilote. Sortir de la zone, c'est quitter la salle.", 13, RaceUi.COLOR_TEXT)
-
-	local lobby = self.Data.Lobby
-	if #lobby > 0 then
-		b:Section("Courses")
-		for _, race in ipairs(lobby) do
-			local stateText = if race.State == "Lobby" then "en attente" else "en course"
-			b:Text(string.format(
-				"%s · %d tours · %s · %d/%d pilotes · %s",
-				trackName(race.TrackId),
-				race.Laps,
-				formatName(race.Format),
-				race.Count,
-				race.Max,
-				stateText
-			), 13, if race.State == "Lobby" then RaceUi.COLOR_GREEN else RaceUi.COLOR_DIM)
+-- Un circuit du menu : nom, ce qui s'y passe, et le bouton pour y courir.
+function RaceMenu:_circuitRow(b: Builder, id: string)
+	local circuit = Tracks.Get(id)
+	if not circuit then
+		return
+	end
+	-- Salle qui attend des pilotes (on la rejoint) et pilotes déjà en piste.
+	local waiting: RaceUi.LobbyRace? = nil
+	local racing = 0
+	for _, race in ipairs(self.Data.Lobby) do
+		if race.TrackId == id then
+			if race.State == "Lobby" and race.Count < race.Max then
+				waiting = waiting or race
+			elseif race.State ~= "Lobby" then
+				racing += race.Count
+			end
 		end
 	end
+	local details = string.match(circuit.Description, "^[^%.]+") or ""
+	local status = {}
+	if waiting then
+		table.insert(status, string.format("%d en attente · %d tours · %s", waiting.Count, waiting.Laps, formatName(waiting.Format)))
+	end
+	if racing > 0 then
+		table.insert(status, string.format("%d en course", racing))
+	end
+
+	local width = PANEL_WIDTH - 32
+	local row = b:Row(40)
+	local name = RaceUi.Label(row, circuit.Name, 15, Enum.Font.GothamBold)
+	name.Position = UDim2.fromOffset(0, 2)
+	name.Size = UDim2.new(1, -176, 0, 18)
+	local info = RaceUi.Label(row, if #status > 0 then table.concat(status, " · ") else details, 12, Enum.Font.GothamMedium, if waiting then RaceUi.COLOR_GREEN else RaceUi.COLOR_DIM)
+	info.Position = UDim2.fromOffset(0, 21)
+	info.Size = UDim2.new(1, -176, 0, 16)
+	info.TextTruncate = Enum.TextTruncate.AtEnd
+	local text = if waiting then string.format("REJOINDRE (%d/%d)", waiting.Count, waiting.Max) else "COURIR"
+	local button = self:_button(row, text, width - 168, 168, function()
+		self.Action("Play", { Mode = "Rallycross", TrackId = id })
+	end)
+	if waiting then
+		button.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+	end
+end
+
+function RaceMenu:_buildOutside(b: Builder)
+	local width = PANEL_WIDTH - 32
+
+	b:Section("Spéciale")
+	b:Text("1,6 km chronométrés, terre et asphalte, un saut et deux épingles. Bats ton record et grimpe au classement (L).", 13, RaceUi.COLOR_DIM)
+	local stageRow = b:Row(40)
+	local stage = self:_button(stageRow, "LANCER UNE SPÉCIALE", 0, width, function()
+		self.Action("Play", { Mode = "Stage" })
+	end)
+	stage.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+	stage.TextSize = 16
+
+	b:Section("Rallycross")
+	b:Text("Seul ou jusqu'à 6 pilotes. Le départ est donné 20 s après le premier inscrit : les autres peuvent rejoindre d'ici là, et l'hôte peut lancer sans attendre. Joker obligatoire une fois par course.", 13, RaceUi.COLOR_DIM)
+	for _, id in ipairs(Tracks.List()) do
+		self:_circuitRow(b, id)
+	end
+
+	b:Section("Et aussi")
+	local practiceRow = b:Row(36)
+	self:_button(practiceRow, "ESSAIS LIBRES (piste d'essai)", 0, width, function()
+		self.Action("Play", { Mode = "Practice" })
+	end)
+	local homeRow = b:Row(36)
+	self:_button(homeRow, "RETOUR AU PADDOCK (H)", 0, width, function()
+		self.Action("Paddock", nil)
+	end)
+	b:Text("Au paddock, entrer à pied dans la zone d'un circuit fait aussi rejoindre sa salle d'attente (en sortir, c'est la quitter).", 12, RaceUi.COLOR_DIM)
 
 	b:Section("Ta voiture")
 	self:_livery(b)
@@ -344,6 +394,9 @@ function RaceMenu:_buildRace(b: Builder, race: RaceUi.RaceSnapshot)
 	end
 	b:Text(stateText, 14, RaceUi.COLOR_ACCENT)
 	self.CountdownLabel = b:Text("", 14, RaceUi.COLOR_GREEN)
+	if inLobby and #race.Members == 1 then
+		b:Text("Seul pour l'instant : la course partira quand même. Une course en solo ne compte pas pour la carrière (points, victoires), mais tes records du tour, oui.", 12, RaceUi.COLOR_DIM)
+	end
 
 	b:Section("Pilotes")
 	for _, member in ipairs(race.Members) do

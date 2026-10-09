@@ -246,6 +246,19 @@ function StageTrack.GetFinishDistance(): number
 	return StageTrack.GetLength() - StageTrack.FINISH_MARGIN
 end
 
+-- Où poser la voiture pour un départ : un peu avant la ligne (départ quasi
+-- arrêté), dans l'axe de la route, légèrement au-dessus de la chaussée pour
+-- que la suspension se pose. Lancement de la spéciale (serveur) et retour au
+-- départ (StageTimer, client).
+StageTrack.START_RUN_UP = 10 -- studs avant la ligne
+StageTrack.DROP_HEIGHT = 4
+
+function StageTrack.StartFrame(): CFrame
+	local sample = StageTrack.SampleAt(StageTrack.START_DISTANCE - StageTrack.START_RUN_UP)
+	local position = sample.Position + Vector3.new(0, StageTrack.DROP_HEIGHT, 0)
+	return CFrame.lookAt(position, position + sample.Forward)
+end
+
 -- Premier échantillon dont l'abscisse atteint `distance`.
 function StageTrack.SampleAt(distance: number): Sample
 	local samples = StageTrack.GetSamples()

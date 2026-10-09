@@ -257,7 +257,7 @@ local actions: TouchControls.Actions = {
 		if current then
 			Remotes.RequestCarControl:FireServer(current.Chassis)
 		else
-			print("[Paddock] Pas de voiture : passe sur la zone jaune TA VOITURE, ou sur la zone d'un circuit pour courir")
+			print("[Paddock] Pas de voiture : C (menu) pour lancer une spéciale, une course de rallycross ou des essais libres")
 		end
 	end,
 	ExitCar = function()
@@ -313,14 +313,14 @@ local function setControl(granted: boolean)
 		if current:IsRacing() then
 			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C rallycross, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
 			exitDrivingCamera()
 		end
 		setCharacterControlsEnabled(true)
-		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le menu rallycross")
+		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le menu")
 	end
 	applyDrivingUi()
 end
@@ -455,7 +455,14 @@ Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
 	raceClient:SetLivery(profile.Livery)
 end)
 
-print("[Paddock] Bienvenue ! Zones au sol : un circuit chacune (2 à 6 pilotes), zone jaune = ta voiture pour les essais libres, zone violette = garage (couleur, numéro, réglages). C : menu rallycross, records. H : retour au paddock")
+print("[Paddock] Bienvenue ! C : menu (spéciale, rallycross, essais libres, records). Au paddock : une zone par circuit, zone jaune = ta voiture, zone violette = garage (couleur, numéro, réglages). H : retour au paddock")
+
+-- Arrivée dans le jeu : le menu principal, pour choisir tout de suite à quoi jouer.
+task.delay(2, function()
+	if not hasControl() and not isRacing() then
+		raceClient:OpenMenu()
+	end
+end)
 
 Remotes.ProfileUpdated.OnClientEvent:Connect(function(stats: any, laps: any)
 	raceClient:SetProfile(stats, laps)

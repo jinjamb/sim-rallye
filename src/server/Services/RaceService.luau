@@ -5,9 +5,12 @@
 
 	CYCLE D'UNE COURSE
 		Lobby     : salle d'attente, liée à une ZONE du paddock (un circuit par
-		            zone, PaddockService). Entrer dans la zone fait rejoindre la
-		            salle (créée au besoin), en sortir la fait quitter. 2 à 6
-		            joueurs. Compte à rebours dès le 2e pilote (PAD_COUNTDOWN),
+		            zone, PaddockService). On la rejoint de deux façons :
+		              - par le menu (« Rallycross », PaddockService) : on y reste
+		                où qu'on soit, jusqu'à QUITTER ;
+		              - en entrant dans la zone : en sortir fait quitter la salle.
+		            1 à 6 joueurs : on peut courir seul. Compte à rebours dès le
+		            1er pilote (PAD_COUNTDOWN), pour laisser les autres rejoindre,
 		            raccourci quand la salle est pleine ; l'hôte (le premier
 		            arrivé) peut lancer tout de suite et choisir tours, format,
 		            contacts.
@@ -34,6 +37,10 @@
 	comptée, et il faudra la rouler quand même avant de franchir la ligne. Une
 	téléportation (remise en piste) ne fait gagner que quelques studs.
 
+	COURSE EN SOLO : même déroulement, mais elle ne compte pas pour la carrière
+	(points, victoires, podiums) : une victoire seul n'en est pas une. Les
+	records du tour, eux, comptent.
+
 	JOKER : obligatoire une fois par course. Il est compté quand la voiture passe
 	le milieu de la branche joker. Pas de joker à l'arrivée : +5 s.
 	FAUX DÉPART : +1 s.
@@ -56,7 +63,8 @@ local RecordService = require(script.Parent.RecordService)
 
 local RaceService = {}
 
-local MIN_PLAYERS = 2
+local MIN_PLAYERS = 1 -- on peut courir seul
+local CAREER_MIN_RUNNERS = 2 -- en dessous, la course ne compte pas pour la carrière
 local MAX_PLAYERS = 6
 local MAX_RACES = 8
 local MIN_LAPS, MAX_LAPS = 2, 8
@@ -98,6 +106,8 @@ type Member = {
 	Player: Player,
 	UserId: number,
 	Name: string,
+	-- Inscrit par le menu : reste dans la salle hors de la zone du paddock.
+	Pinned: boolean,
 }
 
 type Runner = {
@@ -254,7 +264,7 @@ local function raceSnapshot(race: Race)
 		RoundCount = race.RoundCount,
 		RoundName = roundName(race, race.Round),
 		Members = members,
-		MinPlayers = if RunService:IsStudio() then 1 else MIN_PLAYERS,
+		MinPlayers = MIN_PLAYERS,
 		MaxPlayers = MAX_PLAYERS,
 		AutoStartAt = race.AutoStartAt,
 		LightsStart = race.LightsStart,
@@ -425,12 +435,14 @@ local function endRound(race: Race)
 	race.State = "Results"
 	race.Token += 1
 	local final = race.Round >= race.RoundCount
+	-- Seul en piste : pas de points, la carrière n'en tient pas compte.
+	local counts = #race.Runners >= CAREER_MIN_RUNNERS
 
 	local sorted = sortRunners(race)
 	local rows: { ResultRow } = {}
 	local order: { number } = {}
 	for position, runner in ipairs(sorted) do
-		local points = if final and runner.Finished then (POINTS[position] or 0) else 0
+		local points = if final and counts and runner.Finished then (POINTS[position] or 0) else 0
 		table.insert(rows, {
 			UserId = runner.UserId,
 			Name = runner.Name,
@@ -443,7 +455,7 @@ local function endRound(race: Race)
 			Points = points,
 		})
 		table.insert(order, runner.UserId)
-		if final and runner.Player.Parent then
+		if final and counts and runner.Player.Parent then
 			RecordService.AddRaceResult(runner.Player, if runner.Finished then position else 0, points)
 		end
 	end
@@ -696,7 +708,7 @@ local function startRace(race: Race)
 end
 
 local function minimumPlayers(): number
-	return if RunService:IsStudio() then 1 else MIN_PLAYERS
+	return MIN_PLAYERS
 end
 
 local function scheduleStart(race: Race, at: number)
@@ -786,11 +798,12 @@ end
 -- Actions des joueurs
 --------------------------------------------------------------------------------
 
-local function addMember(race: Race, player: Player)
+local function addMember(race: Race, player: Player, pinned: boolean)
 	table.insert(race.Members, {
 		Player = player,
 		UserId = player.UserId,
 		Name = player.DisplayName,
+		Pinned = pinned,
 	})
 	raceOf[player] = race
 end
@@ -827,11 +840,12 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 end
 
 --[[
-	Entrée dans la zone d'un circuit (PaddockService) : rejoint la salle
-	d'attente de cette zone, ou en ouvre une si elle est pleine ou déjà partie
-	(plusieurs courses peuvent tourner sur le même circuit).
+	Rejoint la salle d'attente d'un circuit, ou en ouvre une si elle est pleine
+	ou déjà partie (plusieurs courses peuvent tourner sur le même circuit).
+	`pinned` : par le menu (on reste inscrit hors de la zone) ; sinon, entrée
+	dans la zone du paddock (PaddockService), qu'il ne faut pas quitter.
 ]]
-function RaceService.JoinPad(player: Player, padId: string): boolean
+function RaceService.JoinPad(player: Player, padId: string, pinned: boolean?): boolean
 	if raceOf[player] then
 		return false
 	end
@@ -855,20 +869,53 @@ function RaceService.JoinPad(player: Player, padId: string): boolean
 		race = createRace(padId, circuit, player)
 	end
 	local joined = race :: Race
-	addMember(joined, player)
+	addMember(joined, player, pinned == true)
 	updateAutoStart(joined)
 	sendRaceState(joined)
 	broadcastLobby()
 	return true
 end
 
--- Zone de la salle d'attente du joueur, s'il attend un départ (nil sinon).
+-- Zone de la salle d'attente du joueur, s'il l'a rejointe PAR LA ZONE et
+-- attend un départ (nil sinon) : en sortir fait quitter la salle.
 function RaceService.GetLobbyPad(player: Player): string?
 	local race = raceOf[player]
 	if race and race.State == "Lobby" then
-		return race.PadId
+		for _, member in ipairs(race.Members) do
+			if member.Player == player and not member.Pinned then
+				return race.PadId
+			end
+		end
 	end
 	return nil
+end
+
+-- Circuit de la salle d'attente du joueur (nil s'il n'attend pas de départ).
+function RaceService.GetLobbyTrack(player: Player): string?
+	local race = raceOf[player]
+	return if race and race.State == "Lobby" then race.TrackId else nil
+end
+
+--[[
+	Le joueur choisit autre chose dans le menu (spéciale, essais libres, autre
+	circuit) : il quitte sa salle d'attente. Refusé en pleine course (on passe
+	par "Abandonner") ; une fois arrivé et revenu au paddock, il est libre.
+	Renvoie false et la raison si c'est refusé.
+]]
+function RaceService.ReleaseForMode(player: Player): (boolean, string?)
+	local race = raceOf[player]
+	if not race then
+		return true, nil
+	end
+	if race.State == "Lobby" then
+		removeMember(race, player)
+		return true, nil
+	end
+	local runner = runnerOf(race, player)
+	if runner and runner.Returned then
+		return true, nil
+	end
+	return false, "Tu es en course : abandonne d'abord (menu), ou attends l'arrivée."
 end
 
 function RaceService.IsInRace(player: Player): boolean
