@@ -5,24 +5,31 @@
 	mobile) ouvre et ferme ; il s'ouvre aussi à l'arrivée dans le jeu, et au
 	retour d'une course.
 
-	Ce module n'est que le cadre : en-tête, corps défilant, ouverture,
-	sélection à la manette. Le contenu vient des rubriques, une par module
-	(MenuKit.luau décrit ce qu'elles reçoivent) :
-		ChallengesPage  défi de la semaine, défis du jour ;
-		SchoolPage      école de pilotage (en tête du menu pour un débutant) ;
-		PlayPage        spéciale et ralenti, rallycross, essais libres ;
-		CareerPage      sa voiture, records du tour, carrière ;
-		RacePage        à la place de tout le reste pendant une course.
+	Ce module n'est que le cadre : en-tête (avec le solde de crédits),
+	onglets, corps défilant, ouverture, sélection à la manette. Le contenu
+	vient des rubriques, une par module (MenuKit.luau décrit ce qu'elles
+	reçoivent), réparties en onglets :
+		JOUER      PlayPage (spéciale et ralenti, rallycross, essais libres),
+		           SchoolPage (école de pilotage, en tête pour un débutant)
+		           et un rappel des défis ;
+		DÉFIS      ChallengesPage (défi de la semaine, défis du jour) ;
+		BOUTIQUE   ShopPage (solde, crédits, objets) ;
+		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière).
+	Pendant une course, RacePage remplace tout (sans onglets).
 
 	Le contenu est reconstruit à chaque changement d'état (il change rarement) ;
 	seuls les comptes à rebours sont rafraîchis à chaque frame.
 ]]
 
 local GuiService = game:GetService("GuiService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local MenuKit = require(script.Parent.MenuKit)
 local PlayPage = require(script.Parent.PlayPage)
 local ChallengesPage = require(script.Parent.ChallengesPage)
+local ShopPage = require(script.Parent.ShopPage)
 local SchoolPage = require(script.Parent.SchoolPage)
 local CareerPage = require(script.Parent.CareerPage)
 local RacePage = require(script.Parent.RacePage)
@@ -40,6 +47,10 @@ export type MainMenu = typeof(setmetatable({}, MainMenu)) & {
 	Gui: ScreenGui,
 	Panel: Frame,
 	Body: ScrollingFrame,
+	TabBar: Frame,
+	TabButtons: { [string]: TextButton },
+	Tab: string,
+	Balance: TextLabel,
 	Scale: UIScale,
 	TouchLayout: boolean,
 	Data: Data,
@@ -53,6 +64,15 @@ export type MainMenu = typeof(setmetatable({}, MainMenu)) & {
 
 local PANEL_WIDTH = MenuKit.PANEL_WIDTH
 local HEADER_HEIGHT = 70 -- en-tête du jeu : titre, sous-titre, damier
+local TAB_HEIGHT = 34
+
+type Tab = { Id: string, Name: string }
+local TABS: { Tab } = {
+	{ Id = "Play", Name = "JOUER" },
+	{ Id = "Challenges", Name = "DÉFIS" },
+	{ Id = "Shop", Name = "BOUTIQUE" },
+	{ Id = "Career", Name = "CARRIÈRE" },
+}
 local SCREEN_PADDING = 24
 local TOUCH_SCALE = 1.1
 local BEGINNER_LEVEL = 3 -- jusqu'à ce niveau, l'école passe en tête du menu
@@ -68,6 +88,8 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.CountdownLabel = nil
 	self.FirstButton = nil
 	self.Dirty = false
+	self.Tab = "Play"
+	self.TabButtons = {}
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RaceMenu"
@@ -101,10 +123,46 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	close.Position = UDim2.new(1, -44, 0, 8)
 	close.Size = UDim2.fromOffset(32, 28)
 	close.TextSize = 18
+	-- Solde de crédits, toujours en vue.
+	local balance = Theme.Tag(panel, "… " .. Credits.SHORT, Theme.PANEL_2, Theme.ACCENT, 15)
+	balance.AnchorPoint = Vector2.new(1, 0)
+	balance.Position = UDim2.new(1, -54, 0, 12)
+	self.Balance = balance
+
+	-- Onglets.
+	local tabBar = Instance.new("Frame")
+	tabBar.BackgroundTransparency = 1
+	tabBar.Position = UDim2.fromOffset(16, HEADER_HEIGHT)
+	tabBar.Size = UDim2.new(1, -32, 0, TAB_HEIGHT)
+	tabBar.Parent = panel
+	local tabLayout = Instance.new("UIListLayout")
+	tabLayout.FillDirection = Enum.FillDirection.Horizontal
+	tabLayout.Padding = UDim.new(0, 4)
+	tabLayout.Parent = tabBar
+	local tabWidth = (PANEL_WIDTH - 32 - 4 * (#TABS - 1)) / #TABS
+	for index, tab in ipairs(TABS) do
+		local button = Widgets.Button(tabBar, tab.Name, function()
+			self:SetTab(tab.Id)
+		end)
+		button.LayoutOrder = index
+		button.Size = UDim2.fromOffset(tabWidth, TAB_HEIGHT - 6)
+		button.FontFace = Theme.HEADLINE
+		button.TextSize = 15
+		local underline = Instance.new("Frame")
+		underline.Name = "Underline"
+		underline.BorderSizePixel = 0
+		underline.BackgroundColor3 = Theme.ACCENT
+		underline.AnchorPoint = Vector2.new(0, 1)
+		underline.Position = UDim2.fromScale(0, 1)
+		underline.Size = UDim2.new(1, 0, 0, 3)
+		underline.Parent = button
+		self.TabButtons[tab.Id] = button
+	end
+	self.TabBar = tabBar
 
 	local body = Instance.new("ScrollingFrame")
-	body.Position = UDim2.fromOffset(0, HEADER_HEIGHT)
-	body.Size = UDim2.new(1, 0, 1, -HEADER_HEIGHT)
+	body.Position = UDim2.fromOffset(0, HEADER_HEIGHT + TAB_HEIGHT)
+	body.Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + TAB_HEIGHT))
 	body.BackgroundTransparency = 1
 	body.BorderSizePixel = 0
 	body.ScrollBarThickness = 4
@@ -153,27 +211,60 @@ function MainMenu:_context(): MenuKit.Context
 		SetCountdown = function(label: TextLabel?)
 			self.CountdownLabel = label
 		end,
+		SetTab = function(tab: string)
+			self:SetTab(tab)
+		end,
 	}
 end
 
--- Hors course : tout le menu, dans l'ordre où on s'en sert.
-local function buildOutside(ctx: MenuKit.Context, b: MenuKit.Builder)
-	local progress = ctx.Data.Progress
-	local beginner = progress ~= nil and progress.Level <= BEGINNER_LEVEL
-	if beginner then
-		SchoolPage.School(ctx, b)
+-- Hors course : le contenu de l'onglet choisi.
+local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
+	if tab == "Challenges" then
+		ChallengesPage.Weekly(ctx, b)
+		ChallengesPage.Daily(ctx, b)
+	elseif tab == "Shop" then
+		ShopPage.Balance(ctx, b)
+		for _, kind in ipairs(Catalog.KINDS) do
+			ShopPage.Items(ctx, b, kind :: Catalog.Kind)
+		end
+		ShopPage.CreditPacks(ctx, b)
+	elseif tab == "Career" then
+		CareerPage.Car(ctx, b)
+		CareerPage.Records(ctx, b)
+		CareerPage.Career(ctx, b)
+	else
+		local progress = ctx.Data.Progress
+		local beginner = progress ~= nil and progress.Level <= BEGINNER_LEVEL
+		if beginner then
+			SchoolPage.School(ctx, b)
+		end
+		ChallengesPage.Summary(ctx, b)
+		PlayPage.Stage(ctx, b)
+		PlayPage.Rallycross(ctx, b)
+		if not beginner then
+			SchoolPage.School(ctx, b)
+		end
+		PlayPage.More(ctx, b)
 	end
-	ChallengesPage.Weekly(ctx, b)
-	ChallengesPage.Daily(ctx, b)
-	PlayPage.Stage(ctx, b)
-	PlayPage.Rallycross(ctx, b)
-	if not beginner then
-		SchoolPage.School(ctx, b)
+end
+
+-- Onglets visibles hors course ; l'onglet choisi en jaune, souligné.
+function MainMenu:_refreshTabs()
+	local inRace = self.Data.Race ~= nil
+	self.TabBar.Visible = not inRace
+	local top = if inRace then HEADER_HEIGHT else HEADER_HEIGHT + TAB_HEIGHT
+	self.Body.Position = UDim2.fromOffset(0, top)
+	self.Body.Size = UDim2.new(1, 0, 1, -top)
+	for id, button in pairs(self.TabButtons) do
+		local selected = id == self.Tab
+		button.TextColor3 = if selected then Theme.ACCENT else Widgets.COLOR_DIM
+		local underline = button:FindFirstChild("Underline")
+		if underline and underline:IsA("Frame") then
+			underline.Visible = selected
+		end
 	end
-	PlayPage.More(ctx, b)
-	CareerPage.Car(ctx, b)
-	CareerPage.Records(ctx, b)
-	CareerPage.Career(ctx, b)
+	local wallet = self.Data.Wallet
+	self.Balance.Text = if wallet then Credits.Format(wallet.Credits) else "… " .. Credits.SHORT
 end
 
 function MainMenu:_rebuild()
@@ -189,11 +280,12 @@ function MainMenu:_rebuild()
 	if self.Status ~= "" then
 		b:Text(self.Status, 13, self.StatusColor)
 	end
+	self:_refreshTabs()
 	local race = self.Data.Race
 	if race then
 		RacePage.Race(ctx, b, race)
 	else
-		buildOutside(ctx, b)
+		buildTab(ctx, b, self.Tab)
 	end
 	if self.Gui.Enabled and not self.TouchLayout then
 		GuiService.SelectedObject = self.FirstButton
@@ -216,6 +308,16 @@ function MainMenu:SetData(data: Data)
 		self.Dirty = true
 		return
 	end
+	self:_rebuild()
+end
+
+function MainMenu:SetTab(tab: string)
+	if self.Tab == tab then
+		return
+	end
+	self.Tab = tab
+	self.Status = ""
+	self.Body.CanvasPosition = Vector2.zero
 	self:_rebuild()
 end
 
@@ -244,7 +346,7 @@ function MainMenu:SetOpen(open: boolean)
 		local scale = if self.TouchLayout then TOUCH_SCALE * math.clamp(viewport.Y / 500, 0.6, 1) else math.clamp(viewport.Y / 1080, 0.6, 1.2)
 		self.Scale.Scale = scale
 		local available = (viewport.Y - SCREEN_PADDING) / scale
-		self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, math.min(720, available))
+		self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, math.min(760, available))
 		if not self.TouchLayout then
 			GuiService.SelectedObject = self.FirstButton
 		end

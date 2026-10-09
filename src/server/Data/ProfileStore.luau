@@ -31,6 +31,7 @@ local ProfileStore = {}
 
 local PROFILE_STORE_NAME = "RallyProfiles_v1"
 local FLUSH_INTERVAL = 30 -- secondes entre deux écritures regroupées
+local FLUSH_ATTEMPTS = 3 -- essais d'une écriture regroupée (DataStore surchargé)
 
 type Pending = {
 	Counters: { [string]: number },
@@ -86,6 +87,31 @@ function ProfileStore.Update(userId: number, context: string, change: (Profile) 
 	end)
 end
 
+--[[
+	Comme Update, mais attend la fin de l'écriture : true si elle a réussi
+	(ou s'il n'y avait rien à écrire). Pour ce qui doit être sauvegardé
+	avant de répondre (un achat Robux). false sans DataStore.
+]]
+function ProfileStore.UpdateNow(userId: number, context: string, change: (Profile) -> boolean): boolean
+	local dataStore = store()
+	if not dataStore then
+		return false
+	end
+	local ok, err = pcall(function()
+		dataStore:UpdateAsync(profileKey(userId), function(old: any)
+			local profile = ProfileSchema.Sanitize(old, userId)
+			if not change(profile) then
+				return nil
+			end
+			return profile
+		end)
+	end)
+	if not ok then
+		Stores.Failed(context, err)
+	end
+	return ok
+end
+
 -- Profil sauvegardé d'un joueur, connecté ou non (attend le DataStore).
 -- nil si les DataStores manquent ou si la lecture échoue.
 function ProfileStore.Read(userId: number, context: string): Profile?
@@ -134,6 +160,8 @@ function ProfileStore.Defer(player: Player, key: string, write: (Profile) -> ())
 end
 
 -- Écrit maintenant ce qui attendait (compteurs et écritures regroupées).
+-- En cas d'échec passager du DataStore, on réessaie un peu plus tard ; si le
+-- joueur est encore là, ce qui n'a pas pu partir rejoint le prochain lot.
 function ProfileStore.Flush(player: Player)
 	local entry = pending[player]
 	if not entry then
@@ -141,15 +169,37 @@ function ProfileStore.Flush(player: Player)
 	end
 	pending[player] = nil
 	local counters, writes = entry.Counters, entry.Writes
-	ProfileStore.Update(player.UserId, "sauvegarde", function(stored)
-		local fields = stored :: any
-		for counter, amount in pairs(counters) do
-			fields[counter] += amount
+	local userId = player.UserId
+	task.spawn(function()
+		for attempt = 1, FLUSH_ATTEMPTS do
+			local saved = ProfileStore.UpdateNow(userId, "sauvegarde", function(stored)
+				local fields = stored :: any
+				for counter, amount in pairs(counters) do
+					fields[counter] += amount
+				end
+				for _, write in pairs(writes) do
+					write(stored)
+				end
+				return true
+			end)
+			if saved or not Stores.Available() then
+				return
+			end
+			if attempt < FLUSH_ATTEMPTS then
+				task.wait(2 ^ attempt)
+			end
 		end
-		for _, write in pairs(writes) do
-			write(stored)
+		if profiles[player] then
+			local again = pendingOf(player)
+			for counter, amount in pairs(counters) do
+				again.Counters[counter] = (again.Counters[counter] or 0) + amount
+			end
+			for key, write in pairs(writes) do
+				if again.Writes[key] == nil then -- une demande plus récente l'emporte
+					again.Writes[key] = write
+				end
+			end
 		end
-		return true
 	end)
 end
 

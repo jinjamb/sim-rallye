@@ -28,6 +28,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Challenges/`  | `Weekly` (défi de la semaine) et `Daily` (défis du jour).                                |
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée) et `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client). |
+| `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux). |
 
 ## `src/server` : l'autorité
 
@@ -47,6 +48,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | Service            | Sujet                                                                                 |
 |--------------------|---------------------------------------------------------------------------------------|
 | `ProgressService`  | XP, niveau et déblocages, déduits du profil et envoyés au joueur.                     |
+| `EconomyService`   | Crédits, objets possédés et portés, achats en crédits et en Robux (ProcessReceipt).   |
 | `GarageService`    | Réglages et livrée.                                                                   |
 | `RecordService`    | Record de la spéciale et son classement, records du tour, statistiques de carrière.   |
 | `GhostService`     | Fantômes : le sien, et le défi du fantôme contre un autre pilote.                     |
@@ -76,9 +78,15 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
-| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux, classement, réglages, garage, et le menu principal (`UI/Menu`). |
+| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), classement, réglages, garage, et le menu principal (`UI/Menu`). |
 
-Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre. Chaque rubrique est un module (`PlayPage`, `ChallengesPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
+Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaque rubrique est un module (`PlayPage`, `ChallengesPage`, `ShopPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
+
+## Économie
+
+- **Ajouter un objet** (voiture, fumée, klaxon…) : une entrée dans le module de sa sorte (`shared/Economy/Items/`), avec sa rareté et ses sources (`Free`, `Credits`, `Robux`, `Pass`, `Roll`). La boutique, le garage, les tirages et le Rallye Pass le trouvent d'eux-mêmes.
+- **Achats en Robux** : chaque produit se crée dans le Creator Dashboard. Son identifiant va dans `Products.luau` (packs de crédits) ou dans le champ `Robux.ProductId` de l'objet. Tant qu'il vaut 0, le produit s'affiche « bientôt ».
+- Le serveur n'accorde un achat qu'une fois sauvegardé, et garde l'identifiant de l'achat pour ne jamais l'accorder deux fois.
 
 ## Conventions
 

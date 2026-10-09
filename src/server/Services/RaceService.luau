@@ -76,6 +76,8 @@ local CarService = require(script.Parent.CarService)
 local RecordService = require(script.Parent.RecordService)
 local StyleService = require(script.Parent.StyleService)
 local ChallengeService = require(script.Parent.ChallengeService)
+local EconomyService = require(script.Parent.EconomyService)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 
 local RaceService = {}
 
@@ -459,6 +461,22 @@ end
 -- Cérémonie du podium : (pilotes de la course, trois premiers arrivés).
 RaceService.PodiumHandler = function(_players: { Player }, _podium: { ResultRow }) end
 
+-- Crédits d'une arrivée en finale (ou course simple) : seul, une petite somme.
+local function raceCredits(position: number, counts: boolean): number
+	local rewards = Credits.REWARDS
+	if not counts then
+		return rewards.SoloRace
+	end
+	local amount = rewards.RaceFinish
+	if position <= 3 then
+		amount += rewards.RacePodium
+	end
+	if position == 1 then
+		amount += rewards.RaceWin
+	end
+	return amount
+end
+
 local function endRound(race: Race)
 	if race.State ~= "Racing" then
 		return
@@ -488,6 +506,9 @@ local function endRound(race: Race)
 		table.insert(order, runner.UserId)
 		if final and counts and runner.Player.Parent then
 			RecordService.AddRaceResult(runner.Player, if runner.Finished then position else 0, points)
+		end
+		if final and runner.Finished and runner.Player.Parent then
+			EconomyService.Earn(runner.Player, raceCredits(position, counts), "Course terminée")
 		end
 	end
 	race.LastResults = rows

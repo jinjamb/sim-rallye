@@ -74,6 +74,15 @@ export type Remotes = {
 	RaceEvent: RemoteEvent,
 	-- Serveur -> Clients : (records) meilleurs tours par circuit
 	TrackRecords: RemoteEvent,
+
+	-- ÉCONOMIE (EconomyService)
+	-- Serveur -> Client : (wallet, news?) crédits, objets possédés et portés ;
+	-- news : crédits gagnés, objet acheté ou débloqué, erreur
+	Wallet: RemoteEvent,
+	-- Client -> Serveur : (itemId) acheter un objet en crédits
+	BuyItem: RemoteEvent,
+	-- Client -> Serveur : (kind, itemId) porter un objet possédé
+	EquipItem: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -102,6 +111,9 @@ local RELIABLE = {
 	"RaceState",
 	"RaceEvent",
 	"TrackRecords",
+	"Wallet",
+	"BuyItem",
+	"EquipItem",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

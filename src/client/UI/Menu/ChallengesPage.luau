@@ -126,4 +126,34 @@ function ChallengesPage.Daily(ctx: Context, b: Builder)
 	), 12, Widgets.COLOR_DIM)
 end
 
+-- Rappel dans l'onglet JOUER : où en sont les défis, et un bouton pour y aller.
+function ChallengesPage.Summary(ctx: Context, b: Builder)
+	local parts = {}
+	local daily: any = ctx.Data.Daily
+	if daily then
+		local done = 0
+		for _, challenge in ipairs(daily.Challenges) do
+			if challenge.Done then
+				done += 1
+			end
+		end
+		table.insert(parts, string.format("Défis du jour %d/%d", done, #daily.Challenges))
+	end
+	local board: any = ctx.Data.Weekly
+	local modifier = if board then Weekly.ModifierById(board.Modifier) else nil
+	if modifier then
+		table.insert(parts, "Semaine : " .. modifier.Name .. (if board.Mine then " ✓" else ""))
+	end
+	if #parts == 0 then
+		return
+	end
+	local row = b:Row(36)
+	local text = Widgets.Label(row, table.concat(parts, "  ·  "), 14, Enum.Font.GothamBold, Theme.ACCENT)
+	text.Size = UDim2.new(1, -128, 1, 0)
+	text.TextTruncate = Enum.TextTruncate.AtEnd
+	ctx.Button(row, "DÉFIS ▶", MenuKit.CONTENT_WIDTH - 120, 120, function()
+		ctx.SetTab("Challenges")
+	end)
+end
+
 return ChallengesPage

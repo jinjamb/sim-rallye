@@ -3,16 +3,24 @@
 	RaceClient.luau
 	Le rallycross côté client : reçoit ce qu'envoie RaceService (courses
 	ouvertes, état de sa course, classement en direct, événements, records) et
-	le répartit entre le menu principal (MainMenu), l'affichage de course (RaceHud) et la
-	caméra spectateur (SpectatorCamera).
+	le répartit entre le menu principal (MainMenu), l'affichage de course
+	(RaceHud) et la caméra spectateur (SpectatorCamera). Il tient aussi ce que
+	le menu affiche du profil (progression, défis, livrée, portefeuille) et
+	transmet ses demandes au serveur (jouer, acheter, porter un objet).
 
 	Les décisions (tours, positions, arrivée) sont toutes prises par le serveur :
 	ce module ne fait qu'afficher et transmettre les demandes du joueur.
 ]]
 
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Products = require(ReplicatedStorage.Shared.Economy.Products)
+local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
@@ -22,6 +30,9 @@ local Widgets = require(script.Parent.Parent.UI.Widgets)
 local RaceTypes = require(script.Parent.RaceTypes)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MainMenu = require(script.Parent.Parent.UI.Menu.MainMenu)
+local MenuKit = require(script.Parent.Parent.UI.Menu.MenuKit)
+local Toast = require(script.Parent.Parent.UI.Toast)
+local Theme = require(script.Parent.Parent.UI.Theme)
 local RaceHud = require(script.Parent.RaceHud)
 local Minimap = require(script.Parent.Minimap)
 local SpectatorCamera = require(script.Parent.Parent.Camera.SpectatorCamera)
@@ -59,6 +70,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	MyChassis: BasePart?,
 	Livery: any,
 	LiverySaveToken: number,
+	Wallet: MenuKit.Wallet?, -- crédits, objets (EconomyService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
 	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
@@ -90,6 +102,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.MyChassis = nil
 	self.Livery = nil
 	self.LiverySaveToken = 0
+	self.Wallet = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
@@ -98,6 +111,17 @@ function RaceClient.new(options: Options): RaceClient
 	self.Menu = MainMenu.new(options.PlayerGui, options.LocalUserId, function(action: string, payload: any)
 		if action == "Livery" then
 			self:SaveLivery(payload)
+		elseif action == "Buy" then
+			Remotes.BuyItem:FireServer(payload)
+		elseif action == "Equip" then
+			if type(payload) == "table" then
+				Remotes.EquipItem:FireServer(payload.Kind, payload.Id)
+			end
+		elseif action == "BuyRobux" then
+			local product = Products.Get(if type(payload) == "string" then payload else nil)
+			if product and Products.IsAvailable(product) then
+				MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.ProductId)
+			end
 		elseif action == "Paddock" then
 			Remotes.ReturnToPaddock:FireServer()
 			self.Menu:SetOpen(false)
@@ -174,6 +198,7 @@ function RaceClient:_refreshMenu()
 		ReplayOpponent = self.ReplayOpponent,
 		Laps = self.LapBests,
 		Livery = self.Livery,
+		Wallet = self.Wallet,
 	})
 end
 
@@ -409,6 +434,41 @@ function RaceClient:SetDaily(state: any, news: any)
 end
 
 -- Fantôme affronté (défi du fantôme) : le menu propose aussi son ralenti.
+--[[
+	Crédits et objets (EconomyService), et ce qui vient de se passer : un gain
+	(petite notification), un achat ou un déblocage (bandeau), une erreur.
+]]
+function RaceClient:SetWallet(wallet: any, news: any)
+	if type(wallet) ~= "table" or type(wallet.Credits) ~= "number" then
+		return
+	end
+	self.Wallet = wallet
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.Gain) == "number" then
+		Toast.Show(string.format("<b>+%s</b>  ·  %s", Credits.Format(news.Gain), tostring(news.Reason or "")))
+	end
+	local item = Catalog.Get(news.Bought or news.Unlocked)
+	if item then
+		Banner.Show(if news.Bought then "ACHAT" else "DÉBLOQUÉ", item.Name .. (if news.Reason then " · " .. tostring(news.Reason) else ""), Rarity.Get(item.Rarity).Color, 3.5, true)
+	end
+	local product = Products.Get(news.Purchased)
+	if product then
+		local credits = product.Grant.Credits
+		Banner.Show("MERCI !", if credits then "+" .. Credits.Format(credits) else product.Name, Theme.GREEN, 3.5, true)
+	end
+	if type(news.Error) == "string" then
+		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
+		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+function RaceClient:GetWallet(): MenuKit.Wallet?
+	return self.Wallet
+end
+
 function RaceClient:SetReplayOpponent(name: string?)
 	self.ReplayOpponent = name
 	self:_refreshMenu()

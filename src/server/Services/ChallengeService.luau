@@ -29,6 +29,8 @@ local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
 local Boards = require(script.Parent.Parent.Data.Boards)
 local ProgressService = require(script.Parent.ProgressService)
+local EconomyService = require(script.Parent.EconomyService)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 
 local ChallengeService = {}
 
@@ -129,6 +131,12 @@ function ChallengeService.DailyEvent(player: Player, event: string, value: numbe
 		ProfileStore.AddCounter(player, "DailyXp", xp)
 	end
 	sendDaily(player, if #completed > 0 then { Completed = completed, AllDone = bonus } else nil)
+	if #completed > 0 then
+		EconomyService.Earn(player, Credits.REWARDS.DailyChallenge * #completed, "Défi du jour réussi")
+	end
+	if bonus then
+		EconomyService.Earn(player, Credits.REWARDS.DailyBonus, "Les trois défis du jour")
+	end
 	if xp > 0 then
 		ProgressService.Push(player, true)
 	end
@@ -177,7 +185,7 @@ end
 
 local scheduleWeeklyRefresh = Boards.Debounced(2, refreshWeekly)
 
-export type WeeklyResult = { IsBest: boolean, PreviousMs: number? }
+export type WeeklyResult = { IsBest: boolean, PreviousMs: number?, FirstOfWeek: boolean }
 
 --[[
 	Arrivée d'un passage du défi de la semaine `key` : classement de la semaine
@@ -218,7 +226,7 @@ function ChallengeService.WeeklyFinish(player: Player, ms: number, key: string):
 		Boards.SubmitLowest(weeklyStore(key), player.UserId, ms, "défi de la semaine")
 		scheduleWeeklyRefresh()
 	end
-	return { IsBest = isBest, PreviousMs = previous }
+	return { IsBest = isBest, PreviousMs = previous, FirstOfWeek = not sameWeek }
 end
 
 --------------------------------------------------------------------------------

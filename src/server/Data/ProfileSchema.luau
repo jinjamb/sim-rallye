@@ -24,6 +24,7 @@ ProfileSchema.STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
 
 ProfileSchema.GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 ProfileSchema.GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
+ProfileSchema.MAX_RECEIPTS = 50 -- achats Robux retenus (Roblox ne rejoue que les récents)
 
 export type Ghost = { Rate: number, Frames: { number } }
 export type StageRecord = { Ms: number, Ghost: Ghost? }
@@ -49,11 +50,15 @@ export type Profile = {
 	Daily: DailyState?, -- défis du jour : progression du jour en cours
 	DailyXp: number, -- XP gagnée aux défis du jour, cumulée
 	Lessons: { [string]: number }, -- meilleure médaille (1 à 4) par leçon de l'école
+	Credits: number, -- monnaie du jeu (Credits.luau)
+	Owned: { [string]: boolean }, -- objets possédés (Catalog.luau), hors objets gratuits
+	Equipped: { [string]: string }, -- objet porté, par sorte (Catalog.Kind -> id)
+	Receipts: { string }, -- derniers achats Robux accordés (jamais deux fois)
 }
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
 -- peut ajouter à ce qu'un autre serveur a écrit sans rien écraser.
-export type Counter = "StageRuns" | "Style" | "DailyXp"
+export type Counter = "StageRuns" | "Style" | "DailyXp" | "Credits"
 
 function ProfileSchema.EmptyStats(): Stats
 	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
@@ -73,6 +78,10 @@ function ProfileSchema.Empty(userId: number): Profile
 		Daily = nil,
 		DailyXp = 0,
 		Lessons = {},
+		Credits = 0,
+		Owned = {},
+		Equipped = {},
+		Receipts = {},
 	}
 end
 
@@ -152,6 +161,29 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 		end
 	end
 	profile.Daily = sanitizeDaily(data.Daily)
+	profile.Credits = count(data.Credits)
+	-- Objets : gardés même s'ils ont quitté le catalogue (un achat ne se perd pas).
+	if type(data.Owned) == "table" then
+		for id, owned in pairs(data.Owned) do
+			if type(id) == "string" and owned == true then
+				profile.Owned[id] = true
+			end
+		end
+	end
+	if type(data.Equipped) == "table" then
+		for kind, id in pairs(data.Equipped) do
+			if type(kind) == "string" and type(id) == "string" then
+				profile.Equipped[kind] = id
+			end
+		end
+	end
+	if type(data.Receipts) == "table" then
+		for _, receipt in ipairs(data.Receipts) do
+			if type(receipt) == "string" and #profile.Receipts < ProfileSchema.MAX_RECEIPTS then
+				table.insert(profile.Receipts, receipt)
+			end
+		end
+	end
 	local weekly = data.Weekly
 	if type(weekly) == "table" and type(weekly.Key) == "string" and type(weekly.Ms) == "number" and weekly.Ms > 0 then
 		profile.Weekly = { Key = weekly.Key, Ms = weekly.Ms }

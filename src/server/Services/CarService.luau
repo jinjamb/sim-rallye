@@ -48,6 +48,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local GarageService = require(script.Parent.GarageService)
 local ProgressService = require(script.Parent.ProgressService)
+local EconomyService = require(script.Parent.EconomyService)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 
 local CarService = {}
@@ -355,6 +356,16 @@ local function tagProgress(car: Model, player: Player)
 	end
 end
 
+-- Objets portés que les autres voient ou entendent (Catalog.luau) : un
+-- attribut par sorte sur la voiture, lu par chaque client (RemoteCars).
+local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine" }
+local function tagEquipped(car: Model, player: Player)
+	for _, kind in ipairs(VISIBLE_KINDS) do
+		local item = EconomyService.Equipped(player, kind :: any)
+		car:SetAttribute("Equipped" .. kind, if item then item.Id else nil)
+	end
+end
+
 --[[
 	(Re)crée la voiture du joueur. frame nil = au paddock. Le joueur en reprend
 	aussitôt le volant s'il est en vie (son personnage est soudé au châssis, il
@@ -385,6 +396,7 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car:SetAttribute("OwnerUserId", player.UserId)
 	car:SetAttribute("OwnerName", player.DisplayName)
 	tagProgress(car, player)
+	tagEquipped(car, player)
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
 	for name, value in pairs(opts.Attributes or {}) do
@@ -459,6 +471,14 @@ function CarService.RefreshProgress(player: Player, _snapshot: any)
 	local car = carByPlayer[player]
 	if car then
 		tagProgress(car, player)
+	end
+end
+
+-- Objet porté changé (garage, achat) : la voiture le montre aussitôt.
+function CarService.RefreshEquipped(player: Player)
+	local car = carByPlayer[player]
+	if car then
+		tagEquipped(car, player)
 	end
 end
 

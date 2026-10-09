@@ -573,6 +573,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
 	end
 end)
 
+-- Crédits et objets : solde, boutique, et ce qu'on vient de gagner ou d'acheter.
+Remotes.Wallet.OnClientEvent:Connect(function(wallet: any, news: any)
+	raceClient:SetWallet(wallet, news)
+end)
+
 -- Défis du jour : objectifs et progression (menu), réussites annoncées.
 Remotes.Daily.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetDaily(state, news)

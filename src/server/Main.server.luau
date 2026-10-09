@@ -34,6 +34,7 @@ local ProfileStore = require(script.Parent.Data.ProfileStore)
 local Services = script.Parent.Services
 local ProgressService = require(Services.ProgressService)
 local GarageService = require(Services.GarageService)
+local EconomyService = require(Services.EconomyService)
 local RecordService = require(Services.RecordService)
 local ChallengeService = require(Services.ChallengeService)
 local GhostService = require(Services.GhostService)
@@ -46,6 +47,7 @@ local PaddockService = require(Services.PaddockService)
 
 -- Crochets entre services (sans dépendance circulaire entre modules).
 GarageService.LiveryChanged = CarService.RefreshLivery
+EconomyService.EquippedChanged = CarService.RefreshEquipped
 ProgressService.Changed = CarService.RefreshProgress
 RaceService.PodiumHandler = PaddockService.Podium :: any
 
@@ -53,6 +55,7 @@ PaddockService.Start()
 CarService.Start()
 
 GarageService.Start()
+EconomyService.Start()
 RecordService.Start()
 StageService.Start()
 ChallengeService.Start()

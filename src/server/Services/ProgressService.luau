@@ -7,6 +7,10 @@
 	style, défis, école). Elle est recalculée et envoyée au joueur à chaque
 	changement (Push), avec les nouveautés à annoncer (niveau gagné,
 	cosmétique débloqué).
+
+	Un niveau gagné ou une nouvelle médaille rapportent aussi des crédits
+	(Credits.luau), une fois : à la transition, pendant la partie. Au
+	chargement, ce qui est déjà acquis ne rapporte rien.
 ]]
 
 local Players = game:GetService("Players")
@@ -18,6 +22,8 @@ local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local EconomyService = require(script.Parent.EconomyService)
 
 local ProgressService = {}
 
@@ -56,6 +62,23 @@ end
 -- branchée par Main.server.luau sur CarService.
 ProgressService.Changed = function(_player: Player, _snapshot: Progression.Snapshot) end
 
+-- Crédits d'un niveau gagné et des nouvelles médailles.
+local function rewardTransition(player: Player, previous: Progression.Snapshot, snapshot: Progression.Snapshot)
+	local levels = snapshot.Level - previous.Level
+	if levels > 0 then
+		EconomyService.Earn(player, Credits.REWARDS.LevelUp * levels, "Niveau " .. snapshot.Level)
+	end
+	local medalCredits = 0
+	for track, tier in pairs(snapshot.Medals) do
+		for reached = (previous.Medals[track] or 0) + 1, tier do
+			medalCredits += Credits.REWARDS.Medal[reached] or 0
+		end
+	end
+	if medalCredits > 0 then
+		EconomyService.Earn(player, medalCredits, "Nouvelle médaille")
+	end
+end
+
 --[[
 	Recalcule la progression et l'envoie au joueur. `announce` : signaler un
 	niveau gagné ou un cosmétique débloqué (pas au chargement du profil).
@@ -79,6 +102,9 @@ function ProgressService.Push(player: Player, announce: boolean)
 		end
 	end
 	Remotes.Progress:FireClient(player, snapshot, news)
+	if announce and previous then
+		rewardTransition(player, previous, snapshot)
+	end
 	if not previous or previous.Level ~= snapshot.Level then
 		ProgressService.Changed(player, snapshot)
 	end

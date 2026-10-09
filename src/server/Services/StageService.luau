@@ -35,6 +35,8 @@ local RecordService = require(script.Parent.RecordService)
 local GhostService = require(script.Parent.GhostService)
 local ChallengeService = require(script.Parent.ChallengeService)
 local ProgressService = require(script.Parent.ProgressService)
+local EconomyService = require(script.Parent.EconomyService)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 
 local StageService = {}
 
@@ -103,6 +105,10 @@ local function onWeeklyFinish(player: Player, ms: number, key: string, clean: bo
 		PreviousMs = result.PreviousMs,
 	})
 	ProgressService.AddCounters(player, 1, 0)
+	EconomyService.Earn(player, Credits.REWARDS.StageRun, "Défi de la semaine")
+	if result.FirstOfWeek then
+		EconomyService.Earn(player, Credits.REWARDS.WeeklyFirst, "Défi de la semaine relevé")
+	end
 	ChallengeService.SendWeekly(player)
 	stageFinished(player, clean, true)
 end
@@ -144,6 +150,7 @@ local function onFinish(player: Player, ms: number, clean: boolean)
 	})
 	-- Une spéciale de plus (et peut-être une médaille) : la progression suit.
 	ProgressService.AddCounters(player, 1, 0)
+	EconomyService.Earn(player, Credits.REWARDS.StageRun, "Spéciale terminée")
 	stageFinished(player, clean, false)
 end
 

@@ -38,6 +38,14 @@ export type Data = {
 	ReplayOpponent: string?, -- fantôme affronté : son ralenti est proposé
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
+	Wallet: Wallet?,
+}
+
+-- Solde et objets (EconomyService).
+export type Wallet = {
+	Credits: number,
+	Owned: { string },
+	Equipped: { [string]: string },
 }
 
 export type Context = {
@@ -51,6 +59,8 @@ export type Context = {
 	Button: (parent: Instance, text: string, x: number, width: number, callback: () -> ()) -> TextButton,
 	-- Étiquette rafraîchie à chaque image (compte à rebours de la salle d'attente).
 	SetCountdown: (TextLabel?) -> (),
+	-- Aller à un autre onglet du menu ("Play", "Challenges", "Shop", "Career").
+	SetTab: (string) -> (),
 }
 
 export type Builder = {
@@ -94,6 +104,18 @@ function MenuKit.Builder(body: Instance): Builder
 		return label
 	end
 	return builder :: Builder
+end
+
+-- Objets possédés (dont les objets de série), d'après le portefeuille.
+function MenuKit.OwnedSet(ctx: Context): { [string]: boolean }
+	local set: { [string]: boolean } = {}
+	local wallet = ctx.Data.Wallet
+	if wallet then
+		for _, id in ipairs(wallet.Owned) do
+			set[id] = true
+		end
+	end
+	return set
 end
 
 function MenuKit.TrackName(id: string): string
