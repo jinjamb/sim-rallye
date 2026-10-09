@@ -249,7 +249,7 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 		{ "RÉGLAGES", actions.ToggleSetup },
 		{ "TEMPS", actions.ToggleLeaderboard },
 		{ "FANTÔME", actions.CycleGhost },
-		{ "COURSES", actions.ToggleRaceMenu },
+		{ "MENU", actions.ToggleRaceMenu },
 		{ "PADDOCK", actions.ReturnToPaddock },
 		{ "SORTIR", actions.ExitCar },
 	}
@@ -286,7 +286,7 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	races.AnchorPoint = Vector2.new(0.5, 1)
 	races.Position = UDim2.new(0.5, 0, 1, -(MARGIN + 52 + GAP))
 	races.Size = UDim2.fromOffset(200, 40)
-	races.Text = "COURSES"
+	races.Text = "MENU"
 	races.TextSize = 14
 	races.Font = Enum.Font.GothamBlack
 	races.TextColor3 = COLOR_TEXT
@@ -417,7 +417,7 @@ function TouchControls:SetCarAvailable(available: boolean)
 end
 
 -- En course : pas de retour au départ de la spéciale ni au paddock, pas de
--- fantôme, et on ne descend pas de voiture (on abandonne depuis le menu COURSES).
+-- fantôme, et on ne descend pas de voiture (on abandonne depuis le MENU).
 function TouchControls:SetRaceMode(racing: boolean)
 	for _, name in ipairs({ "DÉPART", "FANTÔME", "SORTIR", "PADDOCK" }) do
 		local button = self.ActionButtons[name]

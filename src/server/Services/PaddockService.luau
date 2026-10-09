@@ -17,6 +17,12 @@
 		  (RaceService.JoinPad). On peut y venir à pied ou en voiture.
 		- Sortir de la zone = quitter la salle (tant que la course n'est pas partie).
 		- Entrer à pied dans la zone VOITURE = recevoir sa voiture.
+	MENU (C, ou bouton MENU sur mobile ; ouvert à l'arrivée) : le raccourci de
+	tout ça, d'où qu'on soit :
+		- Lancer une spéciale : la voiture est posée sur la ligne de départ ;
+		- Rallycross : rejoindre (ou ouvrir) la salle d'attente d'un circuit ;
+		  on y reste sans avoir à se tenir dans la zone ;
+		- Essais libres : la voiture à sa place au paddock.
 	RETOUR : depuis les essais libres ou la spéciale, H (ou le menu C, ou le
 	bouton PADDOCK sur mobile) ramène à pied au paddock, sans la voiture.
 	L'entrée est détectée au FRANCHISSEMENT : quelqu'un qui quitte la salle par
@@ -35,6 +41,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
@@ -46,6 +53,7 @@ local SIGN_INTERVAL = 0.5
 local CAR_PAD_COOLDOWN = 3
 local RETURN_COOLDOWN = 2
 local PODIUM_DURATION = 9
+local PLAY_COOLDOWN = 1.5 -- entre deux choix du menu (chaque choix recrée la voiture)
 
 type Sign = {
 	Status: TextLabel,
@@ -186,7 +194,7 @@ local function buildPaddock()
 			medals.RichText = true
 		end
 		local status = label(frame, "Entre dans la zone pour courir", 292, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
-		label(frame, "2 à 6 pilotes · départ 20 s après le 2e · C : options", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
+		label(frame, "1 à 6 pilotes · départ 20 s après le 1er · C : menu", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 		signs[pad.Id] = { Status = status, Record = record }
 	end
 
@@ -358,6 +366,51 @@ local function pollZones()
 end
 
 --------------------------------------------------------------------------------
+-- Menu principal : lancer une spéciale, une course de rallycross, des essais
+--------------------------------------------------------------------------------
+
+local lastPlayAt: { [Player]: number } = {}
+
+local function refuse(player: Player, message: string)
+	Remotes.RaceEvent:FireClient(player, "Error", { Message = message })
+end
+
+local function onPlayMode(player: Player, mode: any, trackId: any)
+	local now = os.clock()
+	if now - (lastPlayAt[player] or -math.huge) < PLAY_COOLDOWN then
+		return
+	end
+	if mode == "Rallycross" then
+		if type(trackId) ~= "string" or not Tracks.Get(trackId) then
+			return
+		end
+		if RaceService.GetLobbyTrack(player) == trackId then
+			return -- déjà dans cette salle d'attente
+		end
+	elseif mode ~= "Stage" and mode ~= "Practice" then
+		return
+	end
+	local ok, reason = RaceService.ReleaseForMode(player)
+	if not ok then
+		refuse(player, reason or "Impossible pour l'instant.")
+		return
+	end
+	lastPlayAt[player] = now
+
+	if mode == "Stage" then
+		CarService.Spawn(player, StageTrack.StartFrame(), nil)
+	elseif mode == "Practice" then
+		CarService.GiveFreeCar(player)
+	elseif RaceService.IsInRace(player) then
+		-- Arrivé et revenu au paddock, mais sa course n'est pas finie pour les autres.
+		refuse(player, "Ta course n'est pas encore terminée : patiente jusqu'aux résultats.")
+	else
+		-- La voiture actuelle (essais, spéciale) reste jusqu'à la mise en grille.
+		RaceService.JoinPad(player, trackId, true)
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Podium
 --------------------------------------------------------------------------------
 
@@ -462,10 +515,13 @@ function PaddockService.Start()
 		end
 	end)
 
+	Remotes.PlayMode.OnServerEvent:Connect(onPlayMode)
+
 	Players.PlayerRemoving:Connect(function(player: Player)
 		currentPad[player] = nil
 		lastCarAt[player] = nil
 		lastReturnAt[player] = nil
+		lastPlayAt[player] = nil
 	end)
 
 	local pollAccumulator, signAccumulator = 0, 0

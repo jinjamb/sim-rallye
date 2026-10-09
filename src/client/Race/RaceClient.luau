@@ -54,11 +54,14 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	LiverySaveToken: number,
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
+	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
+	ReopenMenuAt: number?,
 	PodiumEye: Vector3,
 	PodiumFocus: Vector3,
 }
 
 local LIVERY_SAVE_DELAY = 1 -- regroupe une rafale de clics en une seule sauvegarde
+local REOPEN_MENU_DELAY = 3 -- après la fin d'une course, le temps de revenir au paddock
 
 local function serverNow(): number
 	return workspace:GetServerTimeNow()
@@ -78,6 +81,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Livery = nil
 	self.LiverySaveToken = 0
 	self.PodiumUntil = 0
+	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
 	self.PodiumFocus = Vector3.zero
 
@@ -87,6 +91,15 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Paddock" then
 			Remotes.ReturnToPaddock:FireServer()
 			self.Menu:SetOpen(false)
+		elseif action == "Play" then
+			-- Spéciale, essais libres, ou salle d'attente d'un circuit (PaddockService).
+			if type(payload) == "table" then
+				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId)
+			end
+			-- La salle d'attente s'affiche dans le menu : on le laisse ouvert.
+			if type(payload) ~= "table" or payload.Mode ~= "Rallycross" then
+				self.Menu:SetOpen(false)
+			end
 		else
 			Remotes.RaceAction:FireServer(action, payload)
 		end
@@ -177,6 +190,11 @@ end
 function RaceClient:_setRace(snapshot: RaceUi.RaceSnapshot?)
 	local previous = self.Race
 	self.Race = snapshot
+	-- Fin d'une course (pas d'une simple salle d'attente quittée) : le menu
+	-- revient pour enchaîner.
+	if snapshot == nil and previous ~= nil and previous.State ~= "Lobby" then
+		self.ReopenMenuAt = os.clock() + REOPEN_MENU_DELAY
+	end
 	if not snapshot or snapshot.State == "Lobby" then
 		self.Live = nil
 		self:StopSpectating()
@@ -269,6 +287,11 @@ function RaceClient:_onEvent(kind: string, data: any)
 			self.PodiumUntil = os.clock() + duration
 		end
 		hud:ShowPodium(if type(data.Names) == "table" then data.Names else {}, duration)
+		-- Place à la cérémonie ; le menu reviendra après.
+		self.Menu:SetOpen(false)
+		if self.ReopenMenuAt then
+			self.ReopenMenuAt = os.clock()
+		end
 	end
 end
 
@@ -346,6 +369,11 @@ end
 
 function RaceClient:ToggleMenu()
 	self.Menu:Toggle()
+end
+
+-- Menu principal ouvert (arrivée dans le jeu).
+function RaceClient:OpenMenu()
+	self.Menu:SetOpen(true)
 end
 
 -- Châssis de sa propre voiture (pour la mini-carte), nil sans voiture.
@@ -468,6 +496,15 @@ end
 
 function RaceClient:Update(dt: number)
 	self.Menu:Update()
+	-- Retour d'une course : le menu revient, une fois le podium passé, si le
+	-- joueur est à pied (il a pu repartir en spéciale entre-temps).
+	local reopenAt = self.ReopenMenuAt
+	if reopenAt and os.clock() >= reopenAt and self.PodiumUntil == 0 and self.Race == nil then
+		self.ReopenMenuAt = nil
+		if self.MyChassis == nil then
+			self.Menu:SetOpen(true)
+		end
+	end
 	local race = self.Race
 	local cars: { Minimap.CarDot } = {}
 	if race and race.State ~= "Lobby" then
