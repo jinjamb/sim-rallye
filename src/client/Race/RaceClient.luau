@@ -35,6 +35,8 @@ export type Options = {
 	GetOtherCars: () -> { [number]: BasePart },
 	-- Le joueur quitte la vue spectateur : la caméra de poursuite reprend la main.
 	OnSpectateStopped: () -> (),
+	-- Menu : ralenti d'un passage ("Own" : le sien ; "Opponent" : le fantôme affronté).
+	OnReplay: (string) -> (),
 }
 
 export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
@@ -50,6 +52,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- défi de la semaine (RecordService : WeeklyBoard)
 	Daily: any, -- défis du jour (RecordService : Daily)
+	ReplayOpponent: string?, -- nom du fantôme affronté (ralenti possible)
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
 	Livery: any,
@@ -80,6 +83,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Progress = nil
 	self.Weekly = nil
 	self.Daily = nil
+	self.ReplayOpponent = nil
 	self.LapBests = {}
 	self.MyChassis = nil
 	self.Livery = nil
@@ -95,6 +99,9 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Paddock" then
 			Remotes.ReturnToPaddock:FireServer()
 			self.Menu:SetOpen(false)
+		elseif action == "Replay" then
+			self.Menu:SetOpen(false)
+			options.OnReplay(if type(payload) == "table" then tostring(payload.Which) else "Own")
 		elseif action == "Play" then
 			-- Spéciale, essais libres, ou salle d'attente d'un circuit (PaddockService).
 			if type(payload) == "table" then
@@ -162,6 +169,7 @@ function RaceClient:_refreshMenu()
 		Progress = self.Progress,
 		Weekly = self.Weekly,
 		Daily = self.Daily,
+		ReplayOpponent = self.ReplayOpponent,
 		Laps = self.LapBests,
 		Livery = self.Livery,
 	})
@@ -396,6 +404,12 @@ function RaceClient:SetDaily(state: any, news: any)
 	if news.AllDone then
 		Banner.Show("LES TROIS DÉFIS DU JOUR !", "Bonus  +" .. tostring(state.BonusXp) .. " XP  ·  nouveaux défis demain", RaceUi.COLOR_ACCENT, 4, true)
 	end
+end
+
+-- Fantôme affronté (défi du fantôme) : le menu propose aussi son ralenti.
+function RaceClient:SetReplayOpponent(name: string?)
+	self.ReplayOpponent = name
+	self:_refreshMenu()
 end
 
 -- Défi de la semaine : pour le menu.

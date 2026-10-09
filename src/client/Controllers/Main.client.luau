@@ -26,6 +26,8 @@ local SetupMenu = require(script.Parent.SetupMenu)
 local TouchControls = require(script.Parent.TouchControls)
 local DrivingSession = require(script.Parent.DrivingSession)
 local GhostChallenge = require(script.Parent.GhostChallenge)
+local Replay = require(script.Parent.Replay)
+local Banner = require(script.Parent.Banner)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local RaceClient = require(script.Parent.Parent.Race.RaceClient)
 local Garage = require(script.Parent.Parent.Race.Garage)
@@ -83,12 +85,16 @@ local weeklyBoard: any = nil
 -- Défi du fantôme : contre qui on roule sur la spéciale. Le choix dure toute
 -- la partie et suit le joueur d'une voiture à l'autre.
 local leaderboard: Leaderboard.Leaderboard
+local raceClient: RaceClient.RaceClient -- créé plus bas (menus, rallycross)
 local ghostChallenge = GhostChallenge.new(function(challenge)
 	local current = session
 	if current then
 		current:SetGhostChoice(challenge.Opponent, challenge:IsHidden())
 	end
 	leaderboard:SetGhostInfo(challenge:Describe())
+	-- Le menu propose aussi le ralenti du fantôme affronté.
+	local opponent = challenge.Opponent
+	raceClient:SetReplayOpponent(if opponent then opponent.Name else nil)
 end)
 leaderboard = Leaderboard.new(playerGui, player.UserId, function(userId: number)
 	ghostChallenge:Challenge(userId, player.UserId)
@@ -180,7 +186,20 @@ end
 -- Rallycross : menu, affichage de course, spectateur
 --------------------------------------------------------------------------------
 
-local raceClient = RaceClient.new({
+-- Ralenti du meilleur passage, et mode photo (Replay.luau).
+local startReplay: (string) -> ()
+local replay = Replay.new(playerGui, camera, function()
+	-- Fin du ralenti : la caméra revient au joueur.
+	local current = session
+	if current and current.HasControl then
+		current.ChaseCamera:Enter()
+	else
+		exitDrivingCamera()
+		setCharacterControlsEnabled(true)
+	end
+end)
+
+raceClient = RaceClient.new({
 	PlayerGui = playerGui,
 	Camera = camera,
 	LocalUserId = player.UserId,
@@ -195,7 +214,47 @@ local raceClient = RaceClient.new({
 			exitDrivingCamera()
 		end
 	end,
+	OnReplay = function(which: string)
+		startReplay(which)
+	end,
 })
+
+local function formatMs(ms: number): string
+	local seconds = ms / 1000
+	local minutes = math.floor(seconds / 60)
+	return string.format("%d:%05.2f", minutes, seconds - minutes * 60)
+end
+
+-- Ralenti : "Own" = son meilleur passage, "Opponent" = le fantôme affronté.
+startReplay = function(which: string)
+	if isRacing() then
+		Banner.Show("RALENTI", "Pas pendant une course : après l'arrivée.", Theme.ORANGE, 2.5)
+		return
+	end
+	local data: any = nil
+	local title = ""
+	local livery: any = nil
+	if which == "Opponent" then
+		local opponent = ghostChallenge.Opponent
+		if opponent then
+			data = opponent.Data
+			title = opponent.Name .. " · " .. formatMs(opponent.Ms)
+		end
+	else
+		-- Le fantôme de la voiture actuelle a pu être battu depuis le profil.
+		local current = session
+		local ghost = if current then current.Ghost else nil
+		data = (if ghost then ghost.Best else nil) or stageGhost
+		title = "Ton meilleur passage" .. (if stageBestMs then " · " .. formatMs(stageBestMs) else "")
+		livery = raceClient:GetLivery()
+	end
+	if not data then
+		Banner.Show("RALENTI", "Pas encore de passage enregistré : termine la spéciale d'abord.", Theme.ORANGE, 3)
+		return
+	end
+	setCharacterControlsEnabled(false)
+	replay:Start(data, string.upper(title), livery)
+end
 
 -- Garage du paddock (zone violette) : livrée et réglages, voiture en aperçu.
 local garage = Garage.new(playerGui, {
@@ -214,6 +273,9 @@ local garage = Garage.new(playerGui, {
 })
 
 RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, function(dt: number)
+	if replay:UpdateCamera(dt) then
+		return
+	end
 	if raceClient:UpdateCamera(dt) then
 		return
 	end
@@ -575,6 +637,11 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 	if gameProcessed then
 		return
 	end
+	-- Pendant le ralenti, ses touches à lui (pause, caméras, photo...).
+	if replay:IsActive() then
+		replay:HandleKey(input.KeyCode)
+		return
+	end
 	local key = input.KeyCode
 	if key == Enum.KeyCode.E or key == Enum.KeyCode.DPadUp then
 		actions.EnterCar()
@@ -627,7 +694,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 
 	local current = session
 	if current then
-		current.Parked = raceClient:IsSpectating()
+		-- Spectateur ou ralenti : la voiture attend, freins serrés.
+		current.Parked = raceClient:IsSpectating() or replay:IsActive()
 		local audioState = current:RenderUpdate(dt)
 		-- Ce que les autres joueurs entendent et voient de cette voiture (CarService).
 		if audioState then

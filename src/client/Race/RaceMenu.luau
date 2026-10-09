@@ -51,6 +51,7 @@ export type Data = {
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- { Key, Modifier, EndsAt, Entries, Mine } (RecordService)
 	Daily: any, -- { EndsAt, Challenges = { Id, Text, Goal, Progress, Done }, Bonus, Xp, BonusXp }
+	ReplayOpponent: string?, -- fantôme affronté : son ralenti est proposé
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
 }
@@ -567,6 +568,19 @@ function RaceMenu:_buildOutside(b: Builder)
 	end)
 	RaceUi.Primary(stage)
 	stage.TextSize = 16
+	-- Ralenti façon télévision, et mode photo.
+	local replayRow = b:Row(36)
+	local opponent = self.Data.ReplayOpponent
+	local half = (width - 8) / 2
+	self:_button(replayRow, "RALENTI : TON MEILLEUR", 0, if opponent then half else width, function()
+		self.Action("Replay", { Which = "Own" } :: any)
+	end)
+	if opponent then
+		local other = self:_button(replayRow, "RALENTI : " .. string.upper(opponent), half + 8, half, function()
+			self.Action("Replay", { Which = "Opponent" } :: any)
+		end)
+		other.TextTruncate = Enum.TextTruncate.AtEnd
+	end
 
 	b:Section("Rallycross")
 	b:Text("Seul ou jusqu'à 6 pilotes. Le départ est donné 20 s après le premier inscrit : les autres peuvent rejoindre d'ici là, et l'hôte peut lancer sans attendre. Joker obligatoire une fois par course.", 13, RaceUi.COLOR_DIM)

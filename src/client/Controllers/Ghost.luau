@@ -85,14 +85,18 @@ function Ghost.new(chassis: BasePart): Ghost
 	return self
 end
 
--- Copie inerte du gabarit : rien qui tombe, collisionne, émet ou joue un son.
-local function buildModel(): Model?
+--[[
+	Copie inerte du gabarit : rien qui tombe, collisionne, émet ou joue un son.
+	`solid` : une voiture pleine, avec son ombre, et dont les pièces répondent
+	encore aux rayons (le ralenti la peint avec LiveryPainter, puis les coupe).
+]]
+local function buildModel(solid: boolean?): Model?
 	local template = ReplicatedStorage:FindFirstChild("CarTemplate")
 	if not template or not template:IsA("Model") then
 		return nil
 	end
 	local model = template:Clone()
-	model.Name = "Ghost"
+	model.Name = if solid then "ReplayCar" else "Ghost"
 	for _, item in ipairs(model:GetDescendants()) do
 		for _, tag in ipairs(CollectionService:GetTags(item)) do
 			CollectionService:RemoveTag(item, tag)
@@ -100,10 +104,12 @@ local function buildModel(): Model?
 		if item:IsA("BasePart") then
 			item.Anchored = true
 			item.CanCollide = false
-			item.CanQuery = false
 			item.CanTouch = false
-			item.CastShadow = false
-			item.Transparency = math.max(item.Transparency, GHOST_TRANSPARENCY)
+			if not solid then
+				item.CanQuery = false
+				item.CastShadow = false
+				item.Transparency = math.max(item.Transparency, GHOST_TRANSPARENCY)
+			end
 		elseif item:IsA("ParticleEmitter") or item:IsA("Sound") or item:IsA("LuaSourceContainer")
 			or item:IsA("JointInstance") or item:IsA("WeldConstraint") then
 			item:Destroy()
@@ -245,6 +251,29 @@ local function frameAt(data: GhostData, index: number): CFrame
 	local base = (index - 1) * VALUES_PER_FRAME
 	local f = data.Frames
 	return CFrame.new(f[base + 1], f[base + 2], f[base + 3]) * CFrame.fromOrientation(f[base + 4], f[base + 5], f[base + 6])
+end
+
+-- Pour le ralenti (Replay.luau) -----------------------------------------------------
+
+-- Voiture pleine, inerte, prête à être peinte.
+function Ghost.BuildSolidModel(): Model?
+	return buildModel(true)
+end
+
+-- Durée d'un passage enregistré (s).
+function Ghost.Duration(data: GhostData): number
+	return math.max(0, (frameCount(data) - 1) / data.Rate)
+end
+
+-- Position du châssis à l'instant `time` du passage (interpolée).
+function Ghost.PoseAt(data: GhostData, time: number): CFrame
+	local count = frameCount(data)
+	local position = math.clamp(time * data.Rate + 1, 1, math.max(1, count))
+	local index = math.min(math.floor(position), math.max(1, count - 1))
+	if count < 2 then
+		return frameAt(data, 1)
+	end
+	return frameAt(data, index):Lerp(frameAt(data, index + 1), math.clamp(position - index, 0, 1))
 end
 
 -- Départ : on enregistre, et le fantôme part au même instant.
