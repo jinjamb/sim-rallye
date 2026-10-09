@@ -457,6 +457,17 @@ function RaceClient:CanSpectate(): boolean
 		and mine ~= nil and mine:IsDescendantOf(workspace)
 end
 
+-- Inscrit à une course : salle d'attente, grille, course ou résultats.
+function RaceClient:IsInRace(): boolean
+	return self.Race ~= nil
+end
+
+-- Course lancée : mise en grille, départ ou course.
+function RaceClient:IsRaceUnderway(): boolean
+	local race = self.Race
+	return race ~= nil and (race.State == "Grid" or race.State == "Countdown" or race.State == "Racing")
+end
+
 function RaceClient:IsSpectating(): boolean
 	return self.Spectator.Active
 end

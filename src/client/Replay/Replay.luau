@@ -23,6 +23,12 @@
 
 	Pendant le ralenti, les autres écrans du jeu sont masqués, puis rendus.
 	Avec le streaming, le décor est demandé autour de la voiture rejouée.
+
+	EN LIGNE : tout est local. Les autres joueurs ne voient rien, et le
+	ralenti ne ralentit que la lecture (le jeu continue pour tout le monde).
+	Sa propre voiture attend sur place, freins serrés. Main.client.luau le
+	refuse donc pendant une course (salle d'attente comprise) et pendant un
+	passage chronométré, et l'interrompt si une course démarre.
 ]]
 
 local Lighting = game:GetService("Lighting")

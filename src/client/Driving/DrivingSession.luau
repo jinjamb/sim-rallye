@@ -207,6 +207,13 @@ function DrivingSession:RefreshIgnoreList()
 	self.Car:SetIgnoreList(ignore)
 end
 
+-- Passage chronométré de la spéciale, ou leçon de l'école, en cours.
+function DrivingSession:IsRunInProgress(): boolean
+	local timer = self.StageTimer
+	local school = self.School
+	return (timer ~= nil and timer.State == "Running") or (school ~= nil and school.State == "Running")
+end
+
 function DrivingSession:IsRacing(): boolean
 	return self.RaceId ~= nil
 end

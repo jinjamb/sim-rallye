@@ -173,9 +173,20 @@ raceClient = RaceClient.new({
 })
 
 -- Ralenti : "Own" = son meilleur passage, "Opponent" = le fantôme affronté.
+--[[
+	Le ralenti est local : personne d'autre ne le voit, et le jeu ne ralentit
+	pour personne. Mais pendant ce temps, sa voiture attend sur place, freins
+	serrés, et la caméra est prise : on le refuse quand ça ferait perdre
+	quelque chose (une course qui part, un chrono qui tourne).
+]]
 startReplay = function(which: string)
-	if isRacing() then
-		Banner.Show("RALENTI", "Pas pendant une course : après l'arrivée.", Theme.ORANGE, 2.5)
+	if raceClient:IsInRace() then
+		Banner.Show("RALENTI", "Pas pendant une course, ni en salle d'attente : après la course.", Theme.ORANGE, 2.5)
+		return
+	end
+	local running = session
+	if running and running:IsRunInProgress() then
+		Banner.Show("RALENTI", "Pas pendant un passage chronométré : à l'arrivée, ou recommence (Retour arrière).", Theme.ORANGE, 3)
 		return
 	end
 	local data: any = nil
@@ -638,6 +649,12 @@ local telemetryAccumulator = 0
 
 RunService.RenderStepped:Connect(function(dt: number)
 	remoteCars:Update(dt)
+
+	-- Une course qui part (revanche, salle rejointe) reprend la main sur le ralenti.
+	if replay:IsActive() and raceClient:IsRaceUnderway() then
+		replay:Stop()
+		Banner.Show("RALENTI", "La course part : ralenti interrompu.", Theme.ORANGE, 2.5)
+	end
 
 	local current = session
 	if current then
