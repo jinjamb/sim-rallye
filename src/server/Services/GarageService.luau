@@ -1,8 +1,9 @@
 --!strict
 --[[
 	GarageService.luau
-	Ce que le joueur règle sur sa voiture : réglages (CarSetup.luau) et livrée
-	(Livery.luau). Sauvegardés ensemble, par lots (ProfileStore.Defer).
+	Ce que le joueur règle sur sa voiture : réglages (CarSetup.luau, un jeu
+	par catégorie de voiture) et livrée (Livery.luau, la même pour toutes).
+	Sauvegardés ensemble, par lots (ProfileStore.Defer).
 
 	Une livrée qui utilise un cosmétique verrouillé (pas encore débloqué, ou
 	barème retouché depuis) est ramenée à ce qui est débloqué : au chargement
@@ -14,6 +15,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
@@ -38,10 +40,10 @@ local function deferSave(player: Player)
 	if not profile then
 		return
 	end
-	local setup = profile.Setup
+	local setups = table.clone(profile.Setups)
 	local livery = profile.Livery
 	ProfileStore.Defer(player, "Garage", function(stored)
-		stored.Setup = setup
+		stored.Setups = setups
 		stored.Livery = livery
 	end)
 end
@@ -55,7 +57,7 @@ function GarageService.Start()
 	end)
 
 	local lastSetupAt: { [Player]: number } = {}
-	Remotes.SaveSetup.OnServerEvent:Connect(function(player: Player, input: any)
+	Remotes.SaveSetup.OnServerEvent:Connect(function(player: Player, classId: any, input: any)
 		local profile = ProfileStore.Get(player)
 		if not profile then
 			return
@@ -65,7 +67,10 @@ function GarageService.Start()
 			return
 		end
 		lastSetupAt[player] = now
-		profile.Setup = CarSetup.Sanitize(input)
+		if not CarClasses.Exists(classId) then
+			return
+		end
+		profile.Setups[classId] = CarSetup.Sanitize(input, classId)
 		deferSave(player)
 	end)
 

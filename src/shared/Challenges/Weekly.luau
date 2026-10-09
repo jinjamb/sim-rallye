@@ -14,10 +14,16 @@
 	pilote (StageModifier.luau : la physique tourne chez lui) ; le chrono, lui,
 	reste mesuré par le serveur.
 
+	LA VOITURE est imposée, elle aussi tirée au sort (CLASS_WEIGHTS) : tout le
+	monde court dans la même catégorie, prêtée pour le défi si on ne l'a pas.
+	Un seul classement, équitable, et l'occasion d'essayer une voiture.
+
 	Le défi a son propre classement, et ne touche ni le record habituel de la
 	spéciale, ni son fantôme, ni ses médailles (ChallengeService). Le terminer
 	une fois dans la semaine rapporte de l'XP (Progression.luau).
 ]]
+
+local CarClasses = require(script.Parent.Parent.Vehicle.CarClasses)
 
 local Weekly = {}
 
@@ -35,6 +41,13 @@ Weekly.MODIFIERS = {
 	{ Id = "NoHandbrake", Name = "Sans frein à main", Description = "Les épingles au frein et au volant seulement." },
 } :: { Modifier }
 
+-- Chances relatives de chaque catégorie d'être la voiture de la semaine.
+local CLASS_WEIGHTS: { { Id: string, Weight: number } } = {
+	{ Id = "Rally2", Weight = 2 },
+	{ Id = "Rally4", Weight = 1 },
+	{ Id = "GroupB", Weight = 1 },
+}
+
 local DAY = 86400
 local WEEK_OFFSET_DAYS = 3 -- le 1er janvier 1970 était un jeudi
 
@@ -42,6 +55,7 @@ export type Week = {
 	Index: number,
 	Key: string, -- "w2962" : nom du classement, clé de sauvegarde
 	Modifier: Modifier,
+	CarClass: string, -- la voiture imposée (CarClasses.luau)
 	StartsAt: number, -- os.time() du lundi 0 h UTC
 	EndsAt: number, -- os.time() du lundi suivant
 }
@@ -59,6 +73,21 @@ local function pick(index: number): number
 	return choice
 end
 
+local function pickClass(index: number): string
+	local total = 0
+	for _, entry in ipairs(CLASS_WEIGHTS) do
+		total += entry.Weight
+	end
+	local roll = Random.new(index * 104729 + 3):NextNumber() * total
+	for _, entry in ipairs(CLASS_WEIGHTS) do
+		roll -= entry.Weight
+		if roll < 0 and CarClasses.Exists(entry.Id) then
+			return entry.Id
+		end
+	end
+	return CarClasses.DEFAULT
+end
+
 function Weekly.At(time: number): Week
 	local days = math.floor(time / DAY)
 	local index = (days + WEEK_OFFSET_DAYS) // 7
@@ -67,6 +96,7 @@ function Weekly.At(time: number): Week
 		Index = index,
 		Key = "w" .. tostring(index),
 		Modifier = Weekly.MODIFIERS[pick(index)],
+		CarClass = pickClass(index),
 		StartsAt = startsAt,
 		EndsAt = startsAt + 7 * DAY,
 	}

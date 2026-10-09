@@ -29,6 +29,8 @@ local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Widgets = require(script.Parent.Widgets)
 local Theme = require(script.Parent.Theme)
@@ -41,6 +43,8 @@ export type Callbacks = {
 	SetLivery: (Livery.Livery) -> (),
 	GetProgress: () -> Progression.Snapshot?,
 	OpenSetup: () -> (),
+	-- Catégorie de la voiture choisie : sa carrosserie sur l'aperçu.
+	GetCarClass: () -> string,
 }
 
 export type Garage = typeof(setmetatable({}, Garage)) & {
@@ -65,6 +69,7 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	ShowroomBase: CFrame?,
 	Angle: number,
 	Shown: string, -- livrée affichée sur l'aperçu (Livery.Key)
+	ShownClass: string, -- catégorie affichée sur l'aperçu (kit de carrosserie)
 }
 
 local PANEL_WIDTH = 380
@@ -83,6 +88,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	self.ShowroomBase = nil
 	self.Angle = 0
 	self.Shown = ""
+	self.ShownClass = ""
 	self.FirstButton = nil
 
 	local gui = Instance.new("ScreenGui")
@@ -398,12 +404,29 @@ function Garage:Update(dt: number, position: Vector3?)
 	if not self.Showroom then
 		self.Showroom = self:_buildShowroom()
 		self.Shown = ""
+		self.ShownClass = ""
 	end
 	local model = self.Showroom
 	local base = self.ShowroomBase
 	if model and base then
 		self.Angle = (self.Angle + SPIN_SPEED * dt) % (math.pi * 2)
 		model:PivotTo(CFrame.new(base.Position) * CFrame.Angles(0, self.Angle, 0) * base.Rotation)
+		-- Carrosserie de la catégorie choisie (BodyKits.luau), inerte comme le reste.
+		local classId = self.Callbacks.GetCarClass()
+		if classId ~= self.ShownClass then
+			self.ShownClass = classId
+			BodyKits.Apply(model, CarClasses.Get(classId).Body)
+			local kit = model:FindFirstChild("BodyKit")
+			if kit then
+				for _, item in ipairs(kit:GetDescendants()) do
+					if item:IsA("WeldConstraint") then
+						item:Destroy()
+					elseif item:IsA("BasePart") then
+						item.Anchored = true
+					end
+				end
+			end
+		end
 		local livery = self:_shown()
 		if livery then
 			local key = Livery.Key(livery)

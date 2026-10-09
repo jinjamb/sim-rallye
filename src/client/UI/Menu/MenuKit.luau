@@ -15,6 +15,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -30,7 +32,7 @@ MenuKit.ROW_HEIGHT = 30
 export type Data = {
 	Lobby: { RaceTypes.LobbyRace },
 	Race: RaceTypes.RaceSnapshot?,
-	Records: { [string]: RaceTypes.TrackBoard },
+	Records: RaceTypes.ClassBoards, -- records du tour, par catégorie puis par circuit
 	Stats: RaceTypes.Stats?,
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- { Key, Modifier, EndsAt, Entries, Mine } (ChallengeService)
@@ -61,6 +63,9 @@ export type Context = {
 	SetCountdown: (TextLabel?) -> (),
 	-- Aller à un autre onglet du menu ("Play", "Challenges", "Shop", "Career").
 	SetTab: (string) -> (),
+	-- État d'affichage propre aux rubriques (catégorie montrée...), gardé
+	-- d'une reconstruction à l'autre.
+	View: { [string]: any },
 }
 
 export type Builder = {
@@ -104,6 +109,26 @@ function MenuKit.Builder(body: Instance): Builder
 		return label
 	end
 	return builder :: Builder
+end
+
+-- Catégorie de la voiture choisie au garage (Rally2 par défaut).
+function MenuKit.ChosenClass(ctx: Context): string
+	local wallet = ctx.Data.Wallet
+	local item = Catalog.Get(if wallet then wallet.Equipped.Car else nil)
+	return CarClasses.Get(if item then item.CarClass else nil).Id
+end
+
+-- Catégories dont le joueur possède la voiture, dans l'ordre du catalogue.
+function MenuKit.OwnedClasses(ctx: Context): { string }
+	local owned = MenuKit.OwnedSet(ctx)
+	local list = {}
+	for _, class in ipairs(CarClasses.LIST) do
+		local item = Catalog.CarItem(class.Id)
+		if item and (item.Free or owned[item.Id]) then
+			table.insert(list, class.Id)
+		end
+	end
+	return list
 end
 
 -- Objets possédés (dont les objets de série), d'après le portefeuille.

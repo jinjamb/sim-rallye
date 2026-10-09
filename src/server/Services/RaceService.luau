@@ -78,6 +78,8 @@ local StyleService = require(script.Parent.StyleService)
 local ChallengeService = require(script.Parent.ChallengeService)
 local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 
 local RaceService = {}
 
@@ -197,6 +199,9 @@ type Race = {
 	Laps: number,
 	Format: Format,
 	Contacts: boolean,
+	-- Catégorie de voiture de la course (CarClasses.luau) : tout le monde la
+	-- conduit (prêtée à qui ne l'a pas), records du tour de cette catégorie.
+	CarClass: string,
 	HostUserId: number,
 	Members: { Member },
 	State: RaceState,
@@ -264,6 +269,7 @@ local function lobbyList()
 				Laps = race.Laps,
 				Format = race.Format,
 				Contacts = race.Contacts,
+				CarClass = race.CarClass,
 				Host = hostName,
 				Count = #race.Members,
 				Max = MAX_PLAYERS,
@@ -290,6 +296,7 @@ local function raceSnapshot(race: Race)
 		Laps = race.Laps,
 		Format = race.Format,
 		Contacts = race.Contacts,
+		CarClass = race.CarClass,
 		HostUserId = race.HostUserId,
 		State = race.State,
 		Round = race.Round,
@@ -721,6 +728,7 @@ startRound = function(race: Race, round: number)
 				RaceId = race.Id,
 				Contacts = race.Contacts,
 				Held = true,
+				CarClass = race.CarClass,
 			})
 			pending -= 1
 			-- Parti de la course pendant le chargement : sa voiture n'a rien à faire sur la grille.
@@ -864,6 +872,12 @@ local function addMember(race: Race, player: Player, pinned: boolean)
 	raceOf[player] = race
 end
 
+-- La voiture choisie par l'hôte : celle de la course, au départ.
+local function hostClass(host: Player): string
+	local chosen = EconomyService.Equipped(host, "Car")
+	return CarClasses.Get(if chosen then chosen.CarClass else nil).Id
+end
+
 local function createRace(padId: string, circuit: Circuit.Circuit, host: Player): Race
 	local id = tostring(nextRaceId)
 	nextRaceId += 1
@@ -875,6 +889,7 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Laps = circuit.DefaultLaps,
 		Format = "Sprint",
 		Contacts = true,
+		CarClass = hostClass(host),
 		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
@@ -1167,6 +1182,13 @@ local function onSettings(player: Player, payload: any)
 	if type(payload.Contacts) == "boolean" then
 		race.Contacts = payload.Contacts
 	end
+	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
+	if CarClasses.Exists(payload.CarClass) then
+		local item = Catalog.CarItem(payload.CarClass)
+		if item and EconomyService.Owns(player, item.Id) then
+			race.CarClass = payload.CarClass
+		end
+	end
 	sendRaceState(race)
 	broadcastLobby()
 end
@@ -1308,15 +1330,15 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		local medal: number? = nil
 		if runner.Laps > 1 then
 			local lapMs = math.floor(lapTime * 1000 + 0.5)
-			local limits = Medals.ForCircuit(race.TrackId, length)
-			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key), limits)
-			record = RecordService.SubmitLap(player, circuit.Key, lapMs)
+			local limits = Medals.ForCircuit(race.TrackId, length, race.CarClass)
+			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key, race.CarClass), limits)
+			record = RecordService.SubmitLap(player, circuit.Key, race.CarClass, lapMs)
 			local after = Medals.TierOf(lapMs, limits)
 			if record and after > before then
 				medal = after -- nouvelle médaille sur ce circuit
 			end
 			if RunService:IsStudio() then
-				print(string.format("[Médailles] %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
+				print(string.format("[Médailles] %s en %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, race.CarClass, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
 			end
 		end
 		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record, Medal = medal })

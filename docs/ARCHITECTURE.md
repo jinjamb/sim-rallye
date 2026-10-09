@@ -20,7 +20,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 |----------------|------------------------------------------------------------------------------------------|
 | `Network/`     | `Remotes` : la liste de tous les RemoteEvents (créés par le serveur, attendus par le client). |
 | `Util/`        | `Format` (temps, milliers, compte à rebours) et `Units` (échelle stud/mètre, gravité).    |
-| `Vehicle/`     | Ce qui définit une voiture : `CarSetup` (réglages et bornes) et `Surfaces` (adhérence).   |
+| `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, Groupe B), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie) et `Surfaces` (adhérence). |
 | `Stage/`       | La spéciale : `StageTrack` (tracé, abscisse) et `Pacenotes` (notes du copilote).         |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
 | `Paddock/`     | La disposition du paddock (zones, panneaux).                                             |
@@ -87,6 +87,12 @@ Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaq
 - **Ajouter un objet** (voiture, fumée, klaxon…) : une entrée dans le module de sa sorte (`shared/Economy/Items/`), avec sa rareté et ses sources (`Free`, `Credits`, `Robux`, `Pass`, `Roll`). La boutique, le garage, les tirages et le Rallye Pass le trouvent d'eux-mêmes.
 - **Achats en Robux** : chaque produit se crée dans le Creator Dashboard. Son identifiant va dans `Products.luau` (packs de crédits) ou dans le champ `Robux.ProductId` de l'objet. Tant qu'il vaut 0, le produit s'affiche « bientôt ».
 - Le serveur n'accorde un achat qu'une fois sauvegardé, et garde l'identifiant de l'achat pour ne jamais l'accorder deux fois.
+
+## Catégories de voitures
+
+Une catégorie est une fiche dans `shared/Vehicle/CarClasses.luau`. Elle définit le moteur, la boîte, la transmission, les pneus et le kit de carrosserie. Elle donne aussi un suffixe aux clés des records : la Rally2 garde les clés d'avant les catégories. La physique (`Car`, `Powertrain`, `Gearbox`) lit la fiche de la voiture conduite.
+
+Records, fantômes, médailles et classements sont propres à chaque catégorie. La voiture achetable correspondante est un objet `Car` du catalogue (`Economy/Items/Cars.luau`).
 
 ## Conventions
 

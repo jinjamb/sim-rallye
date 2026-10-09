@@ -27,6 +27,7 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	Chassis: BasePart,
 	IsFront: boolean,
 	IsLeft: boolean,
+	TireGrip: number, -- adhérence des pneus de la catégorie (CarClasses.luau)
 
 	-- Réglages
 	SuspensionLength: number,
@@ -151,6 +152,7 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.Chassis = chassis
 	self.IsFront = isFront
 	self.IsLeft = isLeft
+	self.TireGrip = 1
 
 	self.SuspensionLength = 1.6
 
@@ -361,7 +363,7 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongitudinalVelocity = longitudinalVelocity
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
-	local mu = self.Surface.Grip * Surfaces.GripScale
+	local mu = self.Surface.Grip * Surfaces.GripScale * self.TireGrip
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 

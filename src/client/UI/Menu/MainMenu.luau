@@ -60,6 +60,7 @@ export type MainMenu = typeof(setmetatable({}, MainMenu)) & {
 	FirstButton: GuiButton?,
 	-- Données changées menu fermé : reconstruit à la prochaine ouverture.
 	Dirty: boolean,
+	View: { [string]: any }, -- état d'affichage des rubriques (MenuKit.Context)
 }
 
 local PANEL_WIDTH = MenuKit.PANEL_WIDTH
@@ -90,6 +91,7 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Dirty = false
 	self.Tab = "Play"
 	self.TabButtons = {}
+	self.View = {}
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RaceMenu"
@@ -214,6 +216,7 @@ function MainMenu:_context(): MenuKit.Context
 		SetTab = function(tab: string)
 			self:SetTab(tab)
 		end,
+		View = self.View,
 	}
 end
 

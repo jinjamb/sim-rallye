@@ -22,11 +22,15 @@
 
 	Le choix dure toute la partie (la voiture, elle, est recréée à chaque
 	passage au paddock) : Main.client.luau le transmet à chaque session.
+
+	PAR CATÉGORIE (CarClasses.luau) : on affronte un pilote de la catégorie de
+	sa voiture. Changer de voiture redemande l'adversaire dans la nouvelle.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Ghost = require(script.Parent.Ghost)
 local Banner = require(script.Parent.Parent.UI.Banner)
@@ -39,6 +43,8 @@ export type Mode = "Perso" | "Rival" | "Record" | "Player" | "Off"
 
 export type GhostChallenge = typeof(setmetatable({}, GhostChallenge)) & {
 	Mode: Mode,
+	-- Catégorie de la voiture conduite : on affronte les pilotes de celle-ci.
+	ClassId: string,
 	Opponent: Ghost.Opponent?,
 	-- Pilote visé en mode Player.
 	TargetUserId: number?,
@@ -70,6 +76,7 @@ local MODE_TITLES: { [string]: string } = {
 function GhostChallenge.new(onChanged: (GhostChallenge) -> ()): GhostChallenge
 	local self = (setmetatable({}, GhostChallenge) :: any) :: GhostChallenge
 	self.Mode = "Perso"
+	self.ClassId = CarClasses.DEFAULT
 	self.Opponent = nil
 	self.TargetUserId = nil
 	self.RequestToken = 0
@@ -83,6 +90,22 @@ function GhostChallenge.new(onChanged: (GhostChallenge) -> ()): GhostChallenge
 		end
 	end)
 	return self
+end
+
+-- Nouvelle voiture : un adversaire d'une autre catégorie ne vaut plus.
+function GhostChallenge:SetClass(classId: string)
+	if classId == self.ClassId then
+		return
+	end
+	self.ClassId = classId
+	if self.Opponent then
+		self.Opponent = nil
+		self.OnChanged(self)
+	end
+	if self.Mode == "Rival" or self.Mode == "Record" or self.Mode == "Player" then
+		self.RequestToken += 1
+		self:_request()
+	end
 end
 
 -- Le fantôme est-il masqué ?
@@ -143,13 +166,13 @@ function GhostChallenge:_request()
 			return
 		end
 		self.LastRequestAt = os.clock()
-		Remotes.RequestGhost:FireServer(self.Mode, if self.Mode == "Player" then self.TargetUserId else nil)
+		Remotes.RequestGhost:FireServer(self.Mode, if self.Mode == "Player" then self.TargetUserId else nil, self.ClassId)
 	end)
 end
 
 function GhostChallenge:_onOpponent(payload: any)
-	if payload.Mode ~= self.Mode then
-		return -- réponse à une demande dépassée
+	if payload.Mode ~= self.Mode or (payload.ClassId ~= nil and payload.ClassId ~= self.ClassId) then
+		return -- réponse à une demande dépassée (autre mode, autre voiture)
 	end
 	local beaten = self.BeatenName
 	self.BeatenName = nil

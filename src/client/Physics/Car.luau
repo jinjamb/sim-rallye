@@ -6,12 +6,15 @@ local DifferentialClass = require(script.Parent.Differential)
 local InputManager = require(script.Parent.Parent.Core.InputManager)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 
 local Car = {}
 Car.__index = Car
 
 export type Car = typeof(setmetatable({}, Car)) & {
 	Chassis: BasePart,
+	-- Catégorie (CarClasses.luau) : moteur, boîte, transmission, pneus.
+	Class: CarClasses.Class,
 	Wheels: { WheelClass.Wheel },
 	WheelsByName: { [string]: WheelClass.Wheel },
 	Powertrain: PowertrainClass.Powertrain,
@@ -107,6 +110,7 @@ end
 	pivoter la voiture au gaz. Le Coast donne de la stabilité au lever de pied.
 	CENTRAL : 60 % à l'arrière, comme avant, pour le caractère survireur ; le
 	blocage renvoie le couple vers l'essieu qui adhère quand l'autre patine.
+	TRACTION (Rally4) : tout le couple à l'avant, ni central ni arrière moteur.
 	(Une vraie Rally2 n'a PAS de différentiel central : arbre rigide. Pour
 	l'imiter, mettre Lock à 1 et un Preload élevé -- la voiture devient plus
 	sous-vireuse en épingle, et le frein à main devient indispensable.)
@@ -125,9 +129,10 @@ local CENTER_DIFF = { Split = 0.6, PreloadRatio = 0.05, PowerLock = 0.4, CoastLo
 local ANTI_ROLL_FRONT_RATIO = 0.6
 local ANTI_ROLL_REAR_RATIO = 0.42
 
-function Car.new(chassis: BasePart): Car
+function Car.new(chassis: BasePart, classId: string?): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
+	self.Class = CarClasses.Get(classId)
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
 	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
@@ -156,6 +161,7 @@ function Car.new(chassis: BasePart): Car
 		local isFront = string.match(name, "F") ~= nil
 		local isLeft = string.match(name, "L$") ~= nil
 		local wheel = WheelClass.new(attachment, chassis, isFront, isLeft)
+		wheel.TireGrip = self.Class.TireGrip
 		table.insert(self.Wheels, wheel)
 		self.WheelsByName[name] = wheel
 	end
@@ -164,7 +170,7 @@ function Car.new(chassis: BasePart): Car
 	-- il est lu sur les roues réelles du gabarit, pas supposé. Une carrosserie
 	-- importée avec de plus grandes roues (tools/attach-body.luau) allonge donc
 	-- tous les rapports d'autant, comme en vrai.
-	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass, self.Wheels[1].Radius)
+	self.Powertrain = PowertrainClass.new(chassis.AssemblyMass, self.Wheels[1].Radius, self.Class)
 
 	local wheelGripTorque = (weight / 4) * self.Powertrain.WheelRadius
 	local function makeDiff(spec: typeof(FRONT_DIFF)): DifferentialClass.Differential
@@ -189,7 +195,7 @@ function Car.new(chassis: BasePart): Car
 	self.SpringRate = springRate
 	-- Les valeurs par défaut du schéma sont celles ci-dessus : ça ne change
 	-- rien, mais tout passe désormais par le même chemin que les réglages joueur.
-	self:ApplySetup(CarSetup.Default())
+	self:ApplySetup(CarSetup.Default(self.Class.Id))
 
 	return self
 end
@@ -200,7 +206,7 @@ end
 	en mouvement comprise.
 ]]
 function Car:ApplySetup(input: CarSetup.Setup)
-	local setup = CarSetup.Sanitize(input)
+	local setup = CarSetup.Sanitize(input, self.Class.Id)
 	self.Setup = setup
 
 	self.MaxSteerAngle = setup.SteerAngle
@@ -213,7 +219,8 @@ function Car:ApplySetup(input: CarSetup.Setup)
 	self.FrontDiff.CoastLock = setup.FrontCoastLock
 	self.RearDiff.PowerLock = setup.RearPowerLock
 	self.RearDiff.CoastLock = setup.RearCoastLock
-	self.CenterDiff.Split = setup.CenterSplit
+	-- Traction : tout à l'avant, quel que soit le réglage.
+	self.CenterDiff.Split = if self.Class.Drive == "FWD" then 0 else setup.CenterSplit
 	self.CenterDiff.PowerLock = setup.CenterLock
 	-- Le central est moins bloqué en frein moteur qu'en traction (rampes 1.5 voie).
 	self.CenterDiff.CoastLock = setup.CenterLock * 0.5
@@ -373,7 +380,8 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		et l'épingle au frein à main reste molle. Avec : l'arrière se bloque net
 		pendant que l'avant continue de tirer la voiture dans le virage.
 	]]
-	local rearDecoupled = inputs.handbrake
+	local fwd = self.Class.Drive == "FWD"
+	local rearDecoupled = inputs.handbrake or fwd
 
 	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
 	local rl, rr = self.WheelsByName.WheelRL, self.WheelsByName.WheelRR

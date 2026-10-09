@@ -29,6 +29,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local CarEffects = require(script.Parent.CarEffects)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -65,8 +66,9 @@ local function escape(text: string): string
 	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
 end
 
--- "#7 Pilote · NATIONALE 12" : numéro de course (livrée), nom, et licence et
--- niveau dans la couleur de la licence (posés par le serveur, Progression.luau).
+-- "#7 Pilote · NATIONALE 12 · Rally4" : numéro de course (livrée), nom,
+-- licence et niveau dans la couleur de la licence (posés par le serveur,
+-- Progression.luau), catégorie de la voiture.
 local function nameText(model: Model): string
 	local name = escape(tostring(model:GetAttribute("OwnerName") or ""))
 	local number = model:GetAttribute("RaceNumber")
@@ -75,6 +77,11 @@ local function nameText(model: Model): string
 	local licence = Progression.LICENCES[tonumber(model:GetAttribute("Licence")) or 0]
 	if licence and type(level) == "number" then
 		text ..= string.format(' <font color="%s">· %s %d</font>', Medals.Hex(licence.Color), licence.Short, level)
+	end
+	-- Sa catégorie de voiture (CarClasses.luau), en discret.
+	local class = model:GetAttribute("CarClass")
+	if CarClasses.Exists(class) then
+		text ..= ' <font color="#a0a4b0">· ' .. escape(CarClasses.Get(class).Name) .. "</font>"
 	end
 	return text
 end

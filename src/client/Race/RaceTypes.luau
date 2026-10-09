@@ -14,6 +14,7 @@ export type LobbyRace = {
 	Laps: number,
 	Format: string, -- "Sprint" | "Event"
 	Contacts: boolean,
+	CarClass: string, -- catégorie de voiture de la course (CarClasses.luau)
 	Host: string,
 	Count: number,
 	Max: number,
@@ -29,6 +30,7 @@ export type RaceSnapshot = {
 	Laps: number,
 	Format: string,
 	Contacts: boolean,
+	CarClass: string,
 	HostUserId: number,
 	State: string, -- "Lobby" | "Grid" | "Countdown" | "Racing" | "Results"
 	Round: number,
@@ -87,6 +89,8 @@ export type Results = {
 
 export type BoardEntry = { UserId: number, Name: string, Ms: number }
 export type TrackBoard = { Key: string, Entries: { BoardEntry } }
+-- Records du tour : par catégorie de voiture, puis par circuit.
+export type ClassBoards = { [string]: { [string]: TrackBoard } }
 export type Stats = { Races: number, Wins: number, Podiums: number, Points: number }
 
 return RaceTypes

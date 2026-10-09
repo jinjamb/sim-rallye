@@ -18,6 +18,10 @@
 	Circuit : sur un tour SANS joker (Circuit.Length) ; le tour du joker, plus
 	long, rapporte donc rarement une médaille, comme il se doit.
 
+	PAR CATÉGORIE : les vitesses ci-dessous sont celles de la Rally2 ; chaque
+	catégorie les multiplie par son MedalScale (CarClasses.luau). Sans
+	catégorie précisée : la Rally2.
+
 	CALIBRAGE : les vitesses ci-dessous sont un premier jet, à ajuster en
 	roulant. Dans Studio, chaque temps validé affiche sa vitesse moyenne dans la
 	sortie ([Médailles] ...) : bronze pour un débutant qui reste sur la route,
@@ -26,6 +30,7 @@
 
 local StageTrack = require(script.Parent.Parent.Stage.StageTrack)
 local Units = require(script.Parent.Parent.Util.Units)
+local CarClasses = require(script.Parent.Parent.Vehicle.CarClasses)
 
 local Medals = {}
 
@@ -60,32 +65,36 @@ function Medals.AverageKmh(distance: number, ms: number): number
 end
 
 -- Temps (ms) de chaque palier, arrondis au dixième : des objectifs lisibles.
-local function thresholds(distance: number, speeds: { number }): { number }
+local function thresholds(distance: number, speeds: { number }, scale: number): { number }
 	local result = table.create(#speeds)
 	for i, kmh in ipairs(speeds) do
-		local studsPerSecond = kmh / Units.ToKmh(1)
+		local studsPerSecond = kmh * scale / Units.ToKmh(1)
 		result[i] = math.floor(distance / studsPerSecond * 10 + 0.5) * 100
 	end
 	return result
 end
 
-local stageCache: { number }? = nil
+local stageCache: { [string]: { number } } = {}
 
 -- Longueur du parcours chronométré de la spéciale (studs).
 function Medals.StageDistance(): number
 	return StageTrack.GetFinishDistance() - StageTrack.START_DISTANCE
 end
 
-function Medals.ForStage(): { number }
-	if not stageCache then
-		stageCache = thresholds(Medals.StageDistance(), STAGE_SPEEDS)
+-- `classId` : CarClasses.luau (la Rally2 sans argument).
+function Medals.ForStage(classId: string?): { number }
+	local class = CarClasses.Get(classId)
+	local cached = stageCache[class.Id]
+	if not cached then
+		cached = thresholds(Medals.StageDistance(), STAGE_SPEEDS, class.MedalScale)
+		stageCache[class.Id] = cached
 	end
-	return stageCache :: { number }
+	return cached
 end
 
 -- `trackId` : Tracks.luau ; `lapLength` : Circuit.Length (studs).
-function Medals.ForCircuit(trackId: string, lapLength: number): { number }
-	return thresholds(lapLength, CIRCUIT_SPEEDS[trackId] or DEFAULT_CIRCUIT_SPEEDS)
+function Medals.ForCircuit(trackId: string, lapLength: number, classId: string?): { number }
+	return thresholds(lapLength, CIRCUIT_SPEEDS[trackId] or DEFAULT_CIRCUIT_SPEEDS, CarClasses.Get(classId).MedalScale)
 end
 
 -- Palier atteint par un temps (0 = aucun).

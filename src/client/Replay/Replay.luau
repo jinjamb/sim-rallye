@@ -38,6 +38,8 @@ local UserInputService = game:GetService("UserInputService")
 local StageTrack = require(game:GetService("ReplicatedStorage").Shared.Stage.StageTrack)
 local LiveryPainter = require(game:GetService("ReplicatedStorage").Shared.Cosmetics.LiveryPainter)
 local Livery = require(game:GetService("ReplicatedStorage").Shared.Cosmetics.Livery)
+local CarClasses = require(game:GetService("ReplicatedStorage").Shared.Vehicle.CarClasses)
+local BodyKits = require(game:GetService("ReplicatedStorage").Shared.Vehicle.BodyKits)
 local Format = require(game:GetService("ReplicatedStorage").Shared.Util.Format)
 local Ghost = require(script.Parent.Parent.Stage.Ghost)
 local Theme = require(script.Parent.Parent.UI.Theme)
@@ -353,9 +355,10 @@ end
 
 --[[
 	Commence le ralenti d'un passage. `livery` : celle de la voiture rejouée
-	(nil : celle du gabarit, pour le fantôme d'un autre pilote).
+	(nil : celle du gabarit, pour le fantôme d'un autre pilote) ; `classId` :
+	sa catégorie (carrosserie, BodyKits.luau).
 ]]
-function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Livery?)
+function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Livery?, classId: string?)
 	if self.Active then
 		self:Stop()
 	end
@@ -380,6 +383,7 @@ function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Liver
 
 	-- La voiture, à la livrée voulue ; ensuite, plus rien ne la touche.
 	model:PivotTo(Ghost.PoseAt(data, 0))
+	BodyKits.Apply(model, CarClasses.Get(classId).Body)
 	model.Parent = workspace
 	if livery then
 		LiveryPainter.Prepare(model)

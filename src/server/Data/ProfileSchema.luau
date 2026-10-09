@@ -8,19 +8,34 @@
 
 	IDENTITÉ D'UN TRACÉ : dérivée de sa longueur. Si le tracé change, les temps
 	repartent de zéro au lieu de mélanger deux parcours différents.
+
+	PAR CATÉGORIE DE VOITURE (CarClasses.luau) : les records de la spéciale
+	et des circuits ont une clé par catégorie (CarClasses.RecordKey : la
+	Rally2 garde les clés d'avant les catégories), et les réglages un jeu
+	par catégorie (Setups ; l'ancien champ Setup devient celui de la Rally2).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 
 local ProfileSchema = {}
 
--- Clé de la spéciale dans les records du profil.
+-- Clé de la spéciale dans les records du profil (Rally2 ; StageKey pour une catégorie).
 ProfileSchema.STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
+
+function ProfileSchema.StageKey(classId: string): string
+	return CarClasses.RecordKey(ProfileSchema.STAGE_ID, classId)
+end
+
+-- Clé d'un circuit dans les records du tour (Circuit.Key, par catégorie).
+function ProfileSchema.LapKey(trackKey: string, classId: string): string
+	return CarClasses.RecordKey(trackKey, classId)
+end
 
 ProfileSchema.GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 ProfileSchema.GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
@@ -38,10 +53,10 @@ export type DailyState = {
 }
 
 export type Profile = {
-	Records: { [string]: StageRecord },
-	Setup: CarSetup.Setup,
+	Records: { [string]: StageRecord }, -- par clé de spéciale (StageKey)
+	Setups: { [string]: CarSetup.Setup }, -- réglages, par catégorie
 	Livery: Livery.Livery,
-	Laps: { [string]: number }, -- meilleur tour (ms) par circuit (Circuit.Key)
+	Laps: { [string]: number }, -- meilleur tour (ms) par circuit (LapKey)
 	Stats: Stats,
 	StageRuns: number, -- spéciales terminées (temps validés)
 	Style: number, -- points de style cumulés
@@ -67,7 +82,7 @@ end
 function ProfileSchema.Empty(userId: number): Profile
 	return {
 		Records = {},
-		Setup = CarSetup.Default(),
+		Setups = {},
 		Livery = Livery.Default(userId),
 		Laps = {},
 		Stats = ProfileSchema.EmptyStats(),
@@ -196,7 +211,17 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 			end
 		end
 	end
-	profile.Setup = CarSetup.Sanitize(data.Setup)
+	if type(data.Setups) == "table" then
+		for classId, setup in pairs(data.Setups) do
+			if CarClasses.Exists(classId) then
+				profile.Setups[classId] = CarSetup.Sanitize(setup, classId)
+			end
+		end
+	end
+	-- Avant les catégories : un seul jeu de réglages, celui de la Rally2.
+	if profile.Setups[CarClasses.DEFAULT] == nil and type(data.Setup) == "table" then
+		profile.Setups[CarClasses.DEFAULT] = CarSetup.Sanitize(data.Setup, CarClasses.DEFAULT)
+	end
 	if type(data.Laps) == "table" then
 		for key, ms in pairs(data.Laps) do
 			if type(key) == "string" and type(ms) == "number" and ms > 0 then

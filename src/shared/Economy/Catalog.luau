@@ -42,7 +42,9 @@ Catalog.KIND_NAMES = {
 } :: { [Kind]: string }
 
 -- Les objets de chaque sorte, chacun dans son module (Items/).
-local LISTS: { { Item } } = {}
+local LISTS: { { Item } } = {
+	require(script.Parent.Items.Cars),
+}
 
 Catalog.ITEMS = {} :: { Item }
 
@@ -73,6 +75,16 @@ end
 function Catalog.Default(kind: Kind): Item?
 	for _, item in ipairs(Catalog.ITEMS) do
 		if item.Kind == kind and item.Free then
+			return item
+		end
+	end
+	return nil
+end
+
+-- La voiture du catalogue d'une catégorie (CarClasses.luau).
+function Catalog.CarItem(classId: string): Item?
+	for _, item in ipairs(Catalog.ITEMS) do
+		if item.Kind == "Car" and item.CarClass == classId then
 			return item
 		end
 	end

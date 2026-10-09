@@ -14,12 +14,16 @@
 	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
 	ce pilote (en mémoire s'il est connecté, sinon dans le DataStore, puis gardé
 	quelques minutes en cache).
+
+	PAR CATÉGORIE (CarClasses.luau) : un fantôme par catégorie de voiture ;
+	on affronte les pilotes de sa catégorie.
 ]]
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Boards = require(script.Parent.Parent.Data.Boards)
@@ -27,7 +31,6 @@ local RecordService = require(script.Parent.RecordService)
 
 local GhostService = {}
 
-local STAGE_ID = ProfileSchema.STAGE_ID
 local GHOST_WINDOW = 60 -- secondes pour envoyer le fantôme après un record
 local GHOST_REQUEST_COOLDOWN = 2 -- secondes entre deux demandes de fantôme d'un autre pilote
 local RIVAL_CANDIDATES = 5 -- temps juste devant le sien examinés dans le classement sauvegardé
@@ -36,11 +39,11 @@ local OPPONENT_CACHE_TIME = 120 -- secondes : fantôme d'un pilote absent, gard�
 
 type StageRecord = ProfileSchema.StageRecord
 
-local pendingGhost: { [Player]: { Ms: number, Expires: number } } = {}
+local pendingGhost: { [Player]: { Ms: number, Expires: number, ClassId: string } } = {}
 
 -- Record perso validé : son fantôme est attendu.
-function GhostService.Expect(player: Player, ms: number)
-	pendingGhost[player] = { Ms = ms, Expires = os.clock() + GHOST_WINDOW }
+function GhostService.Expect(player: Player, ms: number, classId: string)
+	pendingGhost[player] = { Ms = ms, Expires = os.clock() + GHOST_WINDOW, ClassId = classId }
 end
 
 local function onSubmitGhost(player: Player, input: any)
@@ -61,13 +64,14 @@ local function onSubmitGhost(player: Player, input: any)
 	end
 	pendingGhost[player] = nil
 
-	local record = profile.Records[STAGE_ID]
+	local key = ProfileSchema.StageKey(pending.ClassId)
+	local record = profile.Records[key]
 	if record and record.Ms == pending.Ms then
 		record.Ghost = ghost
 	end
 	local ms = pending.Ms
 	ProfileStore.Update(player.UserId, "fantôme", function(stored)
-		local current = stored.Records[STAGE_ID]
+		local current = stored.Records[key]
 		if not current or current.Ms ~= ms then
 			return false -- un meilleur temps est arrivé entre-temps
 		end
@@ -80,15 +84,16 @@ end
 -- Défi du fantôme : courir contre la trajectoire d'un autre pilote
 --------------------------------------------------------------------------------
 
-local opponentCache: { [number]: { Record: StageRecord?, Expires: number } } = {}
+local opponentCache: { [string]: { Record: StageRecord?, Expires: number } } = {}
 
 -- Record de la spéciale (temps et fantôme) d'un pilote, connecté ou non.
-local function stageRecordOf(userId: number): StageRecord?
+local function stageRecordOf(userId: number, classId: string): StageRecord?
 	local online = Players:GetPlayerByUserId(userId)
 	if online and ProfileStore.Get(online) then
-		return RecordService.GetStageRecord(online)
+		return RecordService.GetStageRecord(online, classId)
 	end
-	local cached = opponentCache[userId]
+	local cacheKey = tostring(userId) .. "|" .. classId
+	local cached = opponentCache[cacheKey]
 	if cached and os.clock() < cached.Expires then
 		return cached.Record
 	end
@@ -96,14 +101,14 @@ local function stageRecordOf(userId: number): StageRecord?
 	if not stored then
 		return nil
 	end
-	local record = stored.Records[STAGE_ID]
+	local record = stored.Records[ProfileSchema.StageKey(classId)]
 	local now = os.clock()
 	for id, entry in pairs(opponentCache) do
 		if now >= entry.Expires then
 			opponentCache[id] = nil -- un fantôme pèse ~7000 nombres : on ne garde que les récents
 		end
 	end
-	opponentCache[userId] = { Record = record, Expires = now + OPPONENT_CACHE_TIME }
+	opponentCache[cacheKey] = { Record = record, Expires = now + OPPONENT_CACHE_TIME }
 	return record
 end
 
@@ -117,21 +122,21 @@ end
 ]]
 type Candidate = { UserId: number, Ms: number }
 
-local function opponentCandidates(player: Player, mode: string): { Candidate }
-	local mine = RecordService.GetStageRecord(player)
+local function opponentCandidates(player: Player, mode: string, classId: string): { Candidate }
+	local mine = RecordService.GetStageRecord(player, classId)
 	local times: { [number]: number } = {}
 	local function consider(userId: number, ms: number)
 		local known = times[userId]
 		times[userId] = if known then math.min(known, ms) else ms
 	end
-	for _, entry in ipairs(RecordService.GetLeaderboard()) do
+	for _, entry in ipairs(RecordService.GetLeaderboard(classId)) do
 		consider(entry.UserId, entry.Ms)
 	end
-	for userId, ms in pairs(RecordService.GetSessionBest()) do
+	for userId, ms in pairs(RecordService.GetSessionBest(classId)) do
 		consider(userId, ms)
 	end
 	if mode == "Rival" and mine then
-		for _, item in ipairs(RecordService.GetTimesBelow(mine.Ms - 1, RIVAL_CANDIDATES)) do
+		for _, item in ipairs(RecordService.GetTimesBelow(classId, mine.Ms - 1, RIVAL_CANDIDATES)) do
 			consider(item.UserId, item.Ms)
 		end
 	end
@@ -151,11 +156,11 @@ local function opponentCandidates(player: Player, mode: string): { Candidate }
 	return list
 end
 
-local function sendOpponent(player: Player, mode: string, userId: number?)
+local function sendOpponent(player: Player, mode: string, userId: number?, classId: string)
 	local function fail(message: string)
-		Remotes.GhostOpponent:FireClient(player, { Mode = mode, Error = message })
+		Remotes.GhostOpponent:FireClient(player, { Mode = mode, Error = message, ClassId = classId })
 	end
-	local mine = RecordService.GetStageRecord(player)
+	local mine = RecordService.GetStageRecord(player, classId)
 
 	local candidates: { number } = {}
 	if mode == "Player" then
@@ -165,7 +170,7 @@ local function sendOpponent(player: Player, mode: string, userId: number?)
 		end
 		candidates = { userId :: number }
 	else
-		local list = opponentCandidates(player, mode)
+		local list = opponentCandidates(player, mode, classId)
 		local first = list[1]
 		if mode == "Record" and mine and (first == nil or mine.Ms <= first.Ms) then
 			fail("Le record, c'est toi !")
@@ -185,7 +190,7 @@ local function sendOpponent(player: Player, mode: string, userId: number?)
 		if index > OPPONENT_LOADS then
 			break
 		end
-		local record = stageRecordOf(candidate)
+		local record = stageRecordOf(candidate, classId)
 		if record and record.Ghost then
 			if not player.Parent then
 				return
@@ -196,6 +201,7 @@ local function sendOpponent(player: Player, mode: string, userId: number?)
 				Name = Boards.NameOf(candidate),
 				Ms = record.Ms,
 				Ghost = record.Ghost,
+				ClassId = classId,
 			})
 			return
 		end
@@ -213,7 +219,7 @@ function GhostService.Start()
 
 	local ghostBusy: { [Player]: boolean } = {}
 	local lastRequestAt: { [Player]: number } = {}
-	Remotes.RequestGhost.OnServerEvent:Connect(function(player: Player, mode: any, target: any)
+	Remotes.RequestGhost.OnServerEvent:Connect(function(player: Player, mode: any, target: any, classArg: any)
 		if mode ~= "Rival" and mode ~= "Record" and mode ~= "Player" then
 			return
 		end
@@ -224,6 +230,7 @@ function GhostService.Start()
 			end
 			userId = target
 		end
+		local classId = CarClasses.Get(classArg).Id
 		local now = os.clock()
 		if ghostBusy[player] or now - (lastRequestAt[player] or 0) < GHOST_REQUEST_COOLDOWN then
 			Remotes.GhostOpponent:FireClient(player, { Mode = mode, Error = "Patiente un instant." })
@@ -232,7 +239,7 @@ function GhostService.Start()
 		lastRequestAt[player] = now
 		ghostBusy[player] = true
 		local ok, err = pcall(function()
-			sendOpponent(player, mode, userId)
+			sendOpponent(player, mode, userId, classId)
 		end)
 		ghostBusy[player] = nil
 		if not ok then

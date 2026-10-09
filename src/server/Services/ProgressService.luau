@@ -20,6 +20,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
@@ -29,15 +30,22 @@ local ProgressService = {}
 
 local lastProgress: { [Player]: Progression.Snapshot } = {}
 
--- Palier de médaille par tracé : "stage" pour la spéciale, l'id du circuit sinon.
+--[[
+	Palier de médaille par tracé : "stage" pour la spéciale, l'id du circuit
+	sinon. Le meilleur des catégories de voitures (chacune a ses seuils) :
+	changer de voiture ne fait pas regagner l'XP d'une médaille déjà acquise.
+]]
 local function medalsOf(profile: ProfileSchema.Profile): { [string]: number }
-	local medals: { [string]: number } = {}
-	local stage = profile.Records[ProfileSchema.STAGE_ID]
-	medals.stage = Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage())
-	for _, id in ipairs(Tracks.List()) do
-		local circuit = Tracks.Get(id)
-		if circuit then
-			medals[id] = Medals.TierOf(profile.Laps[circuit.Key], Medals.ForCircuit(id, circuit.Length))
+	local medals: { [string]: number } = { stage = 0 }
+	for _, class in ipairs(CarClasses.LIST) do
+		local stage = profile.Records[ProfileSchema.StageKey(class.Id)]
+		medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id)))
+		for _, id in ipairs(Tracks.List()) do
+			local circuit = Tracks.Get(id)
+			if circuit then
+				local lap = profile.Laps[ProfileSchema.LapKey(circuit.Key, class.Id)]
+				medals[id] = math.max(medals[id] or 0, Medals.TierOf(lap, Medals.ForCircuit(id, circuit.Length, class.Id)))
+			end
 		end
 	end
 	return medals

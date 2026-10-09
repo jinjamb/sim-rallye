@@ -171,9 +171,10 @@ function Leaderboard:SetTitle(text: string)
 end
 
 -- `medals` : pastilles de médaille (la spéciale habituelle ; pas le défi).
-function Leaderboard:SetEntries(entries: { Entry }, medals: boolean?)
+-- `medals` : pastilles de médaille de la catégorie `classId` (la spéciale habituelle).
+function Leaderboard:SetEntries(entries: { Entry }, medals: boolean?, classId: string?)
 	self.Empty.Visible = #entries == 0
-	local limits = Medals.ForStage()
+	local limits = Medals.ForStage(classId)
 	for i, row in ipairs(self.Rows) do
 		local entry = entries[i]
 		local dot = self.Dots[i]

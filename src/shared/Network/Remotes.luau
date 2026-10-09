@@ -21,7 +21,7 @@ export type Remotes = {
 	-- autres joueurs (son, roues, poussière). Voir CarService.
 	CarTelemetry: UnreliableRemoteEvent,
 
-	-- Serveur -> Client : (profile) meilleur temps, fantôme, réglages, statistiques
+	-- Serveur -> Client : (profile) records et fantômes par catégorie, réglages, livrée, statistiques
 	ProfileLoaded: RemoteEvent,
 	-- Serveur -> Client : (stats, laps) statistiques et records du tour mis à jour
 	ProfileUpdated: RemoteEvent,
@@ -29,16 +29,16 @@ export type Remotes = {
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
-	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?) fantôme d'un autre
-	-- pilote à affronter sur la spéciale
+	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?, classId) fantôme d'un
+	-- autre pilote de la même catégorie à affronter sur la spéciale
 	RequestGhost: RemoteEvent,
 	-- Serveur -> Client : (opponent) le fantôme demandé (pilote, temps, trajectoire) ou l'erreur
 	GhostOpponent: RemoteEvent,
-	-- Serveur -> Client : (entries) classement de la spéciale
+	-- Serveur -> Client : (boards) classements de la spéciale, par catégorie de voiture
 	Leaderboard: RemoteEvent,
 	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
 	WeeklyBoard: RemoteEvent,
-	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
+	-- Client -> Serveur : (classId, setup) réglages d'une catégorie de voiture à sauvegarder
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
 	SaveLivery: RemoteEvent,
@@ -72,7 +72,7 @@ export type Remotes = {
 	RaceLive: UnreliableRemoteEvent,
 	-- Serveur -> Client : (kind, data) tour bouclé, joker, pénalité, arrivée, résultats
 	RaceEvent: RemoteEvent,
-	-- Serveur -> Clients : (records) meilleurs tours par circuit
+	-- Serveur -> Clients : (records) meilleurs tours, par catégorie puis par circuit
 	TrackRecords: RemoteEvent,
 
 	-- ÉCONOMIE (EconomyService)

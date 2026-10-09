@@ -38,18 +38,22 @@ local StageModifier = require(script.Parent.Parent.Stage.StageModifier)
 local DrivingSchool = require(script.Parent.Parent.School.DrivingSchool)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarContact = require(script.Parent.CarContact)
 
 local DrivingSession = {}
 DrivingSession.__index = DrivingSession
 
+-- Record de la spéciale dans une catégorie : temps officiel et fantôme.
+export type StageBest = { Ms: number?, Ghost: Ghost.GhostData? }
+
 export type Context = {
 	PlayerGui: Instance,
 	Camera: Camera,
 	TouchLayout: boolean,
-	Setup: CarSetup.Setup,
-	StageBestMs: number?,
-	StageGhost: Ghost.GhostData?,
+	-- Réglages et records, par catégorie de voiture (CarClasses.luau).
+	Setups: { [string]: CarSetup.Setup },
+	StageBests: { [string]: StageBest },
 	-- Défi du fantôme (GhostChallenge.luau) : adversaire choisi, ou fantôme masqué.
 	GhostOpponent: Ghost.Opponent?,
 	GhostHidden: boolean,
@@ -63,6 +67,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Model: Model,
 	Chassis: BasePart,
 	Car: CarClass.Car,
+	ClassId: string, -- catégorie de la voiture (attribut CarClass)
 	RaceId: string?,
 	Dashboard: Dashboard.Dashboard,
 	Audio: CarAudio.CarAudio,
@@ -106,8 +111,9 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local lessonId = model:GetAttribute("Lesson")
 	local lesson = if self.RaceId == nil and type(lessonId) == "string" then Lessons.Get(lessonId) else nil
 
-	local car = CarClass.new(self.Chassis)
-	car:ApplySetup(context.Setup)
+	self.ClassId = CarClasses.Get(model:GetAttribute("CarClass")).Id
+	local car = CarClass.new(self.Chassis, self.ClassId)
+	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))
 	self.Car = car
 
 	local wheelAttachments: { Attachment } = {}
@@ -148,8 +154,10 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 			timer:SetTouchLayout(true)
 			copilot:SetTouchLayout(true)
 		end
-		timer:SetPersonalBest(context.StageBestMs)
-		ghost:SetBest(context.StageGhost)
+		local best: StageBest = context.StageBests[self.ClassId] or { Ms = nil, Ghost = nil }
+		timer:SetClass(self.ClassId)
+		timer:SetPersonalBest(best.Ms)
+		ghost:SetBest(best.Ghost)
 		ghost:SetOpponent(context.GhostOpponent)
 		ghost:SetHidden(context.GhostHidden)
 		timer:SetGhost(ghost)
@@ -251,13 +259,18 @@ function DrivingSession:SetControl(granted: boolean)
 end
 
 -- Profil chargé après la création de la session (meilleur temps, fantôme).
-function DrivingSession:SetStageProfile(bestMs: number?, ghostData: Ghost.GhostData?)
+-- Records chargés après la voiture : ceux de sa catégorie.
+function DrivingSession:SetStageProfile(bests: { [string]: StageBest })
+	local best = bests[self.ClassId]
+	if not best then
+		return
+	end
 	local timer, ghost = self.StageTimer, self.Ghost
 	if timer then
-		timer:SetPersonalBest(bestMs)
+		timer:SetPersonalBest(best.Ms)
 	end
-	if ghost and ghostData then
-		ghost:SetBest(ghostData)
+	if ghost and best.Ghost then
+		ghost:SetBest(best.Ghost)
 	end
 end
 

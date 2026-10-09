@@ -8,6 +8,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Theme = require(script.Parent.Parent.Theme)
@@ -41,6 +42,10 @@ function ChallengesPage.Weekly(ctx: Context, b: Builder)
 	remaining.Size = UDim2.fromScale(1, 1)
 	remaining.TextXAlignment = Enum.TextXAlignment.Right
 	b:Text(modifier.Description .. " La spéciale, ce seul changement, et un classement remis à zéro chaque lundi.", 13, Widgets.COLOR_DIM)
+	-- La voiture de la semaine, la même pour tous (prêtée si on ne l'a pas).
+	local class = CarClasses.Get(board.CarClass)
+	local loaned = not table.find(MenuKit.OwnedClasses(ctx), class.Id)
+	b:Text("Voiture imposée : " .. class.Name .. (if loaned then " (prêtée pour le défi)" else ""), 13, Theme.ACCENT)
 
 	local entries = board.Entries or {}
 	if #entries == 0 then

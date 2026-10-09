@@ -60,7 +60,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Lobby: { RaceTypes.LobbyRace },
 	Race: RaceTypes.RaceSnapshot?,
 	Live: RaceTypes.LivePayload?,
-	Records: { [string]: RaceTypes.TrackBoard },
+	Records: RaceTypes.ClassBoards,
 	Stats: RaceTypes.Stats?,
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- défi de la semaine (RecordService : WeeklyBoard)

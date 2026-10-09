@@ -9,6 +9,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -39,7 +40,7 @@ local function circuitRow(ctx: Context, b: Builder, id: string)
 	local details = string.match(circuit.Description, "^[^%.]+") or ""
 	local status = {}
 	if waiting then
-		table.insert(status, string.format("%d en attente · %d tours · %s", waiting.Count, waiting.Laps, MenuKit.RaceFormatName(waiting.Format)))
+		table.insert(status, string.format("%d en attente · %s · %d tours · %s", waiting.Count, CarClasses.Get(waiting.CarClass).Name, waiting.Laps, MenuKit.RaceFormatName(waiting.Format)))
 	end
 	if racing > 0 then
 		table.insert(status, string.format("%d en course", racing))

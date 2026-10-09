@@ -3,13 +3,15 @@
 	RacePage.luau
 	Le menu pendant une course de rallycross.
 		EN SALLE D'ATTENTE : pilotes, compte à rebours ; l'hôte (premier
-		  arrivé) règle tours, format, contacts, et peut lancer sans
-		  attendre ; QUITTER (ou sortir de la zone).
+		  arrivé) règle tours, format, contacts, voiture (parmi les
+		  siennes, prêtée aux autres), et peut lancer sans attendre ;
+		  QUITTER (ou sortir de la zone).
 		PENDANT LA COURSE : ABANDONNER.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local CareerPage = require(script.Parent.CareerPage)
 local MenuKit = require(script.Parent.MenuKit)
@@ -38,13 +40,25 @@ function RacePage.Race(ctx: Context, b: Builder, race: RaceTypes.RaceSnapshot)
 		MenuKit.Stepper(ctx, b, "Contacts entre voitures", if race.Contacts then "Oui" else "Non", function(_direction)
 			ctx.Action("Settings", { Contacts = not race.Contacts })
 		end)
+		-- Catégorie : parmi les voitures de l'hôte (prêtée aux autres pilotes).
+		local classes = MenuKit.OwnedClasses(ctx)
+		MenuKit.Stepper(ctx, b, "Voiture", CarClasses.Get(race.CarClass).Name, function(direction)
+			if #classes > 1 then
+				local index = table.find(classes, race.CarClass) or 1
+				ctx.Action("Settings", { CarClass = classes[((index - 1 + direction) % #classes) + 1] })
+			end
+		end)
 	else
 		b:Text(string.format(
-			"%d tours · %s · contacts %s",
+			"%s · %d tours · %s · contacts %s",
+			CarClasses.Get(race.CarClass).Name,
 			race.Laps,
 			MenuKit.RaceFormatName(race.Format),
 			if race.Contacts then "activés" else "désactivés"
 		), 14)
+		if inLobby and not table.find(MenuKit.OwnedClasses(ctx), race.CarClass) then
+			b:Text("Tu n'as pas cette voiture : elle t'est prêtée pour la course.", 12, Widgets.COLOR_GREEN)
+		end
 	end
 
 	local stateText: string
@@ -98,7 +112,7 @@ function RacePage.Race(ctx: Context, b: Builder, race: RaceTypes.RaceSnapshot)
 	end
 
 	b:Section("Records du tour")
-	CareerPage.LapRecords(ctx, b, race.TrackId)
+	CareerPage.LapRecords(ctx, b, race.TrackId, race.CarClass)
 end
 
 return RacePage

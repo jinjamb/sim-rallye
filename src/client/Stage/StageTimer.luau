@@ -65,6 +65,8 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	NextDeltaAt: number,
 	-- Meilleur temps OFFICIEL (ms) : celui qui donne la médaille.
 	OfficialBestMs: number?,
+	-- Catégorie de la voiture (CarClasses.luau) : ses médailles.
+	ClassId: string?,
 	-- Défi de la semaine : nom de la contrainte (nil : spéciale habituelle), et
 	-- meilleur temps de la semaine (pas de médailles ici).
 	Weekly: string?,
@@ -135,6 +137,7 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.LiveDelta = nil
 	self.NextDeltaAt = 0
 	self.OfficialBestMs = nil
+	self.ClassId = nil
 	self.Weekly = nil
 	self.WeeklyBestMs = nil
 	self.Ghost = nil
@@ -268,6 +271,11 @@ function StageTimer:Restart()
 end
 
 -- Meilleur temps sauvegardé (profil chargé par le serveur), en millisecondes.
+-- Catégorie de la voiture : ses médailles (avant SetPersonalBest).
+function StageTimer:SetClass(classId: string)
+	self.ClassId = classId
+end
+
 function StageTimer:SetPersonalBest(ms: number?)
 	self.BestTime = if ms then ms / 1000 else nil
 	self.OfficialBestMs = ms
@@ -304,8 +312,8 @@ end
 
 -- Nouvelle médaille : annonce en grand. Sinon, un record perso rappelle la
 -- prochaine à décrocher.
-local function announceRecord(ms: number, previousMs: number?)
-	local limits = Medals.ForStage()
+local function announceRecord(ms: number, previousMs: number?, classId: string?)
+	local limits = Medals.ForStage(classId)
 	local before = Medals.TierOf(previousMs, limits)
 	local after = Medals.TierOf(ms, limits)
 	local nextTier, nextMs = Medals.Next(ms, limits)
@@ -353,7 +361,7 @@ function StageTimer:SetOfficialResult(result: any)
 			text ..= " — RECORD PERSO !"
 			self.BestTime = result.Ms / 1000
 			self.OfficialBestMs = result.Ms
-			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil)
+			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil, self.ClassId)
 		end
 		self.OfficialText = text
 		self.OfficialColor = if result.PersonalBest then COLOR_FASTER else COLOR_DIM
@@ -533,7 +541,7 @@ function StageTimer:_refresh(now: number)
 	end
 
 	-- Meilleur temps officiel, sa médaille, la prochaine à décrocher.
-	local limits = Medals.ForStage()
+	local limits = Medals.ForStage(self.ClassId)
 	local bestMs = self.OfficialBestMs
 	local tier = Medals.TierOf(bestMs, limits)
 	local nextTier, nextMs = Medals.Next(bestMs, limits)

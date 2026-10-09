@@ -1,9 +1,10 @@
 --!strict
 --[[
 	CareerPage.luau
-	Rubriques de la carrière : sa voiture (couleur, numéro), les records du
-	tour de chaque circuit avec ses médailles (Medals.luau), son niveau, sa
-	licence et ses statistiques de course.
+	Rubriques de la carrière : sa voiture (catégorie, couleur, numéro), les
+	records du tour de chaque circuit avec ses médailles (Medals.luau), par
+	catégorie de voiture, son niveau, sa licence et ses statistiques de
+	course.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -13,7 +14,9 @@ local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local MenuKit = require(script.Parent.MenuKit)
+local ShopPage = require(script.Parent.ShopPage)
 local Widgets = require(script.Parent.Parent.Widgets)
 
 type Context = MenuKit.Context
@@ -21,15 +24,17 @@ type Builder = MenuKit.Builder
 
 local CareerPage = {}
 
-function CareerPage.LapRecords(ctx: Context, b: Builder, trackId: string)
+-- Records du tour d'un circuit, dans une catégorie de voiture.
+function CareerPage.LapRecords(ctx: Context, b: Builder, trackId: string, classId: string)
 	local circuit = Tracks.Get(trackId)
 	if not circuit then
 		return
 	end
-	local board = ctx.Data.Records[trackId]
-	local mine = ctx.Data.Laps[circuit.Key]
+	local boards = ctx.Data.Records[classId]
+	local board = if boards then boards[trackId] else nil
+	local mine = ctx.Data.Laps[CarClasses.RecordKey(circuit.Key, classId)]
 	-- Son record, sa médaille, et la prochaine à décrocher.
-	local limits = Medals.ForCircuit(trackId, circuit.Length)
+	local limits = Medals.ForCircuit(trackId, circuit.Length, classId)
 	local tier = Medals.TierOf(mine, limits)
 	local nextTier, nextMs = Medals.Next(mine, limits)
 	local text = string.format("%s — ton record : %s", circuit.Name, if mine then Format.Time(mine / 1000) else "aucun")
@@ -145,17 +150,26 @@ function CareerPage.Livery(ctx: Context, b: Builder)
 	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
 end
 
--- Ta voiture : couleur et numéro.
+-- Ta voiture : la catégorie (à porter ou à acheter), la couleur, le numéro.
 function CareerPage.Car(ctx: Context, b: Builder)
 	b:Section("Ta voiture")
+	ShopPage.ItemRows(ctx, b, "Car")
+	b:Text("Chaque catégorie a ses records, ses médailles et ses classements : une Rally4 ne se mesure pas à un Groupe B.", 12, Widgets.COLOR_DIM)
 	CareerPage.Livery(ctx, b)
 end
 
--- Records du tour de chaque circuit.
+-- Records du tour de chaque circuit, dans la catégorie choisie (◀ ▶).
 function CareerPage.Records(ctx: Context, b: Builder)
 	b:Section("Records du tour")
+	local shown = CarClasses.Get(ctx.View.RecordClass or MenuKit.ChosenClass(ctx))
+	MenuKit.Stepper(ctx, b, "Catégorie", shown.Name, function(direction)
+		local count = #CarClasses.LIST
+		local index = table.find(CarClasses.LIST, shown) or 1
+		ctx.View.RecordClass = CarClasses.LIST[((index - 1 + direction) % count) + 1].Id
+		ctx.Rebuild()
+	end)
 	for _, id in ipairs(Tracks.List()) do
-		CareerPage.LapRecords(ctx, b, id)
+		CareerPage.LapRecords(ctx, b, id, shown.Id)
 	end
 end
 

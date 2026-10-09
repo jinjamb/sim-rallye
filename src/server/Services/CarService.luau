@@ -49,7 +49,10 @@ local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local GarageService = require(script.Parent.GarageService)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 
 local CarService = {}
 
@@ -81,6 +84,9 @@ export type SpawnOptions = {
 	-- Attributs posés sur la voiture (défi de la semaine : Weekly, Modifier ;
 	-- école de pilotage : Lesson). Le client les lit à la création de sa session.
 	Attributes: { [string]: any }?,
+	-- Catégorie imposée (course, défi, école) ; sinon la voiture choisie par
+	-- le joueur. Une catégorie qu'il ne possède pas lui est prêtée.
+	CarClass: string?,
 }
 
 --------------------------------------------------------------------------------
@@ -356,6 +362,12 @@ local function tagProgress(car: Model, player: Player)
 	end
 end
 
+-- Le joueur possède-t-il la voiture de cette catégorie ?
+local function ownsClass(player: Player, classId: string): boolean
+	local item = Catalog.CarItem(classId)
+	return item ~= nil and EconomyService.Owns(player, item.Id)
+end
+
 -- Objets portés que les autres voient ou entendent (Catalog.luau) : un
 -- attribut par sorte sur la voiture, lu par chaque client (RemoteCars).
 local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine" }
@@ -397,12 +409,18 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car:SetAttribute("OwnerName", player.DisplayName)
 	tagProgress(car, player)
 	tagEquipped(car, player)
+	-- Catégorie : moteur, boîte, pneus (client), records et carrosserie.
+	local chosen = EconomyService.Equipped(player, "Car")
+	local class = CarClasses.Get(opts.CarClass or (if chosen then chosen.CarClass else nil))
+	car:SetAttribute("CarClass", class.Id)
+	car:SetAttribute("Loaned", opts.CarClass ~= nil and not ownsClass(player, class.Id))
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
 	for name, value in pairs(opts.Attributes or {}) do
 		car:SetAttribute(name, value)
 	end
 	car:PivotTo(target)
+	BodyKits.Apply(car, class.Body)
 
 	local chassis = chassisOf(car)
 	if not chassis then
@@ -474,11 +492,32 @@ function CarService.RefreshProgress(player: Player, _snapshot: any)
 	end
 end
 
--- Objet porté changé (garage, achat) : la voiture le montre aussitôt.
+--[[
+	Objet porté changé (garage, achat) : la voiture le montre aussitôt. Une
+	autre voiture choisie remplace la sienne, sur place -- sauf en course, au
+	défi ou à l'école, où la catégorie est imposée (elle servira la fois
+	suivante).
+]]
 function CarService.RefreshEquipped(player: Player)
 	local car = carByPlayer[player]
-	if car then
-		tagEquipped(car, player)
+	if not car then
+		return
+	end
+	tagEquipped(car, player)
+	local chosen = EconomyService.Equipped(player, "Car")
+	local classId = CarClasses.Get(if chosen then chosen.CarClass else nil).Id
+	local imposed = car:GetAttribute("RaceId") ~= nil or car:GetAttribute("Weekly") ~= nil or car:GetAttribute("Lesson") ~= nil
+	if imposed or car:GetAttribute("CarClass") == classId then
+		return
+	end
+	local chassis = chassisOf(car)
+	if chassis then
+		local position = chassis.Position + Vector3.new(0, 3, 0)
+		local look = chassis.CFrame.LookVector * Vector3.new(1, 0, 1)
+		if look.Magnitude < 0.1 then
+			look = Vector3.new(0, 0, -1)
+		end
+		task.spawn(CarService.Spawn, player, CFrame.lookAt(position, position + look.Unit), nil)
 	end
 end
 

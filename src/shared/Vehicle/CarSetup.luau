@@ -10,7 +10,14 @@
 
 	Les valeurs par défaut sont celles avec lesquelles la voiture a été mise au
 	point (Car.luau, Aerodynamics.luau, Gearbox.luau) : "Défaut" ne change rien.
+
+	PAR CATÉGORIE (CarClasses.luau) : chaque catégorie a ses réglages (le
+	profil en garde un jeu par catégorie) et peut changer les valeurs par
+	défaut (Setup de sa fiche). Une traction n'a ni différentiel central ni
+	arrière moteur : ces réglages (AwdOnly) ne s'affichent pas pour elle.
 ]]
+
+local CarClasses = require(script.Parent.CarClasses)
 
 local CarSetup = {}
 
@@ -27,6 +34,7 @@ export type Field = {
 	Format: string, -- format d'affichage (string.format)
 	Scale: number, -- multiplicateur d'affichage (0.65 -> 65 %)
 	Hint: string,
+	AwdOnly: boolean?, -- sans effet sur une traction
 }
 
 CarSetup.FIELDS = {
@@ -64,21 +72,25 @@ CarSetup.FIELDS = {
 		Key = "RearPowerLock", Label = "Arrière, accélération", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.50, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus bloqué : l'arrière pousse et fait pivoter la voiture au gaz.",
+		AwdOnly = true,
 	},
 	{
 		Key = "RearCoastLock", Label = "Arrière, frein moteur", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.30, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus bloqué : plus stable au lever de pied, moins de rotation.",
+		AwdOnly = true,
 	},
 	{
 		Key = "CenterSplit", Label = "Central, part arrière", Group = "Différentiels",
 		Min = 0.40, Max = 0.75, Step = 0.05, Default = 0.60, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus à l'arrière : caractère survireur, propulsion.",
+		AwdOnly = true,
 	},
 	{
 		Key = "CenterLock", Label = "Central, blocage", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.40, Format = "%.0f %%", Scale = 100,
 		Hint = "1 = arbre rigide, comme une vraie Rally2 : motricité maxi, sous-vire en épingle.",
+		AwdOnly = true,
 	},
 	{
 		Key = "AntiRollFront", Label = "Barre avant", Group = "Châssis",
@@ -135,12 +147,30 @@ function CarSetup.GetField(key: string): Field?
 	return BY_KEY[key]
 end
 
-function CarSetup.Default(): Setup
+-- Valeurs par défaut d'une catégorie (la Rally2 sans argument).
+function CarSetup.Default(classId: string?): Setup
 	local setup: Setup = {}
 	for _, field in ipairs(CarSetup.FIELDS) do
 		setup[field.Key] = field.Default
 	end
+	for key, value in pairs(CarClasses.Get(classId).Setup) do
+		if BY_KEY[key] then
+			setup[key] = value
+		end
+	end
 	return setup
+end
+
+-- Les réglages qui ont un effet sur cette catégorie, dans l'ordre du menu.
+function CarSetup.FieldsFor(classId: string?): { Field }
+	local drive = CarClasses.Get(classId).Drive
+	local fields = {}
+	for _, field in ipairs(CarSetup.FIELDS) do
+		if drive == "AWD" or not field.AwdOnly then
+			table.insert(fields, field)
+		end
+	end
+	return fields
 end
 
 -- Valeur ramenée dans ses bornes et sur son pas (évite 0.6500000001).
@@ -155,8 +185,8 @@ end
 	sauvegarde) : clés inconnues ignorées, valeurs absentes ou invalides
 	remplacées par le défaut, le reste reborné.
 ]]
-function CarSetup.Sanitize(input: any): Setup
-	local setup = CarSetup.Default()
+function CarSetup.Sanitize(input: any, classId: string?): Setup
+	local setup = CarSetup.Default(classId)
 	if type(input) ~= "table" then
 		return setup
 	end
@@ -179,8 +209,8 @@ function CarSetup.Step(setup: Setup, key: string, direction: number): Setup
 	return copy
 end
 
-function CarSetup.WithPreset(name: string): Setup
-	local setup = CarSetup.Default()
+function CarSetup.WithPreset(name: string, classId: string?): Setup
+	local setup = CarSetup.Default(classId)
 	for _, preset in ipairs(CarSetup.PRESETS) do
 		if preset.Name == name then
 			for key, value in pairs(preset.Values) do
@@ -188,7 +218,7 @@ function CarSetup.WithPreset(name: string): Setup
 			end
 		end
 	end
-	return CarSetup.Sanitize(setup)
+	return CarSetup.Sanitize(setup, classId)
 end
 
 return CarSetup

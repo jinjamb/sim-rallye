@@ -30,6 +30,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local RecordService = require(script.Parent.RecordService)
 local GhostService = require(script.Parent.GhostService)
@@ -125,18 +126,21 @@ local function onFinish(player: Player, ms: number, clean: boolean)
 		onWeeklyFinish(player, ms, weeklyKey, clean)
 		return
 	end
-	local result = RecordService.StageFinish(player, ms)
+	-- Record, classement et fantôme de la catégorie de la voiture.
+	local classId = CarClasses.Get(if car then car:GetAttribute("CarClass") else nil).Id
+	local result = RecordService.StageFinish(player, ms, classId)
 	if not result then
 		return
 	end
 	if result.IsBest then
-		GhostService.Expect(player, ms)
+		GhostService.Expect(player, ms, classId)
 	end
 
 	-- Calibrage des médailles (Medals.luau) : la vitesse moyenne de chaque temps validé.
 	if RunService:IsStudio() then
 		print(string.format(
-			"[Médailles] Spéciale : %.2f s, %.1f km/h de moyenne",
+			"[Médailles] Spéciale en %s : %.2f s, %.1f km/h de moyenne",
+			classId,
 			ms / 1000,
 			Medals.AverageKmh(Medals.StageDistance(), ms)
 		))
@@ -145,6 +149,7 @@ local function onFinish(player: Player, ms: number, clean: boolean)
 	Remotes.RunValidated:FireClient(player, {
 		Valid = true,
 		Ms = ms,
+		ClassId = classId,
 		PersonalBest = result.IsBest,
 		PreviousMs = result.PreviousMs,
 	})

@@ -162,6 +162,7 @@ local function weeklyPayload(player: Player): any
 	return {
 		Key = week.Key,
 		Modifier = week.Modifier.Id,
+		CarClass = week.CarClass,
 		EndsAt = week.EndsAt,
 		Entries = if weeklyKey == week.Key then weeklyEntries else {},
 		Mine = mine,

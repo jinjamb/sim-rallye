@@ -13,27 +13,34 @@
 	Le contenu défile (ScrollingFrame) : sur un téléphone, le menu est affiché
 	plus grand -- des boutons à la taille d'un doigt -- et ne tient plus en
 	hauteur ; il se fait défiler du pouce.
+
+	PAR CATÉGORIE (CarClasses.luau) : le menu montre les réglages de la
+	voiture conduite (SetClass), sans ceux qui n'ont pas d'effet sur elle
+	(une traction n'a pas de différentiel central).
 ]]
 
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Theme = require(script.Parent.Theme)
 
 local SetupMenu = {}
 SetupMenu.__index = SetupMenu
 
 export type SetupMenu = typeof(setmetatable({}, SetupMenu)) & {
+	ClassId: string,
 	Setup: CarSetup.Setup,
-	OnChange: (CarSetup.Setup) -> (),
+	Title: TextLabel,
+	OnChange: (CarSetup.Setup, string) -> (), -- réglages, catégorie
 	Gui: ScreenGui,
 	Panel: Frame,
 	Body: ScrollingFrame,
 	ContentHeight: number,
 	Scale: UIScale,
 	ValueLabels: { [string]: TextLabel },
-	HintLabel: TextLabel,
+	HintLabel: TextLabel?,
 	FirstButton: GuiButton?,
 	TouchLayout: boolean,
 }
@@ -88,12 +95,15 @@ local function formatValue(field: CarSetup.Field, value: number): string
 	return string.format(field.Format, value * field.Scale)
 end
 
-function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): SetupMenu
+function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup, string) -> ()): SetupMenu
 	local self = (setmetatable({}, SetupMenu) :: any) :: SetupMenu
-	self.Setup = CarSetup.Default()
+	self.ClassId = CarClasses.DEFAULT
+	self.Setup = CarSetup.Default(self.ClassId)
 	self.OnChange = onChange
 	self.ValueLabels = {}
+	self.HintLabel = nil
 	self.TouchLayout = false
+	self.ContentHeight = 0
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "SetupMenu"
@@ -101,15 +111,6 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 	gui.Enabled = false
 	gui.DisplayOrder = 10
 	self.Gui = gui
-
-	local groups: { string } = {}
-	local seen: { [string]: boolean } = {}
-	for _, field in ipairs(CarSetup.FIELDS) do
-		if not seen[field.Group] then
-			seen[field.Group] = true
-			table.insert(groups, field.Group)
-		end
-	end
 
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0, 0.5)
@@ -127,7 +128,7 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 	self.Scale = scale
 
 	-- En-tête fixe
-	makeLabel(panel, UDim2.fromOffset(14, 10), UDim2.new(1, -60, 0, 22), "RÉGLAGES DE LA VOITURE", 16, Enum.Font.GothamBlack, COLOR_TEXT, Enum.TextXAlignment.Left)
+	self.Title = makeLabel(panel, UDim2.fromOffset(14, 10), UDim2.new(1, -60, 0, 22), "", 16, Enum.Font.GothamBlack, COLOR_TEXT, Enum.TextXAlignment.Left)
 	local close = makeButton(panel, UDim2.new(1, -40, 0, 8), UDim2.fromOffset(28, 26), "×")
 	close.Activated:Connect(function()
 		self:SetOpen(false)
@@ -144,6 +145,31 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 	body.Parent = panel
 	self.Body = body
 
+	gui.Parent = playerGui
+	self:_build()
+	return self
+end
+
+-- Contenu : préréglages, puis les réglages de la catégorie, par groupe.
+function SetupMenu:_build()
+	local body = self.Body
+	for _, child in ipairs(body:GetChildren()) do
+		child:Destroy()
+	end
+	self.ValueLabels = {}
+	self.FirstButton = nil
+	self.Title.Text = "RÉGLAGES · " .. string.upper(CarClasses.Get(self.ClassId).Name)
+	local fields = CarSetup.FieldsFor(self.ClassId)
+
+	local groups: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, field in ipairs(fields) do
+		if not seen[field.Group] then
+			seen[field.Group] = true
+			table.insert(groups, field.Group)
+		end
+	end
+
 	-- Préréglages
 	local y = 0
 	local presetWidth = (PANEL_WIDTH - 28 - (#CarSetup.PRESETS - 1) * 8) / #CarSetup.PRESETS
@@ -151,7 +177,7 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 		local button = makeButton(body, UDim2.fromOffset(14 + (i - 1) * (presetWidth + 8), y), UDim2.fromOffset(presetWidth, 28), string.upper(preset.Name))
 		button.TextSize = 13
 		button.Activated:Connect(function()
-			self:_set(CarSetup.WithPreset(preset.Name), "Préréglage « " .. preset.Name .. " » appliqué.")
+			self:_set(CarSetup.WithPreset(preset.Name, self.ClassId), "Préréglage « " .. preset.Name .. " » appliqué.")
 		end)
 		if i == 1 then
 			self.FirstButton = button
@@ -163,7 +189,7 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 	for _, group in ipairs(groups) do
 		makeLabel(body, UDim2.fromOffset(14, y), UDim2.new(1, -28, 0, GROUP_HEIGHT), string.upper(group), 12, Enum.Font.GothamBold, COLOR_ACCENT, Enum.TextXAlignment.Left)
 		y += GROUP_HEIGHT
-		for _, field in ipairs(CarSetup.FIELDS) do
+		for _, field in ipairs(fields) do
 			if field.Group == group then
 				makeLabel(body, UDim2.fromOffset(22, y), UDim2.fromOffset(220, ROW_HEIGHT), field.Label, 14, Enum.Font.GothamMedium, COLOR_TEXT, Enum.TextXAlignment.Left)
 				local minus = makeButton(body, UDim2.fromOffset(PANEL_WIDTH - 190, y + 2), UDim2.fromOffset(32, ROW_HEIGHT - 4), "−")
@@ -184,16 +210,13 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup) -> ()): S
 	local hint = makeLabel(body, UDim2.fromOffset(14, y + 8), UDim2.new(1, -28, 0, 44), "", 13, Enum.Font.GothamMedium, COLOR_DIM, Enum.TextXAlignment.Left)
 	hint.TextWrapped = true
 	hint.TextYAlignment = Enum.TextYAlignment.Top
-	hint.Text = "Les changements s'appliquent tout de suite et sont sauvegardés."
+	hint.Text = "Les changements s'appliquent tout de suite et sont sauvegardés, pour cette voiture."
 	self.HintLabel = hint
 
 	self.ContentHeight = y + 60
 	body.CanvasSize = UDim2.fromOffset(0, self.ContentHeight)
-	panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + self.ContentHeight)
-
-	gui.Parent = playerGui
+	self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + self.ContentHeight)
 	self:_refresh()
-	return self
 end
 
 function SetupMenu:_refresh()
@@ -207,15 +230,37 @@ end
 
 function SetupMenu:_set(setup: CarSetup.Setup, hint: string)
 	self.Setup = setup
-	self.HintLabel.Text = hint
+	local label = self.HintLabel
+	if label then
+		label.Text = hint
+	end
 	self:_refresh()
-	self.OnChange(setup)
+	self.OnChange(setup, self.ClassId)
 end
 
 -- Réglages venus de la sauvegarde : affichés, sans déclencher OnChange.
 function SetupMenu:SetSetup(setup: CarSetup.Setup)
-	self.Setup = CarSetup.Sanitize(setup)
+	self.Setup = CarSetup.Sanitize(setup, self.ClassId)
 	self:_refresh()
+end
+
+-- La voiture conduite change de catégorie : ses réglages à elle.
+function SetupMenu:SetClass(classId: string, setup: CarSetup.Setup)
+	local changed = classId ~= self.ClassId
+	self.ClassId = classId
+	self.Setup = CarSetup.Sanitize(setup, classId)
+	if changed then
+		self:_build()
+		if self.Gui.Enabled then
+			self:SetOpen(true) -- recale la hauteur
+		end
+	else
+		self:_refresh()
+	end
+end
+
+function SetupMenu:GetClass(): string
+	return self.ClassId
 end
 
 -- Mobile : affichage agrandi, hauteur limitée à l'écran, contenu défilant.

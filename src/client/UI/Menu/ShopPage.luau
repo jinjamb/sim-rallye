@@ -161,8 +161,9 @@ local function itemRow(ctx: Context, b: Builder, item: Catalog.Item, owned: { [s
 	end
 end
 
--- Les objets d'une sorte : ceux qui s'achètent, et ceux qu'on possède déjà.
-function ShopPage.Items(ctx: Context, b: Builder, kind: Catalog.Kind)
+-- Les objets d'une sorte qu'on peut voir ici : ceux qui s'achètent, et
+-- ceux qu'on possède déjà.
+local function shownItems(ctx: Context, kind: Catalog.Kind): ({ Catalog.Item }, { [string]: boolean })
 	local owned = MenuKit.OwnedSet(ctx)
 	local items = {}
 	for _, item in ipairs(Catalog.OfKind(kind)) do
@@ -170,13 +171,25 @@ function ShopPage.Items(ctx: Context, b: Builder, kind: Catalog.Kind)
 			table.insert(items, item)
 		end
 	end
+	return items, owned
+end
+
+-- Les lignes des objets d'une sorte, sans titre (pour d'autres rubriques).
+function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind)
+	local items, owned = shownItems(ctx, kind)
+	for _, item in ipairs(items) do
+		itemRow(ctx, b, item, owned)
+	end
+end
+
+-- Les objets d'une sorte, sous leur titre.
+function ShopPage.Items(ctx: Context, b: Builder, kind: Catalog.Kind)
+	local items = shownItems(ctx, kind)
 	if #items == 0 then
 		return
 	end
 	b:Section(Catalog.KIND_NAMES[kind])
-	for _, item in ipairs(items) do
-		itemRow(ctx, b, item, owned)
-	end
+	ShopPage.ItemRows(ctx, b, kind)
 end
 
 return ShopPage
