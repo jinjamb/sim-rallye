@@ -20,6 +20,7 @@ local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local EconomyService = require(script.Parent.EconomyService)
+local AchievementService = require(script.Parent.AchievementService)
 
 local PassService = {}
 
@@ -94,6 +95,9 @@ local function grantReached(player: Player, state: PassState): number
 		reached += 1
 	end
 	state.FreeUpTo = math.max(state.FreeUpTo, tier)
+	if tier >= #Pass.TIERS then
+		AchievementService.Award(player, "pass_complete")
+	end
 	if state.Premium then
 		for index = state.PremiumUpTo + 1, tier do
 			giveReward(player, Pass.TIERS[index].Premium, "Rallye Pass premium, palier " .. index)

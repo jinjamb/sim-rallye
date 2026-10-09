@@ -633,6 +633,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	end
 end)
 
+-- Trophées : la liste (menu, onglet CARRIÈRE), et l'annonce d'un nouveau.
+Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)
+	raceClient:SetAchievements(earned, news)
+end)
+
 -- Écurie : son état (menu, onglet ÉCURIE), ses invitations, le classement.
 Remotes.TeamState.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetTeam(state, news)

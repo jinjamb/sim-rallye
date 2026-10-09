@@ -29,6 +29,7 @@ local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
 local Boards = require(script.Parent.Parent.Data.Boards)
+local AchievementService = require(script.Parent.AchievementService)
 
 type Team = Teams.Team
 
@@ -319,6 +320,7 @@ local function create(player: Player, payload: any)
 	end
 	setProfileTeam(player, id)
 	sendState(player, "Écurie " .. team.Name .. " créée : invite tes amis !")
+	AchievementService.Award(player, "team_founder")
 	TeamService.Changed(player)
 end
 

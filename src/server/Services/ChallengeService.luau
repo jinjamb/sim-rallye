@@ -36,6 +36,7 @@ local Stores = require(script.Parent.Parent.Data.Stores)
 local Boards = require(script.Parent.Parent.Data.Boards)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
+local AchievementService = require(script.Parent.AchievementService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 
 local ChallengeService = {}
@@ -273,6 +274,12 @@ local function refreshDrift()
 	driftKey = week.Key
 	for _, player in ipairs(Players:GetPlayers()) do
 		sendDrift(player)
+	end
+	-- Le n°1 de la semaine, s'il est sur ce serveur : trophée Roi du drift.
+	local first = driftEntries[1]
+	local king = if first then Players:GetPlayerByUserId(first.UserId) else nil
+	if king then
+		AchievementService.Award(king, "drift_king")
 	end
 end
 

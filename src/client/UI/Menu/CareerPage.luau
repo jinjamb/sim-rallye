@@ -13,6 +13,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local MenuKit = require(script.Parent.MenuKit)
@@ -190,6 +191,23 @@ function CareerPage.Career(ctx: Context, b: Builder)
 		b:Text("Chargement…", 13, Widgets.COLOR_DIM)
 	end
 	b:Text("Points : 10, 8, 6, 4, 2, 1 du 1er au 6e (finale, ou course simple).", 12, Widgets.COLOR_DIM)
+end
+
+-- Trophées : obtenus d'abord, puis ceux qui restent à décrocher.
+function CareerPage.Trophies(ctx: Context, b: Builder)
+	local earned = ctx.Data.Achievements or {}
+	local got: { Achievements.Achievement }, missing: { Achievements.Achievement } = {}, {}
+	for _, achievement in ipairs(Achievements.LIST) do
+		table.insert(if earned[achievement.Id] then got else missing, achievement)
+	end
+	b:Section(string.format("Trophées · %d/%d", #got, #Achievements.LIST))
+	b:Text("Les grands exploits, aussi en badges sur ton profil Roblox.", 12, Widgets.COLOR_DIM)
+	for _, achievement in ipairs(got) do
+		b:Text("★  " .. achievement.Name .. "  ·  " .. achievement.Description, 13, Widgets.COLOR_ACCENT)
+	end
+	for _, achievement in ipairs(missing) do
+		b:Text("☆  " .. achievement.Name .. "  ·  " .. achievement.Description, 13, Widgets.COLOR_DIM)
+	end
 end
 
 return CareerPage

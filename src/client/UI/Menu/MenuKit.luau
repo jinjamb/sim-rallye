@@ -44,6 +44,7 @@ export type Data = {
 	Pass: any, -- Rallye Pass { Key, Name, EndsAt, Xp, Premium } (PassService)
 	Drift: any, -- Roi du drift { Key, EndsAt, Entries = { UserId, Name, Score }, Mine } (ChallengeService)
 	Team: any, -- écurie { Team, UseColors, Invite, Board, Rank, Season } (TeamService)
+	Achievements: { [string]: number }?, -- trophées obtenus : id -> date (AchievementService)
 }
 
 -- Solde et objets (EconomyService).

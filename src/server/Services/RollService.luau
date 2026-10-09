@@ -18,6 +18,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local EconomyService = require(script.Parent.EconomyService)
+local AchievementService = require(script.Parent.AchievementService)
 
 local RollService = {}
 
@@ -60,6 +61,10 @@ local function roll(player: Player)
 	ProfileStore.Flush(player)
 	Remotes.RollResult:FireClient(player, { ItemId = id, Duplicate = duplicate, Credits = credits })
 	EconomyService.SendWallet(player)
+	if item.Rarity == "Legende" then
+		-- Après la mise en scène du tirage.
+		task.delay(4, AchievementService.Award, player, "legend_roll")
+	end
 end
 
 function RollService.Start()

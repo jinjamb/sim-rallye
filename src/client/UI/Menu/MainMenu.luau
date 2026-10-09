@@ -247,6 +247,7 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 		CareerPage.Car(ctx, b)
 		CareerPage.Records(ctx, b)
 		CareerPage.Career(ctx, b)
+		CareerPage.Trophies(ctx, b)
 	else
 		local progress = ctx.Data.Progress
 		local beginner = progress ~= nil and progress.Level <= BEGINNER_LEVEL

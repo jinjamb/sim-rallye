@@ -24,7 +24,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Stage/`       | La spéciale : `StageTrack` (tracé, abscisse) et `Pacenotes` (notes du copilote).         |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
 | `Paddock/`     | La disposition du paddock (zones, panneaux).                                             |
-| `Progression/` | `Progression` (XP, niveaux, licences, déblocages) et `Medals` (seuils bronze → platine).  |
+| `Progression/` | `Progression` (XP, niveaux, licences, déblocages), `Medals` (seuils bronze → platine) et `Achievements` (trophées et badges Roblox). |
 | `Challenges/`  | `Weekly` (défi de la semaine) et `Daily` (défis du jour).                                |
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
@@ -61,6 +61,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `RollService`      | Tirages : tire l'objet côté serveur, le donne ou le convertit en crédits.             |
 | `PassService`      | Rallye Pass : XP de la saison, paliers, récompenses gratuites et premium.             |
 | `TeamService`      | Écuries : fondation, invitations, couleurs communes, classement de la saison.         |
+| `AchievementService` | Trophées : les décerne et donne leur badge Roblox (BadgeService).                 |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |
@@ -92,6 +93,10 @@ Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaq
 - **Ajouter un objet** (voiture, fumée, klaxon…) : une entrée dans le module de sa sorte (`shared/Economy/Items/`), avec sa rareté et ses sources (`Free`, `Credits`, `Robux`, `Pass`, `Roll`). La boutique, le garage, les tirages et le Rallye Pass le trouvent d'eux-mêmes.
 - **Achats en Robux** : chaque produit se crée dans le Creator Dashboard. Son identifiant va dans `Products.luau` (packs de crédits) ou dans le champ `Robux.ProductId` de l'objet. Tant qu'il vaut 0, le produit s'affiche « bientôt ».
 - Le serveur n'accorde un achat qu'une fois sauvegardé, et garde l'identifiant de l'achat pour ne jamais l'accorder deux fois.
+
+## Trophées et badges
+
+Un trophée est une entrée de `shared/Progression/Achievements.luau`. Il est déduit du profil (`Check`), ou décerné par un service (`AchievementService.Award`). Pour en faire un badge Roblox, on crée le badge dans le Creator Dashboard et on met son identifiant dans `BadgeId`. Les pilotes qui ont déjà le trophée reçoivent le badge à leur prochaine connexion.
 
 ## Catégories de voitures
 

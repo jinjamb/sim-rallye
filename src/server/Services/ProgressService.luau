@@ -28,6 +28,7 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local EconomyService = require(script.Parent.EconomyService)
 local PassService = require(script.Parent.PassService)
 local TeamService = require(script.Parent.TeamService)
+local AchievementService = require(script.Parent.AchievementService)
 
 local ProgressService = {}
 
@@ -122,6 +123,8 @@ function ProgressService.Push(player: Player, announce: boolean)
 		PassService.AddXp(player, snapshot.Xp - previous.Xp)
 		TeamService.AddPoints(player, snapshot.Xp - previous.Xp)
 	end
+	-- Trophées déduits du profil (niveaux, médailles, podiums...).
+	AchievementService.CheckProgress(player, snapshot, announce and previous ~= nil)
 	if not previous or previous.Level ~= snapshot.Level then
 		ProgressService.Changed(player, snapshot)
 	end

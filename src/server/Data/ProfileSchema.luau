@@ -75,6 +75,8 @@ export type Profile = {
 	DriftKing: { Key: string, Score: number }?, -- meilleure combinaison de la semaine
 	TeamId: string?, -- écurie (Teams.luau)
 	UseTeamColors: boolean, -- porte les couleurs de son écurie
+	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
+	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
 }
 
 export type PassState = {
@@ -117,6 +119,8 @@ function ProfileSchema.Empty(userId: number): Profile
 		DriftKing = nil,
 		TeamId = nil,
 		UseTeamColors = false,
+		Achievements = {},
+		Badges = {},
 	}
 end
 
@@ -201,6 +205,21 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.RollPity = count(data.RollPity)
 	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
 	profile.UseTeamColors = data.UseTeamColors == true
+	-- Trophées : gardés même s'ils ont quitté la liste (un exploit ne se perd pas).
+	if type(data.Achievements) == "table" then
+		for id, at in pairs(data.Achievements) do
+			if type(id) == "string" and type(at) == "number" then
+				profile.Achievements[id] = count(at)
+			end
+		end
+	end
+	if type(data.Badges) == "table" then
+		for id, badgeId in pairs(data.Badges) do
+			if type(id) == "string" and type(badgeId) == "number" then
+				profile.Badges[id] = count(badgeId)
+			end
+		end
+	end
 	local drift = data.DriftKing
 	if type(drift) == "table" and type(drift.Key) == "string" and type(drift.Score) == "number" and drift.Score > 0 then
 		profile.DriftKing = { Key = drift.Key, Score = math.floor(drift.Score) }

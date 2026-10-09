@@ -103,6 +103,10 @@ export type Remotes = {
 	TeamAction: RemoteEvent,
 	-- Serveur -> Client : (state, news?) son écurie, son invitation, le classement ; news : message
 	TeamState: RemoteEvent,
+
+	-- TROPHÉES (AchievementService)
+	-- Serveur -> Client : (earned, news?) trophées obtenus (id -> date) ; news : { New = { id } }
+	Achievements: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -142,6 +146,7 @@ local RELIABLE = {
 	"PassState",
 	"TeamAction",
 	"TeamState",
+	"Achievements",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

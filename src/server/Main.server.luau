@@ -32,6 +32,7 @@ require(ReplicatedStorage.Shared.Network.Remotes)
 
 local ProfileStore = require(script.Parent.Data.ProfileStore)
 local Services = script.Parent.Services
+local AchievementService = require(Services.AchievementService)
 local ProgressService = require(Services.ProgressService)
 local GarageService = require(Services.GarageService)
 local EconomyService = require(Services.EconomyService)
@@ -74,5 +75,6 @@ HornService.Start()
 RollService.Start()
 PassService.Start()
 TeamService.Start()
+AchievementService.Start()
 
 ProfileStore.Start()

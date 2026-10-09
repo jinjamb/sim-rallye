@@ -23,6 +23,7 @@ local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Banner = require(script.Parent.Parent.UI.Banner)
@@ -74,6 +75,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Pass: any, -- Rallye Pass (PassService)
 	Drift: any, -- Roi du drift (ChallengeService)
 	Team: any, -- écurie (TeamService)
+	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
 	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
@@ -109,6 +111,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Pass = nil
 	self.Drift = nil
 	self.Team = nil
+	self.Achievements = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
@@ -214,6 +217,7 @@ function RaceClient:_refreshMenu()
 		Pass = self.Pass,
 		Drift = self.Drift,
 		Team = self.Team,
+		Achievements = self.Achievements,
 	})
 end
 
@@ -480,6 +484,23 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	if type(news.Error) == "string" then
 		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
 		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+-- Trophées obtenus ; un nouveau s'annonce (Roblox signale aussi son badge).
+function RaceClient:SetAchievements(earned: any, news: any)
+	if type(earned) ~= "table" then
+		return
+	end
+	self.Achievements = earned
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.New) == "table" then
+		for _, id in ipairs(news.New) do
+			local achievement = Achievements.Get(tostring(id))
+			if achievement then
+				Banner.Show("TROPHÉE", achievement.Name .. "  ·  " .. achievement.Description, Theme.ACCENT, 4.5, true)
+			end
+		end
 	end
 end
 
