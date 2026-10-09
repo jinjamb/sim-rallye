@@ -8,7 +8,8 @@
 	HORS COURSE :
 		- où rejoindre une course, et les courses en attente ou en cours ;
 		- sa livrée : couleur de carrosserie et numéro ;
-		- records du tour de chaque circuit, et sa carrière.
+		- records du tour de chaque circuit, ses médailles (Medals.luau) et
+		  sa carrière.
 	EN SALLE D'ATTENTE :
 		- pilotes, compte à rebours ;
 		- l'hôte (premier arrivé) règle tours, format, contacts, et peut lancer
@@ -25,6 +26,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local RaceUi = require(script.Parent.RaceUi)
 
 local RaceMenu = {}
@@ -214,7 +216,19 @@ function RaceMenu:_records(b: Builder, trackId: string)
 	end
 	local board = self.Data.Records[trackId]
 	local mine = self.Data.Laps[circuit.Key]
-	b:Text(string.format("%s — ton record : %s", circuit.Name, if mine then RaceUi.FormatTime(mine / 1000) else "aucun"), 14, RaceUi.COLOR_TEXT)
+	-- Son record, sa médaille, et la prochaine à décrocher.
+	local limits = Medals.ForCircuit(trackId, circuit.Length)
+	local tier = Medals.TierOf(mine, limits)
+	local nextTier, nextMs = Medals.Next(mine, limits)
+	local text = string.format("%s — ton record : %s", circuit.Name, if mine then RaceUi.FormatTime(mine / 1000) else "aucun")
+	if tier > 0 then
+		text ..= "  " .. Medals.Rich(tier)
+	end
+	if nextTier and nextMs then
+		text ..= "  → " .. Medals.Rich(nextTier) .. " " .. Medals.FormatLimit(nextMs)
+	end
+	b:Text(text, 14, RaceUi.COLOR_TEXT).RichText = true
+	b:Text("   " .. Medals.RichLine(limits), 12, RaceUi.COLOR_DIM).RichText = true
 	if board and #board.Entries > 0 then
 		for index, entry in ipairs(board.Entries) do
 			local color = if entry.UserId == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_DIM

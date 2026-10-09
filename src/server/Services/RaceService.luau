@@ -51,6 +51,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local CarService = require(script.Parent.CarService)
 local RecordService = require(script.Parent.RecordService)
 
@@ -1094,12 +1095,24 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		if isBest then
 			runner.BestLap = lapTime
 		end
-		-- Le premier tour part arrêté de la grille : il ne compte pas pour le record.
+		-- Le premier tour part arrêté de la grille : il ne compte ni pour le
+		-- record ni pour les médailles (Medals.luau : seuils d'un tour lancé).
 		local record = false
+		local medal: number? = nil
 		if runner.Laps > 1 then
-			record = RecordService.SubmitLap(player, circuit.Key, math.floor(lapTime * 1000 + 0.5))
+			local lapMs = math.floor(lapTime * 1000 + 0.5)
+			local limits = Medals.ForCircuit(race.TrackId, length)
+			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key), limits)
+			record = RecordService.SubmitLap(player, circuit.Key, lapMs)
+			local after = Medals.TierOf(lapMs, limits)
+			if record and after > before then
+				medal = after -- nouvelle médaille sur ce circuit
+			end
+			if RunService:IsStudio() then
+				print(string.format("[Médailles] %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
+			end
 		end
-		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record })
+		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record, Medal = medal })
 		if runner.Laps >= race.Laps then
 			finishRunner(race, runner, crossing)
 		end

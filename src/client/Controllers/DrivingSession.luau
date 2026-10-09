@@ -41,6 +41,9 @@ export type Context = {
 	Setup: CarSetup.Setup,
 	StageBestMs: number?,
 	StageGhost: Ghost.GhostData?,
+	-- Défi du fantôme (GhostChallenge.luau) : adversaire choisi, ou fantôme masqué.
+	GhostOpponent: Ghost.Opponent?,
+	GhostHidden: boolean,
 }
 
 export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
@@ -106,6 +109,9 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 		end
 		timer:SetPersonalBest(context.StageBestMs)
 		ghost:SetBest(context.StageGhost)
+		ghost:SetOpponent(context.GhostOpponent)
+		ghost:SetHidden(context.GhostHidden)
+		timer:SetGhost(ghost)
 
 		-- Le verdict du serveur peut arriver juste AVANT que le chrono local ne
 		-- voie la ligne : l'envoi du fantôme attend alors la fin de l'enregistrement.
@@ -189,6 +195,15 @@ function DrivingSession:SetStageProfile(bestMs: number?, ghostData: Ghost.GhostD
 	end
 	if ghost and ghostData then
 		ghost:SetBest(ghostData)
+	end
+end
+
+-- Défi du fantôme : contre qui on roule (nil = son propre record), ou rien.
+function DrivingSession:SetGhostChoice(opponent: Ghost.Opponent?, hidden: boolean)
+	local ghost = self.Ghost
+	if ghost then
+		ghost:SetOpponent(opponent)
+		ghost:SetHidden(hidden)
 	end
 end
 

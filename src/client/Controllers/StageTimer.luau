@@ -13,12 +13,22 @@
 		  (couper l'intérieur de l'épingle saute ~400 studs de tracé d'un coup)
 		  -> temps annulé.
 
-	Meilleur temps et meilleurs inters : gardés pour la session seulement.
+	RÉFÉRENCE : le fantôme rejoué (le sien ou celui d'un adversaire, Ghost.luau).
+	Il donne l'écart EN DIRECT (en vert : devant lui ; en rouge : derrière) et
+	l'écart à chaque inter et à l'arrivée. Sans fantôme (masqué, ou pas encore
+	de temps), les inters se comparent aux meilleurs inters de la session.
+
+	MÉDAILLES (Medals.luau) : la ligne du bas donne le meilleur temps officiel,
+	sa médaille, et la prochaine à décrocher. Une médaille gagnée est annoncée
+	en grand (Banner.luau) dès que le serveur valide le temps.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local Ghost = require(script.Parent.Ghost)
+local Banner = require(script.Parent.Banner)
 
 local StageTimer = {}
 StageTimer.__index = StageTimer
@@ -34,6 +44,8 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	TimeLabel: TextLabel,
 	SplitLabels: { TextLabel },
 	BestLabel: TextLabel,
+	DeltaLabel: TextLabel,
+	VersusLabel: TextLabel,
 
 	State: RunState,
 	StartClock: number,
@@ -44,6 +56,14 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	SplitTimes: { number },
 	BestTime: number?,
 	BestSplits: { number },
+	-- Écart au fantôme (s) à chaque inter, figé au passage ; puis à l'arrivée.
+	SplitDeltas: { [number]: number },
+	FinalDelta: number?,
+	LiveDelta: number?,
+	NextDeltaAt: number,
+	-- Meilleur temps OFFICIEL (ms) : celui qui donne la médaille.
+	OfficialBestMs: number?,
+	Ghost: Ghost.Ghost?,
 	InvalidReason: string,
 	-- Verdict du serveur sur le dernier passage (temps officiel), affiché à l'arrivée.
 	OfficialText: string?,
@@ -78,6 +98,7 @@ local COLOR_DIM = Color3.fromRGB(130, 134, 145)
 local COLOR_FASTER = Color3.fromRGB(70, 200, 95)
 local COLOR_SLOWER = Color3.fromRGB(235, 65, 55)
 local COLOR_INVALID = Color3.fromRGB(235, 65, 55)
+local DELTA_INTERVAL = 0.1 -- l'écart en direct change 10 fois par seconde : lisible
 
 local function formatTime(seconds: number): string
 	local minutes = math.floor(seconds / 60)
@@ -109,6 +130,12 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.SplitTimes = {}
 	self.BestTime = nil
 	self.BestSplits = {}
+	self.SplitDeltas = {}
+	self.FinalDelta = nil
+	self.LiveDelta = nil
+	self.NextDeltaAt = 0
+	self.OfficialBestMs = nil
+	self.Ghost = nil
 	self.InvalidReason = ""
 	self.OfficialText = nil
 	self.OfficialColor = COLOR_DIM
@@ -165,6 +192,19 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	end
 	self.BestLabel = makeLabel(panel, 94 + #StageTrack.SPLITS * 20 + 4, 16, 14, Enum.Font.RobotoMono)
 	self.BestLabel.TextColor3 = COLOR_DIM
+	self.BestLabel.RichText = true
+	-- Écart au fantôme, et contre qui : une colonne à droite du chrono, qui
+	-- ne déborde pas sur ses chiffres (un nom long est tronqué).
+	self.DeltaLabel = makeLabel(panel, 38, 30, 28, Enum.Font.RobotoMono)
+	self.DeltaLabel.Position = UDim2.new(1, -142, 0, 38)
+	self.DeltaLabel.Size = UDim2.fromOffset(130, 30)
+	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Right
+	self.VersusLabel = makeLabel(panel, 68, 16, 12, Enum.Font.GothamBold)
+	self.VersusLabel.Position = UDim2.new(1, -142, 0, 68)
+	self.VersusLabel.Size = UDim2.fromOffset(130, 16)
+	self.VersusLabel.TextXAlignment = Enum.TextXAlignment.Right
+	self.VersusLabel.TextColor3 = COLOR_DIM
+	self.VersusLabel.TextTruncate = Enum.TextTruncate.AtEnd
 
 	gui.Parent = playerGui
 	self:_refresh(0)
@@ -212,6 +252,47 @@ end
 -- Meilleur temps sauvegardé (profil chargé par le serveur), en millisecondes.
 function StageTimer:SetPersonalBest(ms: number?)
 	self.BestTime = if ms then ms / 1000 else nil
+	self.OfficialBestMs = ms
+end
+
+-- Le fantôme qui sert de référence (écarts).
+function StageTimer:SetGhost(ghost: Ghost.Ghost?)
+	self.Ghost = ghost
+end
+
+-- Un fantôme est-il rejoué (pas masqué, et il y a un passage à rejouer) ?
+function StageTimer:_hasGhost(): boolean
+	local ghost = self.Ghost
+	return ghost ~= nil and ghost:Played() ~= nil
+end
+
+-- Instant où le fantôme rejoué est passé au point `distance` du tracé.
+function StageTimer:_referenceAt(distance: number): number?
+	local ghost = self.Ghost
+	return if ghost and self:_hasGhost() then ghost:TimeAt(distance) else nil
+end
+
+-- "+0.42" / "-0.15", signe toujours affiché.
+local function formatDelta(delta: number): string
+	return string.format("%+.2f", delta)
+end
+
+-- Nouvelle médaille : annonce en grand. Sinon, un record perso rappelle la
+-- prochaine à décrocher.
+local function announceRecord(ms: number, previousMs: number?)
+	local limits = Medals.ForStage()
+	local before = Medals.TierOf(previousMs, limits)
+	local after = Medals.TierOf(ms, limits)
+	local nextTier, nextMs = Medals.Next(ms, limits)
+	local nextText = if nextTier and nextMs
+		then string.format("Prochaine : %s en %s", (Medals.TIERS[nextTier] :: Medals.Tier).Name, Medals.FormatLimit(nextMs))
+		else "Toutes les médailles de la spéciale !"
+	if after > before then
+		local tier = Medals.TIERS[after] :: Medals.Tier
+		Banner.Show(tier.Title, "Spéciale en " .. formatTime(ms / 1000) .. "  ·  " .. nextText, tier.Color, 5, true)
+	else
+		Banner.Show("RECORD PERSO", formatTime(ms / 1000) .. "  ·  " .. nextText, COLOR_FASTER, 3.5)
+	end
 end
 
 --[[
@@ -229,6 +310,8 @@ function StageTimer:SetOfficialResult(result: any)
 		if result.PersonalBest then
 			text ..= " — RECORD PERSO !"
 			self.BestTime = result.Ms / 1000
+			self.OfficialBestMs = result.Ms
+			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil)
 		end
 		self.OfficialText = text
 		self.OfficialColor = if result.PersonalBest then COLOR_FASTER else COLOR_DIM
@@ -252,6 +335,10 @@ function StageTimer:_start(now: number)
 	self.State = "Running"
 	self.StartClock = now
 	self.SplitTimes = {}
+	self.SplitDeltas = {}
+	self.FinalDelta = nil
+	self.LiveDelta = nil
+	self.NextDeltaAt = 0
 	self.OfficialText = nil
 	if self.OnRunStarted then
 		self.OnRunStarted()
@@ -261,6 +348,8 @@ end
 function StageTimer:_finish(now: number)
 	self.State = "Finished"
 	self.FinalTime = now - self.StartClock
+	local reference = self:_referenceAt(StageTrack.GetFinishDistance())
+	self.FinalDelta = if reference then self.FinalTime - reference else nil
 	local best = self.BestTime
 	if best == nil or self.FinalTime < best then
 		self.BestTime = self.FinalTime
@@ -298,7 +387,21 @@ function StageTimer:Update(_dt: number)
 		else
 			local nextSplit = #self.SplitTimes + 1
 			if nextSplit <= #self.SplitDistances and progress >= self.SplitDistances[nextSplit] then
-				self.SplitTimes[nextSplit] = now - self.StartClock
+				local splitTime = now - self.StartClock
+				self.SplitTimes[nextSplit] = splitTime
+				-- Sans fantôme : le meilleur inter de la session.
+				local reference = if self:_hasGhost()
+					then self:_referenceAt(self.SplitDistances[nextSplit])
+					else self.BestSplits[nextSplit]
+				if reference then
+					self.SplitDeltas[nextSplit] = splitTime - reference
+				end
+			end
+			-- Écart en direct : où en était la référence quand elle était ICI ?
+			if now >= self.NextDeltaAt then
+				self.NextDeltaAt = now + DELTA_INTERVAL
+				local reference = self:_referenceAt(progress)
+				self.LiveDelta = if reference then (now - self.StartClock) - reference else nil
 			end
 			if progress >= StageTrack.GetFinishDistance() then
 				self:_finish(now)
@@ -345,10 +448,9 @@ function StageTimer:_refresh(now: number)
 	for i, label in ipairs(self.SplitLabels) do
 		local splitTime = self.SplitTimes[i]
 		if splitTime then
-			local best = self.BestSplits[i]
-			if best and not (state == "Finished" and self.BestTime == self.FinalTime) then
-				local delta = splitTime - best
-				label.Text = string.format("INTER %d   %s   %+.2f", i, formatTime(splitTime), delta)
+			local delta = self.SplitDeltas[i]
+			if delta then
+				label.Text = string.format("INTER %d   %s   %s", i, formatTime(splitTime), formatDelta(delta))
 				label.TextColor3 = if delta <= 0 then COLOR_FASTER else COLOR_SLOWER
 			else
 				label.Text = string.format("INTER %d   %s", i, formatTime(splitTime))
@@ -360,8 +462,31 @@ function StageTimer:_refresh(now: number)
 		end
 	end
 
-	local best = self.BestTime
-	self.BestLabel.Text = if best then "Meilleur  " .. formatTime(best) else "Pas encore de temps"
+	-- Écart au fantôme : en direct pendant le passage, figé à l'arrivée.
+	local delta = if state == "Running" then self.LiveDelta elseif state == "Finished" then self.FinalDelta else nil
+	local ghost = self.Ghost
+	if delta then
+		self.DeltaLabel.Text = formatDelta(delta)
+		self.DeltaLabel.TextColor3 = if delta <= 0 then COLOR_FASTER else COLOR_SLOWER
+		self.VersusLabel.Text = if ghost and self:_hasGhost() then "VS " .. ghost:Describe() else "VS MEILLEURS INTERS"
+	else
+		self.DeltaLabel.Text = ""
+		self.VersusLabel.Text = if state ~= "Running" and ghost and self:_hasGhost() then "VS " .. ghost:Describe() else ""
+	end
+
+	-- Meilleur temps officiel, sa médaille, la prochaine à décrocher.
+	local limits = Medals.ForStage()
+	local bestMs = self.OfficialBestMs
+	local tier = Medals.TierOf(bestMs, limits)
+	local nextTier, nextMs = Medals.Next(bestMs, limits)
+	local text = if bestMs then "Meilleur " .. formatTime(bestMs / 1000) else "Pas de temps"
+	if tier > 0 then
+		text ..= " " .. Medals.Rich(tier)
+	end
+	if nextTier and nextMs then
+		text ..= "  → " .. Medals.Rich(nextTier) .. " " .. Medals.FormatLimit(nextMs)
+	end
+	self.BestLabel.Text = text
 end
 
 return StageTimer

@@ -39,6 +39,7 @@ export type Actions = {
 	Restart: () -> (),
 	ToggleSetup: () -> (),
 	ToggleLeaderboard: () -> (),
+	CycleGhost: () -> (),
 	ToggleRaceMenu: () -> (),
 	ReturnToPaddock: () -> (),
 	EnterCar: () -> (),
@@ -247,6 +248,7 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 		{ "BOÎTE", actions.ToggleMode },
 		{ "RÉGLAGES", actions.ToggleSetup },
 		{ "TEMPS", actions.ToggleLeaderboard },
+		{ "FANTÔME", actions.CycleGhost },
 		{ "COURSES", actions.ToggleRaceMenu },
 		{ "PADDOCK", actions.ReturnToPaddock },
 		{ "SORTIR", actions.ExitCar },
@@ -414,10 +416,10 @@ function TouchControls:SetCarAvailable(available: boolean)
 	self.EnterButton.Visible = available
 end
 
--- En course : pas de retour au départ de la spéciale ni au paddock, et on ne
--- descend pas de voiture (on abandonne depuis le menu COURSES).
+-- En course : pas de retour au départ de la spéciale ni au paddock, pas de
+-- fantôme, et on ne descend pas de voiture (on abandonne depuis le menu COURSES).
 function TouchControls:SetRaceMode(racing: boolean)
-	for _, name in ipairs({ "DÉPART", "SORTIR", "PADDOCK" }) do
+	for _, name in ipairs({ "DÉPART", "FANTÔME", "SORTIR", "PADDOCK" }) do
 		local button = self.ActionButtons[name]
 		if button then
 			button.Visible = not racing

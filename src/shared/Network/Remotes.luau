@@ -29,6 +29,11 @@ export type Remotes = {
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
+	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?) fantôme d'un autre
+	-- pilote à affronter sur la spéciale
+	RequestGhost: RemoteEvent,
+	-- Serveur -> Client : (opponent) le fantôme demandé (pilote, temps, trajectoire) ou l'erreur
+	GhostOpponent: RemoteEvent,
 	-- Serveur -> Client : (entries) classement de la spéciale
 	Leaderboard: RemoteEvent,
 	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
@@ -62,6 +67,8 @@ local RELIABLE = {
 	"ProfileUpdated",
 	"RunValidated",
 	"SubmitGhost",
+	"RequestGhost",
+	"GhostOpponent",
 	"Leaderboard",
 	"SaveSetup",
 	"SaveLivery",

@@ -13,6 +13,9 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Banner = require(script.Parent.Parent.Controllers.Banner)
 local RaceUi = require(script.Parent.RaceUi)
 local RaceMenu = require(script.Parent.RaceMenu)
 local RaceHud = require(script.Parent.RaceHud)
@@ -211,6 +214,18 @@ function RaceClient:_onEvent(kind: string, data: any)
 			color = if jokerDue then RaceUi.COLOR_ORANGE else RaceUi.COLOR_TEXT
 		end
 		hud:ShowMessage(text, color, 3)
+		-- Nouvelle médaille sur ce circuit (meilleur tour, Medals.luau).
+		local tier = Medals.Get(tonumber(data.Medal) or 0)
+		if tier then
+			local circuit = if race then Tracks.Get(race.TrackId) else nil
+			Banner.Show(
+				tier.Title,
+				string.format("%s — tour en %s", if circuit then circuit.Name else "Circuit", RaceUi.FormatTime(tonumber(data.Time))),
+				tier.Color,
+				4,
+				true
+			)
+		end
 	elseif kind == "Joker" then
 		local count = tonumber(data.Count) or 1
 		if count == 1 then

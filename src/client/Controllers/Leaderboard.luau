@@ -5,7 +5,14 @@
 	meilleurs temps officiels, tous joueurs confondus, sauvegardés d'une partie à
 	l'autre. Sa propre ligne est surlignée.
 	En haut à droite ; L (ou stick droit enfoncé) l'affiche ou le masque.
+
+	Chaque temps porte la pastille de sa médaille (Medals.luau). Cliquer sur
+	une ligne défie le fantôme de ce pilote (GhostChallenge.luau) ; la ligne
+	du bas dit contre quel fantôme on roule.
 ]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 
 local Leaderboard = {}
 Leaderboard.__index = Leaderboard
@@ -17,8 +24,13 @@ export type Leaderboard = typeof(setmetatable({}, Leaderboard)) & {
 	Gui: ScreenGui,
 	Panel: Frame,
 	Scale: UIScale,
-	Rows: { TextLabel },
+	Rows: { TextButton },
+	Dots: { Frame },
+	RowUserIds: { [number]: number },
 	Empty: TextLabel,
+	Footer: TextLabel,
+	GhostText: string,
+	Touch: boolean,
 	Shown: boolean,
 }
 
@@ -26,6 +38,8 @@ local ROWS = 10
 local PANEL_WIDTH = 300
 local ROW_HEIGHT = 20
 local HEADER_HEIGHT = 30
+local FOOTER_HEIGHT = 34
+local DOT_SIZE = 10
 local SCREEN_MARGIN = 24
 local TOP_OFFSET = 64 -- sous la barre de Roblox
 
@@ -40,10 +54,14 @@ local function formatTime(ms: number): string
 	return string.format("%d:%05.2f", minutes, seconds - minutes * 60)
 end
 
-function Leaderboard.new(playerGui: Instance, localUserId: number): Leaderboard
+-- `onChallenge(userId)` : clic sur une ligne, défier le fantôme de ce pilote.
+function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: (number) -> ()): Leaderboard
 	local self = (setmetatable({}, Leaderboard) :: any) :: Leaderboard
 	self.LocalUserId = localUserId
 	self.Shown = true
+	self.RowUserIds = {}
+	self.GhostText = ""
+	self.Touch = false
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Leaderboard"
@@ -54,7 +72,7 @@ function Leaderboard.new(playerGui: Instance, localUserId: number): Leaderboard
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(1, 0)
 	panel.Position = UDim2.new(1, -SCREEN_MARGIN, 0, TOP_OFFSET)
-	panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + ROWS * ROW_HEIGHT + 10)
+	panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + ROWS * ROW_HEIGHT + FOOTER_HEIGHT + 6)
 	panel.BackgroundColor3 = COLOR_PANEL
 	panel.BackgroundTransparency = 0.25
 	panel.BorderSizePixel = 0
@@ -79,8 +97,10 @@ function Leaderboard.new(playerGui: Instance, localUserId: number): Leaderboard
 	title.Parent = panel
 
 	self.Rows = {}
+	self.Dots = {}
 	for i = 1, ROWS do
-		local row = Instance.new("TextLabel")
+		local row = Instance.new("TextButton")
+		row.AutoButtonColor = false
 		row.BackgroundTransparency = 1
 		row.Position = UDim2.fromOffset(12, HEADER_HEIGHT + (i - 1) * ROW_HEIGHT)
 		row.Size = UDim2.new(1, -24, 0, ROW_HEIGHT)
@@ -90,7 +110,25 @@ function Leaderboard.new(playerGui: Instance, localUserId: number): Leaderboard
 		row.TextXAlignment = Enum.TextXAlignment.Left
 		row.Text = ""
 		row.Parent = panel
+		row.Activated:Connect(function()
+			local userId = self.RowUserIds[i]
+			if userId then
+				onChallenge(userId)
+			end
+		end)
 		self.Rows[i] = row
+		-- Pastille de la médaille, au bout de la ligne.
+		local dot = Instance.new("Frame")
+		dot.AnchorPoint = Vector2.new(1, 0.5)
+		dot.Position = UDim2.new(1, 0, 0.5, 0)
+		dot.Size = UDim2.fromOffset(DOT_SIZE, DOT_SIZE)
+		dot.BorderSizePixel = 0
+		dot.Visible = false
+		local dotCorner = Instance.new("UICorner")
+		dotCorner.CornerRadius = UDim.new(1, 0)
+		dotCorner.Parent = dot
+		dot.Parent = row
+		self.Dots[i] = dot
 	end
 
 	local empty = Instance.new("TextLabel")
@@ -105,14 +143,38 @@ function Leaderboard.new(playerGui: Instance, localUserId: number): Leaderboard
 	empty.Parent = panel
 	self.Empty = empty
 
+	-- Contre quel fantôme on roule, et comment en changer.
+	local footer = Instance.new("TextLabel")
+	footer.BackgroundTransparency = 1
+	footer.Position = UDim2.fromOffset(12, HEADER_HEIGHT + ROWS * ROW_HEIGHT + 4)
+	footer.Size = UDim2.new(1, -24, 0, FOOTER_HEIGHT)
+	footer.Font = Enum.Font.GothamMedium
+	footer.TextSize = 12
+	footer.TextColor3 = COLOR_DIM
+	footer.TextXAlignment = Enum.TextXAlignment.Left
+	footer.TextYAlignment = Enum.TextYAlignment.Top
+	footer.TextWrapped = true
+	footer.Text = ""
+	footer.Parent = panel
+	self.Footer = footer
+	self:SetGhostInfo("Fantôme : ton record")
+
 	gui.Parent = playerGui
 	return self
 end
 
 function Leaderboard:SetEntries(entries: { Entry })
 	self.Empty.Visible = #entries == 0
+	local limits = Medals.ForStage()
 	for i, row in ipairs(self.Rows) do
 		local entry = entries[i]
+		local dot = self.Dots[i]
+		self.RowUserIds[i] = if entry then entry.UserId else nil
+		local tier = if entry then Medals.Get(Medals.TierOf(entry.Ms, limits)) else nil
+		dot.Visible = tier ~= nil
+		if tier then
+			dot.BackgroundColor3 = tier.Color
+		end
 		if entry then
 			-- Nom tronqué : la colonne des temps reste alignée (police à chasse fixe).
 			local name = entry.Name
@@ -129,6 +191,13 @@ function Leaderboard:SetEntries(entries: { Entry })
 	end
 end
 
+-- Ligne du bas : le fantôme affronté (GhostChallenge:Describe()).
+function Leaderboard:SetGhostInfo(text: string)
+	self.GhostText = text
+	self.Footer.Text = text
+		.. (if self.Touch then "\nFANTÔME : changer · touche un pilote : le défier" else "\nG : changer · clic sur un pilote : le défier")
+end
+
 -- Visible quand on pilote (Main) ET pas masqué par le joueur (L).
 function Leaderboard:SetVisible(visible: boolean)
 	self.Gui.Enabled = visible
@@ -137,6 +206,8 @@ end
 -- Disposition tactile : le tableau de bord occupe le haut à droite ; le
 -- classement s'ouvre au centre, à la demande (bouton TEMPS), masqué par défaut.
 function Leaderboard:SetTouchLayout(enabled: boolean)
+	self.Touch = enabled
+	self:SetGhostInfo(self.GhostText)
 	if enabled then
 		self.Panel.AnchorPoint = Vector2.new(0.5, 0.5)
 		self.Panel.Position = UDim2.fromScale(0.5, 0.5)

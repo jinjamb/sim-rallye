@@ -30,6 +30,12 @@
 
 	IDENTITÉ D'UN TRACÉ : dérivée de sa longueur. Si le tracé change, les temps
 	repartent de zéro au lieu de mélanger deux parcours différents.
+
+	DÉFI DU FANTÔME : un joueur peut demander le fantôme d'un autre pilote pour
+	courir contre lui -- le rival juste devant lui au classement, le recordman,
+	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
+	ce pilote (en mémoire s'il est connecté, sinon dans le DataStore, puis gardé
+	quelques minutes en cache).
 ]]
 
 local DataStoreService = game:GetService("DataStoreService")
@@ -42,6 +48,7 @@ local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
 local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 
 local RecordService = {}
 
@@ -64,6 +71,10 @@ local SETUP_FLUSH_INTERVAL = 30
 local GHOST_WINDOW = 60 -- secondes pour envoyer le fantôme après un record
 local GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 local GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
+local GHOST_REQUEST_COOLDOWN = 2 -- secondes entre deux demandes de fantôme d'un autre pilote
+local RIVAL_CANDIDATES = 5 -- temps juste devant le sien examinés dans le classement sauvegardé
+local OPPONENT_LOADS = 3 -- profils lus au plus pour trouver un fantôme
+local OPPONENT_CACHE_TIME = 120 -- secondes : fantôme d'un pilote absent, gardé en mémoire
 
 type Ghost = { Rate: number, Frames: { number } }
 type StageRecord = { Ms: number, Ghost: Ghost? }
@@ -486,6 +497,15 @@ local function onFinish(player: Player, ms: number)
 		scheduleLeaderboardRefresh()
 	end
 
+	-- Calibrage des médailles (Medals.luau) : la vitesse moyenne de chaque temps validé.
+	if RunService:IsStudio() then
+		print(string.format(
+			"[Médailles] Spéciale : %.2f s, %.1f km/h de moyenne",
+			ms / 1000,
+			Medals.AverageKmh(Medals.StageDistance(), ms)
+		))
+	end
+
 	Remotes.RunValidated:FireClient(player, {
 		Valid = true,
 		Ms = ms,
@@ -496,6 +516,156 @@ end
 
 local function onInvalid(player: Player, reason: string)
 	Remotes.RunValidated:FireClient(player, { Valid = false, Reason = reason })
+end
+
+--------------------------------------------------------------------------------
+-- Défi du fantôme : courir contre la trajectoire d'un autre pilote
+--------------------------------------------------------------------------------
+
+local opponentCache: { [number]: { Record: StageRecord?, Expires: number } } = {}
+local ghostBusy: { [Player]: boolean } = {}
+local lastGhostRequestAt: { [Player]: number } = {}
+
+-- Record de la spéciale (temps et fantôme) d'un pilote, connecté ou non.
+local function stageRecordOf(userId: number): StageRecord?
+	local online = Players:GetPlayerByUserId(userId)
+	local profile = if online then profiles[online] else nil
+	if profile then
+		return profile.Records[STAGE_ID]
+	end
+	local cached = opponentCache[userId]
+	if cached and os.clock() < cached.Expires then
+		return cached.Record
+	end
+	local store = profileStore
+	if not storesAvailable or not store then
+		return nil
+	end
+	local ok, result = pcall(function()
+		return store:GetAsync(profileKey(userId))
+	end)
+	if not ok then
+		storeFailed("fantôme d'un autre pilote", result)
+		return nil
+	end
+	local record = sanitizeProfile(result, userId).Records[STAGE_ID]
+	local now = os.clock()
+	for id, entry in pairs(opponentCache) do
+		if now >= entry.Expires then
+			opponentCache[id] = nil -- un fantôme pèse ~7000 nombres : on ne garde que les récents
+		end
+	end
+	opponentCache[userId] = { Record = record, Expires = now + OPPONENT_CACHE_TIME }
+	return record
+end
+
+--[[
+	Pilotes à affronter, du plus indiqué au moins indiqué :
+		Rival  : les temps juste devant le sien, du plus proche au plus lointain
+		         (sans temps : le dernier du top 10, puis on remonte) ;
+		Record : les meilleurs temps, dans l'ordre.
+	Le classement sauvegardé ne contient que le top 10 : pour un joueur plus
+	loin, on demande au DataStore les temps juste en dessous du sien.
+]]
+type Candidate = { UserId: number, Ms: number }
+
+local function opponentCandidates(player: Player, mode: string): { Candidate }
+	local profile = profiles[player]
+	local mine = if profile then profile.Records[STAGE_ID] else nil
+	local times: { [number]: number } = {}
+	local function consider(userId: number, ms: number)
+		local known = times[userId]
+		times[userId] = if known then math.min(known, ms) else ms
+	end
+	for _, entry in ipairs(leaderboard) do
+		consider(entry.UserId, entry.Ms)
+	end
+	for userId, ms in pairs(sessionBest) do
+		consider(userId, ms)
+	end
+	local store = leaderboardStore
+	if mode == "Rival" and mine and storesAvailable and store then
+		local ok, err = pcall(function()
+			local pages = store:GetSortedAsync(false, RIVAL_CANDIDATES, nil, mine.Ms - 1)
+			for _, item in ipairs(pages:GetCurrentPage()) do
+				local userId = tonumber(item.key)
+				if userId then
+					consider(userId, item.value)
+				end
+			end
+		end)
+		if not ok then
+			storeFailed("rival", err)
+		end
+	end
+
+	local list: { Candidate } = {}
+	for userId, ms in pairs(times) do
+		if userId ~= player.UserId and (mode ~= "Rival" or mine == nil or ms < mine.Ms) then
+			table.insert(list, { UserId = userId, Ms = ms })
+		end
+	end
+	table.sort(list, function(a, b)
+		if mode == "Rival" then
+			return a.Ms > b.Ms -- le plus proche de soi d'abord
+		end
+		return a.Ms < b.Ms
+	end)
+	return list
+end
+
+local function sendOpponent(player: Player, mode: string, userId: number?)
+	local function fail(message: string)
+		Remotes.GhostOpponent:FireClient(player, { Mode = mode, Error = message })
+	end
+	local profile = profiles[player]
+	local mine = if profile then profile.Records[STAGE_ID] else nil
+
+	local candidates: { number } = {}
+	if mode == "Player" then
+		if userId == nil or userId == player.UserId then
+			fail("C'est ton propre temps.")
+			return
+		end
+		candidates = { userId :: number }
+	else
+		local list = opponentCandidates(player, mode)
+		local first = list[1]
+		if mode == "Record" and mine and (first == nil or mine.Ms <= first.Ms) then
+			fail("Le record, c'est toi !")
+			return
+		elseif first == nil then
+			fail(if mode == "Rival" and mine then "Personne devant toi : tu es en tête !" else "Aucun autre pilote n'a encore de temps.")
+			return
+		end
+		for _, item in ipairs(list) do
+			table.insert(candidates, item.UserId)
+		end
+	end
+
+	-- Le premier candidat peut ne pas avoir de fantôme (temps antérieur aux
+	-- fantômes, envoi perdu) : on passe au suivant, dans la limite des lectures.
+	for index, candidate in ipairs(candidates) do
+		if index > OPPONENT_LOADS then
+			break
+		end
+		local record = stageRecordOf(candidate)
+		if record and record.Ghost then
+			if not player.Parent then
+				return
+			end
+			Remotes.GhostOpponent:FireClient(player, {
+				Mode = mode,
+				UserId = candidate,
+				Name = nameOf(candidate),
+				Ms = record.Ms,
+				Ghost = record.Ghost,
+			})
+			return
+		end
+	end
+
+	fail(if mode == "Player" then "Pas de fantôme enregistré pour ce pilote." else "Pas de fantôme enregistré pour les pilotes devant toi.")
 end
 
 --------------------------------------------------------------------------------
@@ -645,6 +815,33 @@ function RecordService.Start()
 		end)
 	end)
 
+	Remotes.RequestGhost.OnServerEvent:Connect(function(player: Player, mode: any, target: any)
+		if mode ~= "Rival" and mode ~= "Record" and mode ~= "Player" then
+			return
+		end
+		local userId: number? = nil
+		if mode == "Player" then
+			if type(target) ~= "number" or target ~= target or target <= 0 or target % 1 ~= 0 then
+				return
+			end
+			userId = target
+		end
+		local now = os.clock()
+		if ghostBusy[player] or now - (lastGhostRequestAt[player] or 0) < GHOST_REQUEST_COOLDOWN then
+			Remotes.GhostOpponent:FireClient(player, { Mode = mode, Error = "Patiente un instant." })
+			return
+		end
+		lastGhostRequestAt[player] = now
+		ghostBusy[player] = true
+		local ok, err = pcall(function()
+			sendOpponent(player, mode, userId)
+		end)
+		ghostBusy[player] = nil
+		if not ok then
+			warn("[RecordService] Fantôme d'un autre pilote :", err)
+		end
+	end)
+
 	Remotes.SaveSetup.OnServerEvent:Connect(function(player: Player, input: any)
 		local profile = profiles[player]
 		if not profile then
@@ -698,6 +895,8 @@ function RecordService.Start()
 		runs[player] = nil
 		pendingGhost[player] = nil
 		lastSetupAt[player] = nil
+		ghostBusy[player] = nil
+		lastGhostRequestAt[player] = nil
 	end)
 
 	game:BindToClose(function()

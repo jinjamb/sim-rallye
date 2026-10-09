@@ -7,8 +7,8 @@
 	lancement) d'après PaddockLayout.luau :
 		- point d'apparition ;
 		- une ZONE par circuit, anneau lumineux au sol, et au-dessus un panneau :
-		  nom et longueur du circuit, record du tour, pilotes en attente, compte
-		  à rebours, pilotes en course ;
+		  nom et longueur du circuit, record du tour, temps des médailles
+		  (Medals.luau), pilotes en attente, compte à rebours, pilotes en course ;
 		- la zone VOITURE : sa voiture pour les essais libres et la spéciale ;
 		- le podium, et ses confettis.
 
@@ -34,6 +34,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
@@ -179,8 +180,12 @@ local function buildPaddock()
 		local _, frame = board(folder, pad.Position + Vector3.new(0, 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
 		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
 		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-		local record = label(frame, "Record du tour : —", 200, 60, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
-		local status = label(frame, "Entre dans la zone pour courir", 290, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
+		local record = label(frame, "Record du tour : —", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
+		if circuit then
+			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, Color3.fromRGB(200, 202, 210))
+			medals.RichText = true
+		end
+		local status = label(frame, "Entre dans la zone pour courir", 292, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
 		label(frame, "2 à 6 pilotes · départ 20 s après le 2e · C : options", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 		signs[pad.Id] = { Status = status, Record = record }
 	end

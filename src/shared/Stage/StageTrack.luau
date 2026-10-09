@@ -287,4 +287,30 @@ function StageTrack.Locate(position: Vector3): (Sample, number, number)
 	return best, progress, lateral
 end
 
+--[[
+	Comme Locate, mais en ne cherchant qu'autour d'un échantillon connu (±window) :
+	pour suivre une trajectoire point après point (le fantôme, Ghost.luau) sans
+	parcourir tout le tracé à chaque point. Ne convient qu'à des positions
+	proches l'une de l'autre.
+]]
+function StageTrack.LocateNear(position: Vector3, hint: number, window: number): (Sample, number, number)
+	local samples = StageTrack.GetSamples()
+	local first = math.max(1, hint - window)
+	local last = math.min(#samples, hint + window)
+	local best = samples[first]
+	local bestDistanceSq = math.huge
+	for i = first, last do
+		local sample = samples[i]
+		local dx = position.X - sample.Position.X
+		local dz = position.Z - sample.Position.Z
+		local distanceSq = dx * dx + dz * dz
+		if distanceSq < bestDistanceSq then
+			bestDistanceSq = distanceSq
+			best = sample
+		end
+	end
+	local offset = Vector3.new(position.X - best.Position.X, 0, position.Z - best.Position.Z)
+	return best, best.Distance + offset:Dot(best.ForwardFlat), offset:Dot(best.Left)
+end
+
 return StageTrack

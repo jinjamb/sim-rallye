@@ -25,6 +25,7 @@ local Leaderboard = require(script.Parent.Leaderboard)
 local SetupMenu = require(script.Parent.SetupMenu)
 local TouchControls = require(script.Parent.TouchControls)
 local DrivingSession = require(script.Parent.DrivingSession)
+local GhostChallenge = require(script.Parent.GhostChallenge)
 local RaceClient = require(script.Parent.Parent.Race.RaceClient)
 local Garage = require(script.Parent.Parent.Race.Garage)
 
@@ -53,7 +54,6 @@ local isTouch = TouchControls.IsTouchDevice()
 
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)
-local leaderboard = Leaderboard.new(playerGui, player.UserId)
 
 local session: DrivingSession.DrivingSession? = nil
 local sessionToken = 0
@@ -63,6 +63,20 @@ local debugEnabled = false
 local currentSetup: CarSetup.Setup = CarSetup.Default()
 local stageBestMs: number? = nil
 local stageGhost: any = nil
+
+-- Défi du fantôme : contre qui on roule sur la spéciale. Le choix dure toute
+-- la partie et suit le joueur d'une voiture à l'autre.
+local leaderboard: Leaderboard.Leaderboard
+local ghostChallenge = GhostChallenge.new(function(challenge)
+	local current = session
+	if current then
+		current:SetGhostChoice(challenge.Opponent, challenge:IsHidden())
+	end
+	leaderboard:SetGhostInfo(challenge:Describe())
+end)
+leaderboard = Leaderboard.new(playerGui, player.UserId, function(userId: number)
+	ghostChallenge:Challenge(userId, player.UserId)
+end)
 
 local function hasControl(): boolean
 	local current = session
@@ -240,6 +254,12 @@ local actions: TouchControls.Actions = {
 	ToggleLeaderboard = function()
 		leaderboard:Toggle()
 	end,
+	-- Fantôme suivant (le sien, le rival, le record, aucun) : spéciale seulement.
+	CycleGhost = function()
+		if not isRacing() then
+			ghostChallenge:Cycle()
+		end
+	end,
 	ToggleRaceMenu = function()
 		raceClient:ToggleMenu()
 	end,
@@ -313,7 +333,7 @@ local function setControl(granted: boolean)
 		if current:IsRacing() then
 			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, C rallycross, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), C rallycross, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
@@ -369,6 +389,8 @@ local function startSession(model: Model)
 		Setup = currentSetup,
 		StageBestMs = stageBestMs,
 		StageGhost = stageGhost,
+		GhostOpponent = ghostChallenge.Opponent,
+		GhostHidden = ghostChallenge:IsHidden(),
 	})
 	if not ok then
 		warn("[Car] Session de conduite impossible :", result)
@@ -466,6 +488,7 @@ Remotes.RunValidated.OnClientEvent:Connect(function(result: any)
 	if current then
 		current:OnRunValidated(result)
 	end
+	ghostChallenge:OnRunValidated(result)
 end)
 
 Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
@@ -506,6 +529,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		raceClient:SpectateNext(1)
 	elseif key == Enum.KeyCode.H then
 		actions.ReturnToPaddock()
+	elseif key == Enum.KeyCode.G then
+		actions.CycleGhost()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		actions.ShiftUp()
