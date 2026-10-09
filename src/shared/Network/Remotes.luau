@@ -97,6 +97,12 @@ export type Remotes = {
 	RollResult: RemoteEvent,
 	-- Serveur -> Client : (state, news?) Rallye Pass : saison, XP, premium ; news : palier atteint
 	PassState: RemoteEvent,
+
+	-- ÉCURIES (TeamService)
+	-- Client -> Serveur : (action, payload) créer, inviter, accepter, quitter, exclure, couleurs
+	TeamAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) son écurie, son invitation, le classement ; news : message
+	TeamState: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -134,6 +140,8 @@ local RELIABLE = {
 	"RequestRoll",
 	"RollResult",
 	"PassState",
+	"TeamAction",
+	"TeamState",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

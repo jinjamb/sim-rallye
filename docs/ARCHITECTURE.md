@@ -29,6 +29,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
 | `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux), `Rolls` (règles et probabilités des tirages), `Pass` (saisons et paliers du Rallye Pass). |
+| `Teams/`       | `Teams` : les écuries (taille, nom et sigle valides, couleurs communes).                  |
 
 ## `src/server` : l'autorité
 
@@ -59,6 +60,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `HornService`      | Klaxon : relaie le coup de klaxon d'un pilote à tous les joueurs.                     |
 | `RollService`      | Tirages : tire l'objet côté serveur, le donne ou le convertit en crédits.             |
 | `PassService`      | Rallye Pass : XP de la saison, paliers, récompenses gratuites et premium.             |
+| `TeamService`      | Écuries : fondation, invitations, couleurs communes, classement de la saison.         |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |
@@ -83,7 +85,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
 | `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), classement, réglages, garage, et le menu principal (`UI/Menu`). |
 
-Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaque rubrique est un module (`PlayPage`, `ChallengesPage`, `ShopPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
+Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaque rubrique est un module (`PlayPage`, `ChallengesPage`, `PassPage`, `TeamPage`, `ShopPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
 
 ## Économie
 

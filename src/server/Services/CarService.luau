@@ -49,6 +49,7 @@ local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local GarageService = require(script.Parent.GarageService)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
+local TeamService = require(script.Parent.TeamService)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
@@ -362,6 +363,18 @@ local function tagProgress(car: Model, player: Player)
 	end
 end
 
+-- La livrée peinte : celle du joueur, aux couleurs de son écurie s'il les porte.
+local function liveryOf(player: Player)
+	return TeamService.LiveryOf(player, GarageService.GetLivery(player))
+end
+
+-- Sigle et couleur de son écurie, affichés devant son nom (RemoteCars.luau).
+local function tagTeam(car: Model, player: Player)
+	local team = TeamService.Get(player)
+	car:SetAttribute("TeamTag", if team then team.Tag else nil)
+	car:SetAttribute("TeamColor", if team then team.Color else nil)
+end
+
 -- Le joueur possède-t-il la voiture de cette catégorie ?
 local function ownsClass(player: Player, classId: string): boolean
 	local item = Catalog.CarItem(classId)
@@ -409,6 +422,7 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car:SetAttribute("OwnerName", player.DisplayName)
 	tagProgress(car, player)
 	tagEquipped(car, player)
+	tagTeam(car, player)
 	-- Catégorie : moteur, boîte, pneus (client), records et carrosserie.
 	local chosen = EconomyService.Equipped(player, "Car")
 	local class = CarClasses.Get(opts.CarClass or (if chosen then chosen.CarClass else nil))
@@ -442,7 +456,7 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car.Parent = workspace
 	-- Couleur et numéro du joueur (les rayons qui placent les numéros exigent
 	-- une voiture dans le monde).
-	LiveryPainter.Apply(car, GarageService.GetLivery(player))
+	LiveryPainter.Apply(car, liveryOf(player))
 	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
 	chassis:SetNetworkOwnershipAuto(false)
 	chassis:SetNetworkOwner(nil)
@@ -521,11 +535,20 @@ function CarService.RefreshEquipped(player: Player)
 	end
 end
 
+-- Écurie rejointe, quittée, ou ses couleurs changées : sigle et livrée suivent.
+function CarService.RefreshTeam(player: Player)
+	local car = carByPlayer[player]
+	if car then
+		tagTeam(car, player)
+		LiveryPainter.Apply(car, liveryOf(player))
+	end
+end
+
 -- Livrée modifiée (menu) : la voiture actuelle est repeinte aussitôt.
 function CarService.RefreshLivery(player: Player)
 	local car = carByPlayer[player]
 	if car then
-		LiveryPainter.Apply(car, GarageService.GetLivery(player))
+		LiveryPainter.Apply(car, liveryOf(player))
 	end
 end
 

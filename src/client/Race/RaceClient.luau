@@ -73,6 +73,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Wallet: MenuKit.Wallet?, -- crédits, objets (EconomyService)
 	Pass: any, -- Rallye Pass (PassService)
 	Drift: any, -- Roi du drift (ChallengeService)
+	Team: any, -- écurie (TeamService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
 	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
@@ -107,6 +108,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Wallet = nil
 	self.Pass = nil
 	self.Drift = nil
+	self.Team = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
@@ -120,6 +122,10 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Equip" then
 			if type(payload) == "table" then
 				Remotes.EquipItem:FireServer(payload.Kind, payload.Id)
+			end
+		elseif action == "Team" then
+			if type(payload) == "table" then
+				Remotes.TeamAction:FireServer(payload.Action, payload)
 			end
 		elseif action == "Roll" then
 			Remotes.RequestRoll:FireServer()
@@ -207,6 +213,7 @@ function RaceClient:_refreshMenu()
 		Wallet = self.Wallet,
 		Pass = self.Pass,
 		Drift = self.Drift,
+		Team = self.Team,
 	})
 end
 
@@ -473,6 +480,21 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	if type(news.Error) == "string" then
 		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
 		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+-- Écurie : la sienne, son invitation, le classement ; un message s'affiche.
+function RaceClient:SetTeam(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Team = state
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
+		if news.Error then
+			self.Menu:SetStatus(news.Message, Widgets.COLOR_RED)
+		end
 	end
 end
 

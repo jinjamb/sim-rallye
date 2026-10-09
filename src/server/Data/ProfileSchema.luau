@@ -73,6 +73,8 @@ export type Profile = {
 	RollPity: number, -- tirages depuis le dernier objet Usine ou plus (garantie)
 	Pass: PassState?, -- Rallye Pass de la saison en cours (Pass.luau)
 	DriftKing: { Key: string, Score: number }?, -- meilleure combinaison de la semaine
+	TeamId: string?, -- écurie (Teams.luau)
+	UseTeamColors: boolean, -- porte les couleurs de son écurie
 }
 
 export type PassState = {
@@ -113,6 +115,8 @@ function ProfileSchema.Empty(userId: number): Profile
 		RollPity = 0,
 		Pass = nil,
 		DriftKing = nil,
+		TeamId = nil,
+		UseTeamColors = false,
 	}
 end
 
@@ -195,6 +199,8 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.Credits = count(data.Credits)
 	profile.Rolls = count(data.Rolls)
 	profile.RollPity = count(data.RollPity)
+	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
+	profile.UseTeamColors = data.UseTeamColors == true
 	local drift = data.DriftKing
 	if type(drift) == "table" and type(drift.Key) == "string" and type(drift.Score) == "number" and drift.Score > 0 then
 		profile.DriftKing = { Key = drift.Key, Score = math.floor(drift.Score) }

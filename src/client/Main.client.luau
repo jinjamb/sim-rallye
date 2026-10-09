@@ -633,6 +633,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	end
 end)
 
+-- Écurie : son état (menu, onglet ÉCURIE), ses invitations, le classement.
+Remotes.TeamState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetTeam(state, news)
+end)
+
 -- Roi du drift : le classement (menu), et le titre au-dessus de la voiture du n°1.
 Remotes.DriftBoard.OnClientEvent:Connect(function(board: any)
 	if type(board) ~= "table" or type(board.Entries) ~= "table" then

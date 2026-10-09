@@ -30,6 +30,7 @@ local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local CarEffects = require(script.Parent.CarEffects)
 local TireSmoke = require(script.Parent.TireSmoke)
@@ -76,6 +77,12 @@ end
 -- Progression.luau), catégorie de la voiture.
 local function nameText(model: Model): string
 	local name = escape(tostring(model:GetAttribute("OwnerName") or ""))
+	-- Sigle de son écurie, dans sa couleur (Teams.luau).
+	local tag = model:GetAttribute("TeamTag")
+	local teamColor = Livery.COLORS[tonumber(model:GetAttribute("TeamColor")) or 0]
+	if type(tag) == "string" and teamColor then
+		name = string.format('<font color="%s">[%s]</font> %s', Medals.Hex(teamColor.Color), escape(tag), name)
+	end
 	local number = model:GetAttribute("RaceNumber")
 	local text = if type(number) == "number" then string.format("#%d %s", number, name) else name
 	local level = model:GetAttribute("Level")

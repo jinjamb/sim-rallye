@@ -43,6 +43,7 @@ export type Data = {
 	Wallet: Wallet?,
 	Pass: any, -- Rallye Pass { Key, Name, EndsAt, Xp, Premium } (PassService)
 	Drift: any, -- Roi du drift { Key, EndsAt, Entries = { UserId, Name, Score }, Mine } (ChallengeService)
+	Team: any, -- écurie { Team, UseColors, Invite, Board, Rank, Season } (TeamService)
 }
 
 -- Solde et objets (EconomyService).

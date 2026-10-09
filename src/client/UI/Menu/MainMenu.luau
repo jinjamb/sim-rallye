@@ -14,6 +14,7 @@
 		           et un rappel des défis ;
 		DÉFIS      ChallengesPage (défi de la semaine, défis du jour, roi du drift) ;
 		PASS       PassPage (Rallye Pass : paliers, récompenses, premium) ;
+		ÉCURIE     TeamPage (son écurie, invitations, classement des écuries) ;
 		BOUTIQUE   ShopPage (solde, crédits, objets) ;
 		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière).
 	Pendant une course, RacePage remplace tout (sans onglets).
@@ -32,6 +33,7 @@ local PlayPage = require(script.Parent.PlayPage)
 local ChallengesPage = require(script.Parent.ChallengesPage)
 local ShopPage = require(script.Parent.ShopPage)
 local PassPage = require(script.Parent.PassPage)
+local TeamPage = require(script.Parent.TeamPage)
 local SchoolPage = require(script.Parent.SchoolPage)
 local CareerPage = require(script.Parent.CareerPage)
 local RacePage = require(script.Parent.RacePage)
@@ -74,6 +76,7 @@ local TABS: { Tab } = {
 	{ Id = "Play", Name = "JOUER" },
 	{ Id = "Challenges", Name = "DÉFIS" },
 	{ Id = "Pass", Name = "PASS" },
+	{ Id = "Team", Name = "ÉCURIE" },
 	{ Id = "Shop", Name = "BOUTIQUE" },
 	{ Id = "Career", Name = "CARRIÈRE" },
 }
@@ -231,6 +234,8 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 		ChallengesPage.DriftKing(ctx, b)
 	elseif tab == "Pass" then
 		PassPage.Pass(ctx, b)
+	elseif tab == "Team" then
+		TeamPage.Team(ctx, b)
 	elseif tab == "Shop" then
 		ShopPage.Balance(ctx, b)
 		ShopPage.Rolls(ctx, b)
