@@ -34,6 +34,14 @@
 	comptée, et il faudra la rouler quand même avant de franchir la ligne. Une
 	téléportation (remise en piste) ne fait gagner que quelques studs.
 
+	DÉPASSEMENTS : comparés deux à deux, sur l'avancement intégré (un pilote
+	dépassé d'un tour reste derrière : le prendre d'un tour n'est pas un
+	dépassement). Le nouvel ordre doit tenir OVERTAKE_CONFIRM secondes (pas de
+	points pour deux voitures qui se chamaillent sur la ligne). Ils rapportent
+	des points de style (RecordService.AddStyle, progression), au plus
+	MAX_PASSES_PER_PAIR fois par paire et par manche : deux amis qui
+	s'échangent la place ne font pas fortune.
+
 	JOKER : obligatoire une fois par course. Il est compté quand la voiture passe
 	le milieu de la branche joker. Pas de joker à l'arrivée : +5 s.
 	FAUX DÉPART : +1 s.
@@ -89,6 +97,9 @@ local JUMP_START_DISTANCE = 4
 local JUMP_START_PENALTY = 1
 local JOKER_MISSED_PENALTY = 5
 local MILESTONE = 40 -- studs entre deux points de mesure des écarts
+local OVERTAKE_CONFIRM = 2 -- s : la nouvelle position doit tenir
+local OVERTAKE_POINTS = 2000 -- points de style par dépassement (10 XP)
+local MAX_PASSES_PER_PAIR = 2 -- dépassements récompensés par paire, sens et manche
 
 local POINTS = { 10, 8, 6, 4, 2, 1 }
 
@@ -152,6 +163,9 @@ type ResultRow = {
 	Points: number,
 }
 
+-- Deux pilotes : qui est devant (A = le premier de la clé), depuis quand.
+type PairState = { Ahead: boolean, Since: number, Stable: boolean, PassesA: number, PassesB: number }
+
 type Race = {
 	Id: string,
 	PadId: string, -- zone du paddock d'où vient la course
@@ -174,6 +188,7 @@ type Race = {
 	Runners: { Runner },
 	LastResults: { ResultRow }?,
 	GridOrder: { number }?, -- UserIds, pole en premier (manche suivante)
+	Pairs: { [string]: PairState }, -- dépassements, par paire de pilotes
 }
 
 local races: { [string]: Race } = {}
@@ -609,6 +624,7 @@ startRound = function(race: Race, round: number)
 	end
 
 	race.Runners = {}
+	race.Pairs = {}
 	for slot, member in ipairs(members) do
 		table.insert(race.Runners, {
 			Player = member.Player,
@@ -821,6 +837,7 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Runners = {},
 		LastResults = nil,
 		GridOrder = nil,
+		Pairs = {},
 	}
 	races[id] = race
 	table.insert(raceOrder, id)
@@ -1119,6 +1136,54 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 	end
 end
 
+--[[
+	Dépassements : pour chaque paire de pilotes encore en course, l'ordre sur
+	l'avancement. Un changement d'ordre qui tient OVERTAKE_CONFIRM secondes
+	est un dépassement : points de style pour celui qui passe, message pour
+	les deux.
+]]
+local function checkOvertakes(race: Race, now: number)
+	local runners = race.Runners
+	for i = 1, #runners - 1 do
+		for j = i + 1, #runners do
+			local a, b = runners[i], runners[j]
+			if a.Finished or b.Finished or a.Dnf or b.Dnf then
+				continue
+			end
+			local key = a.UserId .. ":" .. b.UserId
+			local ahead = a.Valid > b.Valid
+			local state = race.Pairs[key]
+			if not state then
+				race.Pairs[key] = { Ahead = ahead, Since = now, Stable = ahead, PassesA = 0, PassesB = 0 }
+				continue
+			end
+			if ahead ~= state.Ahead then
+				state.Ahead = ahead
+				state.Since = now
+			end
+			if state.Ahead ~= state.Stable and now - state.Since >= OVERTAKE_CONFIRM then
+				state.Stable = state.Ahead
+				local passer, passed = a, b
+				if not state.Ahead then
+					passer, passed = b, a
+				end
+				local passes = if passer == a then state.PassesA else state.PassesB
+				local points = if passes < MAX_PASSES_PER_PAIR then OVERTAKE_POINTS else 0
+				if passer == a then
+					state.PassesA += 1
+				else
+					state.PassesB += 1
+				end
+				if points > 0 and passer.Player.Parent then
+					RecordService.AddStyle(passer.Player, points)
+				end
+				sendEvent(race, passer.Player, "Overtake", { Name = passed.Name, Points = points })
+				sendEvent(race, passed.Player, "Overtaken", { Name = passer.Name })
+			end
+		end
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Démarrage
 --------------------------------------------------------------------------------
@@ -1172,6 +1237,9 @@ function RaceService.Start()
 						else
 							markDnf(race, runner, "déconnecté")
 						end
+					end
+					if race.State == "Racing" then
+						checkOvertakes(race, now)
 					end
 					checkRoundEnd(race)
 				end

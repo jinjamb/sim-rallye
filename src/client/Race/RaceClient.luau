@@ -14,6 +14,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
+local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Banner = require(script.Parent.Parent.Controllers.Banner)
 local RaceUi = require(script.Parent.RaceUi)
@@ -45,6 +47,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Live: RaceUi.LivePayload?,
 	Records: { [string]: RaceUi.TrackBoard },
 	Stats: RaceUi.Stats?,
+	Progress: Progression.Snapshot?,
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
 	Livery: any,
@@ -69,6 +72,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Live = nil
 	self.Records = {}
 	self.Stats = nil
+	self.Progress = nil
 	self.LapBests = {}
 	self.MyChassis = nil
 	self.Livery = nil
@@ -135,6 +139,7 @@ function RaceClient:_refreshMenu()
 		Race = self.Race,
 		Records = self.Records,
 		Stats = self.Stats,
+		Progress = self.Progress,
 		Laps = self.LapBests,
 		Livery = self.Livery,
 	})
@@ -226,6 +231,15 @@ function RaceClient:_onEvent(kind: string, data: any)
 				true
 			)
 		end
+	elseif kind == "Overtake" then
+		local points = tonumber(data.Points) or 0
+		hud:ShowMessage(
+			"DÉPASSEMENT — " .. tostring(data.Name) .. (if points > 0 then "  +" .. Progression.Thousands(points) else ""),
+			RaceUi.COLOR_GREEN,
+			2
+		)
+	elseif kind == "Overtaken" then
+		hud:ShowMessage("DÉPASSÉ PAR " .. tostring(data.Name), RaceUi.COLOR_ORANGE, 2)
 	elseif kind == "Joker" then
 		local count = tonumber(data.Count) or 1
 		if count == 1 then
@@ -280,6 +294,49 @@ function RaceClient:SetProfile(stats: any, laps: any)
 		self.LapBests = laps
 	end
 	self:_refreshMenu()
+end
+
+--[[
+	Progression (RecordService) : gardée pour le menu et le garage ; un niveau
+	gagné ou un cosmétique débloqué est annoncé en grand.
+]]
+function RaceClient:SetProgress(snapshot: any, news: any)
+	if type(snapshot) ~= "table" or type(snapshot.Level) ~= "number" then
+		return
+	end
+	local previous = self.Progress
+	self.Progress = snapshot
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if news.LevelUp then
+		local licence = Progression.LICENCES[snapshot.Licence] or Progression.LICENCES[1]
+		local newLicence = previous ~= nil and snapshot.Licence > previous.Licence
+		local nextXp = snapshot.NextXp
+		if newLicence then
+			Banner.Show("LICENCE " .. licence.Short, "Niveau " .. snapshot.Level .. "  ·  bravo, pilote !", licence.Color, 5, true)
+		else
+			Banner.Show(
+				"NIVEAU " .. snapshot.Level,
+				"Licence " .. licence.Name .. (if nextXp then "  ·  prochain niveau à " .. Progression.Thousands(nextXp) .. " XP" else ""),
+				licence.Color,
+				4,
+				true
+			)
+		end
+	end
+	if type(news.Unlocks) == "table" then
+		for _, item in ipairs(news.Unlocks) do
+			if type(item) == "table" then
+				Banner.Show("DÉBLOQUÉ", Livery.ItemName(tostring(item.Kind), tonumber(item.Index) or 0) .. "  ·  au garage", RaceUi.COLOR_ACCENT, 3.5, true)
+			end
+		end
+	end
+end
+
+function RaceClient:GetProgress(): Progression.Snapshot?
+	return self.Progress
 end
 
 function RaceClient:SetTouchLayout(enabled: boolean)

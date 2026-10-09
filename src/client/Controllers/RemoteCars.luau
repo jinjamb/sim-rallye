@@ -27,6 +27,8 @@ local PhysicsService = game:GetService("PhysicsService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
+local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local CarEffects = require(script.Parent.CarEffects)
 
@@ -58,11 +60,22 @@ type View = {
 	Visible: boolean,
 }
 
--- "#7 Pilote" : numéro de course (livrée, posé par le serveur) et nom.
+local function escape(text: string): string
+	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
+end
+
+-- "#7 Pilote · NATIONALE 12" : numéro de course (livrée), nom, et licence et
+-- niveau dans la couleur de la licence (posés par le serveur, Progression.luau).
 local function nameText(model: Model): string
-	local name = tostring(model:GetAttribute("OwnerName") or "")
+	local name = escape(tostring(model:GetAttribute("OwnerName") or ""))
 	local number = model:GetAttribute("RaceNumber")
-	return if type(number) == "number" then string.format("#%d %s", number, name) else name
+	local text = if type(number) == "number" then string.format("#%d %s", number, name) else name
+	local level = model:GetAttribute("Level")
+	local licence = Progression.LICENCES[tonumber(model:GetAttribute("Licence")) or 0]
+	if licence and type(level) == "number" then
+		text ..= string.format(' <font color="%s">· %s %d</font>', Medals.Hex(licence.Color), licence.Short, level)
+	end
+	return text
 end
 
 export type RemoteCars = typeof(setmetatable({}, RemoteCars)) & {
@@ -150,7 +163,7 @@ function RemoteCars:_add(instance: Instance)
 	-- Nom du pilote, au-dessus de la voiture.
 	local tag = Instance.new("BillboardGui")
 	tag.Name = "NameTag"
-	tag.Size = UDim2.fromOffset(160, 28)
+	tag.Size = UDim2.fromOffset(300, 28) -- nom et licence
 	tag.StudsOffset = Vector3.new(0, 6.5, 0)
 	tag.MaxDistance = 350
 	tag.LightInfluence = 0
@@ -161,6 +174,7 @@ function RemoteCars:_add(instance: Instance)
 	label.TextSize = 16
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextStrokeTransparency = 0.4
+	label.RichText = true
 	label.Text = nameText(model)
 	label.Parent = tag
 	tag.Adornee = chassis

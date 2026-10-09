@@ -31,6 +31,23 @@
 	IDENTITÉ D'UN TRACÉ : dérivée de sa longueur. Si le tracé change, les temps
 	repartent de zéro au lieu de mélanger deux parcours différents.
 
+	POINTS DE STYLE COMPTÉS EN COMPÉTITION SEULEMENT : en spéciale chronométrée
+	(passage en cours, ou fini depuis moins de STYLE_GRACE s) ou en course de
+	rallycross. Pas aux essais libres : sinon des donuts sur la piste d'essai
+	suffiraient à monter de niveau.
+
+	PROGRESSION (Progression.luau) : XP, niveau, licence et cosmétiques
+	débloqués se DÉDUISENT du profil (médailles, statistiques, spéciales
+	terminées, points de style) ; ils sont recalculés et envoyés au joueur à
+	chaque changement. Une livrée qui utilise un cosmétique verrouillé est
+	ramenée à ce qui est débloqué.
+	POINTS DE STYLE : dérapages et sauts sont détectés par le client (la
+	physique tourne chez lui) ; le serveur n'en accepte qu'un débit plausible,
+	au volant, et ils ne servent qu'à la progression (des cosmétiques).
+	Les dépassements, eux, sont détectés par le serveur (RaceService).
+	Spéciales terminées et points de style sont sauvegardés par lots, avec
+	les réglages (toutes les 30 s et au départ du joueur).
+
 	DÉFI DU FANTÔME : un joueur peut demander le fantôme d'un autre pilote pour
 	courir contre lui -- le rival juste devant lui au classement, le recordman,
 	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
@@ -49,6 +66,7 @@ local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
 local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 
 local RecordService = {}
 
@@ -75,6 +93,14 @@ local GHOST_REQUEST_COOLDOWN = 2 -- secondes entre deux demandes de fantôme d'u
 local RIVAL_CANDIDATES = 5 -- temps juste devant le sien examinés dans le classement sauvegardé
 local OPPONENT_LOADS = 3 -- profils lus au plus pour trouver un fantôme
 local OPPONENT_CACHE_TIME = 120 -- secondes : fantôme d'un pilote absent, gardé en mémoire
+-- Points de style envoyés par le client : un débit moyen plausible au plus
+-- (on ne dérape pas en permanence), et une réserve pour encaisser d'un coup une
+-- longue combinaison (15 s au ×5 : ~15 000 points). Un tricheur plafonne donc
+-- à ~5 000 XP de l'heure, et seulement en cosmétiques.
+local STYLE_RATE = 300 -- points par seconde, en moyenne
+local STYLE_BURST = 20000
+local STYLE_KINDS = { Drift = true, Jump = true }
+local STYLE_GRACE = 5 -- s après l'arrivée où une combinaison finie compte encore
 
 type Ghost = { Rate: number, Frames: { number } }
 type StageRecord = { Ms: number, Ghost: Ghost? }
@@ -85,6 +111,8 @@ type Profile = {
 	Livery: Livery.Livery,
 	Laps: { [string]: number }, -- meilleur tour (ms) par circuit (Circuit.Key)
 	Stats: Stats,
+	StageRuns: number, -- spéciales terminées (temps validés)
+	Style: number, -- points de style cumulés
 }
 
 type Run = {
@@ -92,6 +120,9 @@ type Run = {
 	StartTime: number,
 	LastProgress: number?,
 	LastTime: number,
+	-- Points de style acceptés jusqu'à cette heure (os.clock) : pendant le
+	-- passage chronométré, et un peu après (combinaison finie sur la ligne).
+	StyleUntil: number,
 }
 
 --------------------------------------------------------------------------------
@@ -189,10 +220,14 @@ local function sanitizeProfile(data: any, userId: number): Profile
 		Livery = Livery.Default(userId),
 		Laps = {},
 		Stats = emptyStats(),
+		StageRuns = 0,
+		Style = 0,
 	}
 	if type(data) ~= "table" then
 		return profile
 	end
+	profile.StageRuns = count(data.StageRuns)
+	profile.Style = count(data.Style)
 	profile.Livery = Livery.Sanitize(data.Livery, userId)
 	if type(data.Records) == "table" then
 		for stageId, record in pairs(data.Records) do
@@ -246,10 +281,119 @@ local function updateStoredProfile(userId: number, context: string, change: (Pro
 	end)
 end
 
+--------------------------------------------------------------------------------
+-- Progression : XP, niveau, licence, déblocages (Progression.luau)
+--------------------------------------------------------------------------------
+
+local lastProgress: { [Player]: Progression.Snapshot } = {}
+
+-- Palier de médaille par tracé : "stage" pour la spéciale, l'id du circuit sinon.
+local function medalsOf(profile: Profile): { [string]: number }
+	local medals: { [string]: number } = {}
+	local stage = profile.Records[STAGE_ID]
+	medals.stage = Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage())
+	for _, id in ipairs(Tracks.List()) do
+		local circuit = Tracks.Get(id)
+		if circuit then
+			medals[id] = Medals.TierOf(profile.Laps[circuit.Key], Medals.ForCircuit(id, circuit.Length))
+		end
+	end
+	return medals
+end
+
+local function snapshotOf(profile: Profile): Progression.Snapshot
+	return Progression.Snapshot({
+		Races = profile.Stats.Races,
+		Wins = profile.Stats.Wins,
+		Podiums = profile.Stats.Podiums,
+		Points = profile.Stats.Points,
+		StageRuns = profile.StageRuns,
+		Style = profile.Style,
+		Medals = medalsOf(profile),
+	})
+end
+
+-- Appelée à chaque changement de progression (licence affichée sur la voiture).
+RecordService.ProgressChanged = function(_player: Player, _snapshot: Progression.Snapshot) end
+
+--[[
+	Recalcule la progression et l'envoie au joueur. `announce` : signaler un
+	niveau gagné ou un cosmétique débloqué (pas au chargement du profil).
+]]
+local function pushProgress(player: Player, announce: boolean)
+	local profile = profiles[player]
+	if not profile or not player.Parent then
+		return
+	end
+	local snapshot = snapshotOf(profile)
+	local previous = lastProgress[player]
+	lastProgress[player] = snapshot
+	local news: any = nil
+	if announce and previous then
+		local unlocks = {}
+		for _, item in ipairs(Progression.NewUnlocks(previous, snapshot)) do
+			table.insert(unlocks, { Kind = item.Kind, Index = item.Index })
+		end
+		if snapshot.Level > previous.Level or #unlocks > 0 then
+			news = { LevelUp = snapshot.Level > previous.Level, Unlocks = unlocks }
+		end
+	end
+	Remotes.Progress:FireClient(player, snapshot, news)
+	if not previous or previous.Level ~= snapshot.Level then
+		RecordService.ProgressChanged(player, snapshot)
+	end
+end
+
+function RecordService.GetProgress(player: Player): Progression.Snapshot?
+	return lastProgress[player]
+end
+
 local function pushProfile(player: Player)
 	local profile = profiles[player]
 	if profile and player.Parent then
 		Remotes.ProfileUpdated:FireClient(player, profile.Stats, profile.Laps)
+		pushProgress(player, true)
+	end
+end
+
+-- Compteurs sauvegardés par lots (spéciales terminées, points de style) :
+-- ce qui s'est ajouté depuis la dernière écriture.
+local pendingCounters: { [Player]: { StageRuns: number, Style: number } } = {}
+
+local function addCounters(player: Player, stageRuns: number, style: number)
+	local profile = profiles[player]
+	if not profile then
+		return
+	end
+	profile.StageRuns += stageRuns
+	profile.Style += style
+	local pending = pendingCounters[player]
+	if not pending then
+		pending = { StageRuns = 0, Style = 0 }
+		pendingCounters[player] = pending
+	end
+	pending.StageRuns += stageRuns
+	pending.Style += style
+	pushProgress(player, true)
+end
+
+local function flushCounters(player: Player)
+	local pending = pendingCounters[player]
+	if not pending then
+		return
+	end
+	pendingCounters[player] = nil
+	updateStoredProfile(player.UserId, "progression", function(stored)
+		stored.StageRuns += pending.StageRuns
+		stored.Style += pending.Style
+		return true
+	end)
+end
+
+-- Points de style décidés par le serveur (dépassements, RaceService).
+function RecordService.AddStyle(player: Player, points: number)
+	if points > 0 then
+		addCounters(player, 0, math.floor(points))
 	end
 end
 
@@ -512,6 +656,8 @@ local function onFinish(player: Player, ms: number)
 		PersonalBest = isBest,
 		PreviousMs = if previous then previous.Ms else nil,
 	})
+	-- Une spéciale de plus (et peut-être une médaille) : la progression suit.
+	addCounters(player, 1, 0)
 end
 
 local function onInvalid(player: Player, reason: string)
@@ -722,8 +868,11 @@ local function onPlayerAdded(player: Player)
 		return -- parti pendant le chargement
 	end
 	local profile = sanitizeProfile(data, player.UserId)
+	-- Livrée sauvegardée avec un cosmétique qui n'est plus débloqué (barème retouché).
+	local default = Livery.Default(player.UserId)
+	profile.Livery = Progression.Enforce(profile.Livery, default, default, snapshotOf(profile))
 	profiles[player] = profile
-	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0 }
+	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0 }
 	nameCache[player.UserId] = player.DisplayName
 
 	local record = profile.Records[STAGE_ID]
@@ -750,6 +899,7 @@ local function onPlayerAdded(player: Player)
 	RecordService.LiveryChanged(player)
 	Remotes.Leaderboard:FireClient(player, leaderboard)
 	Remotes.TrackRecords:FireClient(player, lapBoards)
+	pushProgress(player, false)
 end
 
 local function carChassisOf(player: Player): BasePart?
@@ -867,7 +1017,13 @@ function RecordService.Start()
 			return
 		end
 		lastLiveryAt[player] = now
-		profile.Livery = Livery.Sanitize(input, player.UserId)
+		-- Un cosmétique pas encore débloqué est remplacé par ce qui l'est.
+		profile.Livery = Progression.Enforce(
+			Livery.Sanitize(input, player.UserId),
+			profile.Livery,
+			Livery.Default(player.UserId),
+			lastProgress[player]
+		)
 		setupDirty[player] = true
 		RecordService.LiveryChanged(player)
 	end)
@@ -875,11 +1031,46 @@ function RecordService.Start()
 		lastLiveryAt[player] = nil
 	end)
 
+	-- Points de style (dérapages, sauts) : au volant, à débit plausible.
+	type Allowance = { Points: number, At: number }
+	local styleAllowance: { [Player]: Allowance } = {}
+	Remotes.SubmitStyle.OnServerEvent:Connect(function(player: Player, points: any, kind: any)
+		if type(points) ~= "number" or points ~= points or points <= 0 or not STYLE_KINDS[kind] then
+			return
+		end
+		local car = workspace:FindFirstChild("Car_" .. player.UserId)
+		local chassis = car and car:FindFirstChild("Chassis")
+		if not car or not chassis or chassis:GetAttribute("Driven") ~= true then
+			return
+		end
+		local now = os.clock()
+		-- En compétition seulement : course de rallycross, ou spéciale chronométrée.
+		local run = runs[player]
+		if car:GetAttribute("RaceId") == nil and not (run and now < run.StyleUntil) then
+			return
+		end
+		local allowance: Allowance = styleAllowance[player] or { Points = STYLE_BURST, At = now }
+		allowance.Points = math.min(STYLE_BURST, allowance.Points + (now - allowance.At) * STYLE_RATE)
+		allowance.At = now
+		local accepted = math.floor(math.min(points, allowance.Points))
+		allowance.Points -= accepted
+		styleAllowance[player] = allowance
+		if accepted > 0 then
+			addCounters(player, 0, accepted)
+		end
+	end)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		styleAllowance[player] = nil
+	end)
+
 	task.spawn(function()
 		while true do
 			task.wait(SETUP_FLUSH_INTERVAL)
 			for player in pairs(setupDirty) do
 				flushSetup(player)
+			end
+			for player in pairs(pendingCounters) do
+				flushCounters(player)
 			end
 		end
 	end)
@@ -891,6 +1082,8 @@ function RecordService.Start()
 
 	Players.PlayerRemoving:Connect(function(player: Player)
 		flushSetup(player)
+		flushCounters(player)
+		lastProgress[player] = nil
 		profiles[player] = nil
 		runs[player] = nil
 		pendingGhost[player] = nil
@@ -902,6 +1095,9 @@ function RecordService.Start()
 	game:BindToClose(function()
 		for player in pairs(setupDirty) do
 			flushSetup(player)
+		end
+		for player in pairs(pendingCounters) do
+			flushCounters(player)
 		end
 		task.wait(2) -- laisse partir les écritures lancées en tâche de fond
 	end)
@@ -960,6 +1156,7 @@ function RecordService.Start()
 			end
 
 			if run.Running then
+				run.StyleUntil = now + STYLE_GRACE
 				if delta > maxStep then
 					run.Running = false
 					onInvalid(player, "raccourci")

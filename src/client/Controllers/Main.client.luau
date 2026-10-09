@@ -189,6 +189,9 @@ local garage = Garage.new(playerGui, {
 	SetLivery = function(livery)
 		raceClient:SaveLivery(livery)
 	end,
+	GetProgress = function()
+		return raceClient:GetProgress()
+	end,
 	OpenSetup = function()
 		setupMenu:SetOpen(true)
 	end,
@@ -481,6 +484,13 @@ print("[Paddock] Bienvenue ! Zones au sol : un circuit chacune (2 à 6 pilotes),
 
 Remotes.ProfileUpdated.OnClientEvent:Connect(function(stats: any, laps: any)
 	raceClient:SetProfile(stats, laps)
+end)
+
+-- Progression (XP, niveau, licence) : menu, garage, et les bandeaux d'un niveau
+-- gagné ou d'un cosmétique débloqué.
+Remotes.Progress.OnClientEvent:Connect(function(snapshot: any, news: any)
+	raceClient:SetProgress(snapshot, news)
+	garage:Refresh()
 end)
 
 Remotes.RunValidated.OnClientEvent:Connect(function(result: any)

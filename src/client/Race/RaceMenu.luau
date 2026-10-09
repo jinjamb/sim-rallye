@@ -27,6 +27,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local RaceUi = require(script.Parent.RaceUi)
 
 local RaceMenu = {}
@@ -37,6 +38,7 @@ export type Data = {
 	Race: RaceUi.RaceSnapshot?,
 	Records: { [string]: RaceUi.TrackBoard },
 	Stats: RaceUi.Stats?,
+	Progress: Progression.Snapshot?,
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
 }
@@ -54,6 +56,8 @@ export type RaceMenu = typeof(setmetatable({}, RaceMenu)) & {
 	StatusColor: Color3,
 	CountdownLabel: TextLabel?,
 	FirstButton: GuiButton?,
+	-- Données changées menu fermé : reconstruit à la prochaine ouverture.
+	Dirty: boolean,
 }
 
 local PANEL_WIDTH = 540
@@ -81,11 +85,12 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Action = action
 	self.LocalUserId = localUserId
 	self.TouchLayout = false
-	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Laps = {}, Livery = nil }
+	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Progress = nil, Laps = {}, Livery = nil }
 	self.Status = ""
 	self.StatusColor = RaceUi.COLOR_DIM
 	self.CountdownLabel = nil
 	self.FirstButton = nil
+	self.Dirty = false
 
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "RaceMenu"
@@ -240,6 +245,57 @@ function RaceMenu:_records(b: Builder, trackId: string)
 	end
 end
 
+-- Niveau, licence, barre d'XP, et d'où vient l'XP.
+function RaceMenu:_progress(b: Builder)
+	local progress = self.Data.Progress
+	if not progress then
+		return
+	end
+	local licence = Progression.LICENCES[progress.Licence] or Progression.LICENCES[1]
+	local title = b:Text(string.format(
+		'Niveau %d · <font color="%s">Licence %s</font> · %s XP',
+		progress.Level,
+		Medals.Hex(licence.Color),
+		licence.Name,
+		Progression.Thousands(progress.Xp)
+	), 15)
+	title.RichText = true
+	title.Font = Enum.Font.GothamBold
+
+	-- Barre jusqu'au niveau suivant.
+	local nextXp: number? = progress.NextXp
+	local row = b:Row(12)
+	local track = Instance.new("Frame")
+	track.Size = UDim2.new(1, 0, 0, 8)
+	track.Position = UDim2.fromOffset(0, 2)
+	track.BackgroundColor3 = RaceUi.COLOR_BUTTON
+	track.BorderSizePixel = 0
+	RaceUi.Corner(track, 4)
+	track.Parent = row
+	local fill = Instance.new("Frame")
+	local fraction = 1
+	if nextXp then
+		fraction = math.clamp((progress.Xp - progress.LevelXp) / math.max(1, nextXp - progress.LevelXp), 0, 1)
+	end
+	fill.Size = UDim2.fromScale(fraction, 1)
+	fill.BackgroundColor3 = licence.Color
+	fill.BorderSizePixel = 0
+	RaceUi.Corner(fill, 4)
+	fill.Parent = track
+	if nextXp then
+		b:Text(string.format("Niveau %d à %s XP", progress.Level + 1, Progression.Thousands(nextXp)), 12, RaceUi.COLOR_DIM)
+	end
+	b:Text(string.format(
+		"Spéciales terminées %d · Points de style %s",
+		progress.StageRuns,
+		Progression.Thousands(progress.Style)
+	), 13)
+	b:Text(string.format(
+		"XP : médailles, courses, victoires, podiums, points, spéciales terminées, et le style en compétition — dérapages, sauts, dépassements (%d points de style = 1 XP).",
+		Progression.XP.STYLE_PER_XP
+	), 12, RaceUi.COLOR_DIM)
+end
+
 -- Couleur et numéro de sa voiture.
 function RaceMenu:_livery(b: Builder)
 	local livery = self.Data.Livery
@@ -254,8 +310,18 @@ function RaceMenu:_livery(b: Builder)
 		self:_rebuild()
 	end
 	local colorValue = self:_stepper(b, "Couleur", Livery.NameOf(current), function(direction)
+		-- Couleur suivante parmi celles débloquées (Progression.luau).
 		local count = #Livery.COLORS
-		send({ Color = ((current.Color - 1 + direction) % count) + 1, Number = current.Number })
+		local color = current.Color
+		for _ = 1, count do
+			color = ((color - 1 + direction) % count) + 1
+			if Progression.IsUnlocked("Color", color, self.Data.Progress) then
+				break
+			end
+		end
+		local changed = table.clone(current)
+		changed.Color = color
+		send(changed)
 	end)
 	-- Pastille de la couleur, derrière le nom.
 	local swatch = Livery.ColorOf(current)
@@ -265,10 +331,11 @@ function RaceMenu:_livery(b: Builder)
 	RaceUi.Corner(colorValue, 6)
 	self:_stepper(b, "Numéro", "#" .. tostring(current.Number), function(direction)
 		local range = Livery.MAX_NUMBER - Livery.MIN_NUMBER + 1
-		local number = ((current.Number - Livery.MIN_NUMBER + direction) % range) + Livery.MIN_NUMBER
-		send({ Color = current.Color, Number = number })
+		local changed = table.clone(current)
+		changed.Number = ((current.Number - Livery.MIN_NUMBER + direction) % range) + Livery.MIN_NUMBER
+		send(changed)
 	end)
-	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Aperçu au GARAGE (zone violette du paddock).", 12, RaceUi.COLOR_DIM)
+	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, RaceUi.COLOR_DIM)
 end
 
 function RaceMenu:_buildOutside(b: Builder)
@@ -306,6 +373,7 @@ function RaceMenu:_buildOutside(b: Builder)
 	end
 
 	b:Section("Ta carrière")
+	self:_progress(b)
 	local stats = self.Data.Stats
 	if stats then
 		b:Text(string.format(
@@ -428,6 +496,11 @@ function RaceMenu:SetData(data: Data)
 	if (previousRace == nil) ~= (data.Race == nil) then
 		self.Status = ""
 	end
+	-- Menu fermé : inutile de tout reconstruire à chaque point de style.
+	if not self.Gui.Enabled then
+		self.Dirty = true
+		return
+	end
 	self:_rebuild()
 end
 
@@ -447,6 +520,10 @@ end
 
 function RaceMenu:SetOpen(open: boolean)
 	self.Gui.Enabled = open
+	if open and self.Dirty then
+		self.Dirty = false
+		self:_rebuild()
+	end
 	if open then
 		local viewport = workspace.CurrentCamera.ViewportSize
 		local scale = if self.TouchLayout then TOUCH_SCALE * math.clamp(viewport.Y / 500, 0.6, 1) else math.clamp(viewport.Y / 1080, 0.6, 1.2)

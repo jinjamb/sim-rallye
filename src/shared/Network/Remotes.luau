@@ -40,6 +40,11 @@ export type Remotes = {
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
 	SaveLivery: RemoteEvent,
+	-- Serveur -> Client : (snapshot, news?) progression (XP, niveau, licence, médailles) ;
+	-- news : niveau gagné, cosmétiques débloqués (Progression.luau)
+	Progress: RemoteEvent,
+	-- Client -> Serveur : (points, kind) points de style gagnés (dérapage, saut)
+	SubmitStyle: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
 
@@ -72,6 +77,8 @@ local RELIABLE = {
 	"Leaderboard",
 	"SaveSetup",
 	"SaveLivery",
+	"Progress",
+	"SubmitStyle",
 	"ReturnToPaddock",
 	"RaceAction",
 	"LobbyState",

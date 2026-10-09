@@ -47,7 +47,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local RecordService = require(script.Parent.RecordService)
-local LiveryPainter = require(script.Parent.LiveryPainter)
+local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 
 local CarService = {}
 
@@ -341,6 +341,16 @@ local function streamAround(player: Player, position: Vector3)
 	end
 end
 
+-- Niveau et licence du pilote, affichés au-dessus de sa voiture chez les
+-- autres (RemoteCars.luau). Progression.luau.
+local function tagProgress(car: Model, player: Player)
+	local snapshot = RecordService.GetProgress(player)
+	if snapshot then
+		car:SetAttribute("Level", snapshot.Level)
+		car:SetAttribute("Licence", snapshot.Licence)
+	end
+end
+
 --[[
 	(Re)crée la voiture du joueur. frame nil = au paddock. Le joueur en reprend
 	aussitôt le volant s'il est en vie (son personnage est soudé au châssis, il
@@ -370,6 +380,7 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car.Name = "Car_" .. player.UserId
 	car:SetAttribute("OwnerUserId", player.UserId)
 	car:SetAttribute("OwnerName", player.DisplayName)
+	tagProgress(car, player)
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
 	car:PivotTo(target)
@@ -433,6 +444,14 @@ function CarService.ReturnToPaddock(player: Player)
 	if root then
 		root.CFrame = CFrame.lookAt(position, position + Vector3.new(0, 0, -1))
 		root.AssemblyLinearVelocity = Vector3.zero
+	end
+end
+
+-- Niveau gagné : l'étiquette de la voiture suit.
+function CarService.RefreshProgress(player: Player, _snapshot: any)
+	local car = carByPlayer[player]
+	if car then
+		tagProgress(car, player)
 	end
 end
 

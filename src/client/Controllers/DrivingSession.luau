@@ -2,7 +2,8 @@
 --[[
 	DrivingSession.luau
 	Tout ce qui vit avec UNE voiture du joueur : physique, tableau de bord, son,
-	poussière, caméra de poursuite, et selon le contexte :
+	poussière, caméra de poursuite, points de style (dérapages, sauts), et
+	selon le contexte :
 		- au paddock (pas d'attribut RaceId) : chrono de la spéciale, copilote,
 		  fantôme ;
 		- en course de rallycross : contact avec les autres voitures de la course
@@ -29,6 +30,7 @@ local ChaseCamera = require(script.Parent.ChaseCamera)
 local CarEffects = require(script.Parent.CarEffects)
 local Copilot = require(script.Parent.Copilot)
 local Ghost = require(script.Parent.Ghost)
+local StylePoints = require(script.Parent.StylePoints)
 local CarContact = require(script.Parent.Parent.Race.CarContact)
 
 local DrivingSession = {}
@@ -55,6 +57,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Audio: CarAudio.CarAudio,
 	Effects: CarEffects.CarEffects,
 	ChaseCamera: ChaseCamera.ChaseCamera,
+	Style: StylePoints.StylePoints,
 	StageTimer: StageTimer.StageTimer?,
 	Copilot: Copilot.Copilot?,
 	Ghost: Ghost.Ghost?,
@@ -94,6 +97,15 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	self.Audio = CarAudio.new(self.Chassis, wheelAttachments, true)
 	self.Effects = CarEffects.new(self.Chassis, car.Wheels :: any)
 	self.ChaseCamera = ChaseCamera.new(car, context.Camera)
+	self.Style = StylePoints.new(car, context.PlayerGui)
+	-- Les points de style comptent en compétition : course, ou spéciale chronométrée.
+	self.Style.Counting = function()
+		if self.RaceId ~= nil then
+			return true
+		end
+		local timer = self.StageTimer
+		return timer ~= nil and timer.State == "Running"
+	end
 	if context.TouchLayout then
 		self.Dashboard:SetTouchLayout(true)
 	end
@@ -173,6 +185,7 @@ function DrivingSession:SetControl(granted: boolean)
 		self.ChaseCamera:Exit()
 	end
 	self.Dashboard:SetVisible(granted)
+	self.Style:SetVisible(granted)
 	self.Audio:SetActive(granted)
 	self.Effects:SetActive(granted)
 	local timer, copilot, ghost = self.StageTimer, self.Copilot, self.Ghost
@@ -253,6 +266,7 @@ function DrivingSession:Recover()
 	end
 	local timer = self.StageTimer
 	if timer then
+		self.Style:Reset()
 		timer:Recover()
 		return
 	end
@@ -263,6 +277,7 @@ function DrivingSession:Recover()
 	local circuit = Tracks.FindAt(self.Chassis.Position)
 	if circuit then
 		self.LastRecoverAt = now
+		self.Style:Reset()
 		self.Car:Teleport(circuit:RecoverFrame(self.Chassis.Position, self:_otherCarPositions()))
 	end
 end
@@ -271,6 +286,7 @@ end
 function DrivingSession:Restart()
 	local timer = self.StageTimer
 	if timer and self.HasControl then
+		self.Style:Reset(false)
 		timer:Restart()
 	end
 end
@@ -292,6 +308,9 @@ function DrivingSession:RenderUpdate(dt: number): CarAudio.AudioState?
 	end
 	local audioState = CarAudio.StateFromCar(self.Car)
 	self.Dashboard:Update(dt)
+	if not self.Parked then
+		self.Style:Update(dt)
+	end
 	self.Audio:Update(dt, audioState)
 	self.Effects:Update(dt)
 	local timer = self.StageTimer
@@ -331,6 +350,7 @@ function DrivingSession:Destroy()
 	end
 	self.HasControl = false
 	self.Dashboard:Destroy()
+	self.Style:Destroy()
 	self.Audio:Destroy()
 	self.Effects:Destroy()
 	local timer, copilot, ghost = self.StageTimer, self.Copilot, self.Ghost

@@ -4,7 +4,9 @@
 	Bandeau d'annonce, en haut au centre de l'écran : une médaille décrochée,
 	le fantôme qu'on affronte, un rival battu. Un titre en grand, une ligne en
 	dessous, un liseré de couleur ; il apparaît, reste, puis s'efface.
-	Un seul bandeau à la fois : le suivant remplace le précédent.
+	Un seul bandeau à la fois. Un petit bandeau (info) remplace le précédent ;
+	un GRAND bandeau (médaille, niveau, déblocage) n'est jamais coupé : ce qui
+	arrive pendant qu'il est affiché attend son tour (file d'attente).
 
 	Module unique (pas d'instance) : la spéciale (DrivingSession) comme le
 	rallycross (RaceClient) l'appellent directement.
@@ -33,6 +35,12 @@ type Parts = {
 
 local parts: Parts? = nil
 local token = 0
+-- Grand bandeau affiché jusqu'à cette heure (os.clock) : les suivants attendent.
+local bigUntil = 0
+type Pending = { Title: string, Subtitle: string?, Color: Color3, Duration: number, Big: boolean }
+local queue: { Pending } = {}
+local MAX_QUEUE = 4
+local display: (Pending) -> ()
 
 local function build(): Parts
 	local gui = Instance.new("ScreenGui")
@@ -102,9 +110,32 @@ end
 
 --[[
 	Affiche un bandeau pendant `duration` secondes.
-	`big` : le grand format, réservé aux médailles.
+	`big` : le grand format (médaille, niveau, déblocage), jamais coupé.
 ]]
 function Banner.Show(title: string, subtitle: string?, color: Color3, duration: number, big: boolean?)
+	local pending: Pending = { Title = title, Subtitle = subtitle, Color = color, Duration = duration, Big = big == true }
+	if os.clock() < bigUntil then
+		if #queue < MAX_QUEUE then
+			table.insert(queue, pending)
+		end
+		return
+	end
+	display(pending)
+end
+
+-- Le suivant de la file, s'il y en a un.
+local function nextInQueue()
+	local pending = table.remove(queue, 1)
+	if pending then
+		display(pending)
+	end
+end
+
+display = function(pending: Pending)
+	local title, subtitle, color, duration, big = pending.Title, pending.Subtitle, pending.Color, pending.Duration, pending.Big
+	if big then
+		bigUntil = os.clock() + duration
+	end
 	local current = parts
 	if not current then
 		current = build()
@@ -140,6 +171,10 @@ function Banner.Show(title: string, subtitle: string?, color: Color3, duration: 
 	task.delay(duration, function()
 		if mine ~= token then
 			return -- remplacé entre-temps
+		end
+		if #queue > 0 then
+			nextInQueue()
+			return
 		end
 		local info = TweenInfo.new(FADE_TIME)
 		TweenService:Create(p.Panel, info, { BackgroundTransparency = 1 }):Play()

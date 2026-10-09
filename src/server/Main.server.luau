@@ -24,6 +24,7 @@ local PaddockService = require(Services.PaddockService)
 
 -- Liens entre services (sans dépendance circulaire entre modules).
 RecordService.LiveryChanged = CarService.RefreshLivery
+RecordService.ProgressChanged = CarService.RefreshProgress
 RaceService.PodiumHandler = PaddockService.Podium :: any
 
 PaddockService.Start()
