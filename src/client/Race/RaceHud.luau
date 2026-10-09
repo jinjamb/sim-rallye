@@ -12,14 +12,17 @@
 		extinction est le départ. Les feux du portique, sur le circuit, sont
 		synchronisés (tools/build-circuit.luau les crée).
 		MESSAGES : tour bouclé, joker, pénalité, dernier tour, drapeau à damier.
-		RÉSULTATS : classement de la manche, temps, meilleurs tours, points.
+		RÉSULTATS : classement de la manche, temps, meilleurs tours, points ;
+		après la dernière manche, le bouton REVANCHE et le compte des votes.
 		SPECTATEUR : une fois arrivé, on peut suivre les pilotes encore en course.
 
 	Le chrono du tour est calculé avec l'heure du SERVEUR (début du tour envoyé
 	par RaceService) : il est identique pour tous et colle au temps officiel.
 ]]
 
+local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local RaceUi = require(script.Parent.RaceUi)
@@ -30,6 +33,7 @@ local RaceHud = {}
 RaceHud.__index = RaceHud
 
 export type Callbacks = {
+	Rematch: () -> (),
 	Spectate: () -> (),
 	SpectateNext: (number) -> (),
 	StopSpectate: () -> (),
@@ -73,6 +77,8 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 	ResultsRows: Frame,
 	ResultsFooter: TextLabel,
 	ResultsData: RaceUi.Results?,
+	RematchButton: TextButton,
+	RematchVoted: boolean,
 
 	SpectateBar: Frame,
 	SpectateLabel: TextLabel,
@@ -267,9 +273,22 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	rows.Parent = results
 	self.ResultsRows = rows
 	self.ResultsFooter = RaceUi.Label(results, "", 13, Enum.Font.GothamMedium, RaceUi.COLOR_DIM)
-	self.ResultsFooter.Position = UDim2.new(0, 16, 1, -28)
-	self.ResultsFooter.Size = UDim2.new(1, -32, 0, 18)
+	self.ResultsFooter.Position = UDim2.new(0, 16, 1, -34)
+	self.ResultsFooter.Size = UDim2.new(1, -220, 0, 28)
+	self.ResultsFooter.TextWrapped = true
 	self.ResultsData = nil
+	-- Revanche : la salle reste ouverte pour ceux qui votent (RaceService).
+	local rematch = RaceUi.Button(results, "REVANCHE", function()
+		callbacks.Rematch()
+	end)
+	rematch.AnchorPoint = Vector2.new(1, 1)
+	rematch.Position = UDim2.new(1, -16, 1, -10)
+	rematch.Size = UDim2.fromOffset(190, 34)
+	rematch.TextSize = 16
+	RaceUi.Primary(rematch)
+	rematch.Visible = false
+	self.RematchButton = rematch
+	self.RematchVoted = false
 
 	-- Salle d'attente (on est dans la zone d'un circuit, au paddock) -------------------
 	local banner = RaceUi.Panel(root, 0.15)
@@ -466,8 +485,21 @@ function RaceHud:ShowResults(results: RaceUi.Results)
 		label.Text = string.format("%d. %s%s%s%s%s%s", row.Position, name, padding, timeText, penalty, best, points)
 		label.TextColor3 = if row.UserId == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
 	end
-	self.Results.Size = UDim2.fromOffset(560, 80 + math.min(#results.Rows, MAX_ROWS) * 30)
+	self.Results.Size = UDim2.fromOffset(560, 96 + math.min(#results.Rows, MAX_ROWS) * 30)
 	self.Results.Visible = true
+	-- Dernière manche : on peut voter pour la revanche.
+	self.RematchVoted = false
+	self.RematchButton.Visible = results.Final
+	self.RematchButton.Text = "REVANCHE"
+	if results.Final and UserInputService.GamepadEnabled and not self.TouchLayout then
+		GuiService.SelectedObject = self.RematchButton
+	end
+end
+
+-- Votes pour la revanche : `voted` = son propre vote.
+function RaceHud:SetRematch(votes: number, members: number, voted: boolean)
+	self.RematchVoted = voted
+	self.RematchButton.Text = string.format("%s (%d/%d)", if voted then "REVANCHE ✓" else "REVANCHE", votes, members)
 end
 
 -- Cérémonie du podium (après le retour au paddock, hors course).
@@ -484,6 +516,10 @@ end
 function RaceHud:HideResults()
 	self.ResultsData = nil
 	self.Results.Visible = false
+	self.RematchButton.Visible = false
+	if GuiService.SelectedObject == self.RematchButton then
+		GuiService.SelectedObject = nil
+	end
 end
 
 function RaceHud:SetSpectate(state: SpectateState)
@@ -558,7 +594,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 			then string.format("départ dans <b>%d s</b>", math.max(0, math.ceil((race.AutoStartAt :: number) - serverNow)))
 			else string.format("en attente d'un %de pilote", race.MinPlayers)
 		self.LobbyLabel.Text = string.format(
-			'%s · %d/%d pilotes · %s\n<font size="13" color="#8288A0">%d tours · %s · C : options · sors de la zone pour quitter</font>',
+			'%s · %d/%d pilotes · %s\n<font size="13" color="#8288A0">%d tours · %s · C : menu (réglages, quitter)</font>',
 			name,
 			#race.Members,
 			race.MaxPlayers,
@@ -650,7 +686,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 	if results and self.Results.Visible then
 		local remaining = math.max(0, math.ceil(results.NextAt - serverNow))
 		self.ResultsFooter.Text = if results.Final
-			then string.format("Retour au paddock dans %d s", remaining)
+			then string.format("Retour au paddock dans %d s. REVANCHE : la salle reste ouverte pour ceux qui votent.", remaining)
 			else string.format("%s dans %d s — grille dans l'ordre de ce classement", results.NextRoundName or "Manche suivante", remaining)
 	end
 end

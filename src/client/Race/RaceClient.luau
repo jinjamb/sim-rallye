@@ -109,6 +109,9 @@ function RaceClient.new(options: Options): RaceClient
 		end
 	end)
 	self.Hud = RaceHud.new(options.PlayerGui, options.LocalUserId, {
+		Rematch = function()
+			Remotes.RaceAction:FireServer("Rematch", nil)
+		end,
 		Spectate = function()
 			self:StartSpectating()
 		end,
@@ -255,6 +258,12 @@ function RaceClient:_onEvent(kind: string, data: any)
 				true
 			)
 		end
+	elseif kind == "Rematch" then
+		local voters = if type(data.Voters) == "table" then data.Voters else {}
+		hud:SetRematch(tonumber(data.Votes) or 0, tonumber(data.Members) or 0, table.find(voters, self.Options.LocalUserId) ~= nil)
+	elseif kind == "RematchStart" then
+		hud:ShowMessage("REVANCHE ! Nouveau départ après le podium", RaceUi.COLOR_ACCENT, 4)
+		Banner.Show("REVANCHE", "Même circuit, mêmes réglages · départ dans 25 s (C : menu)", RaceUi.COLOR_ACCENT, 3.5)
 	elseif kind == "Overtake" then
 		local points = tonumber(data.Points) or 0
 		hud:ShowMessage(

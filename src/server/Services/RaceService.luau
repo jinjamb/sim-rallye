@@ -21,7 +21,12 @@
 		Results   : classement de la manche. Format "Qualif + Finale" : la finale
 		            suit, grille dans l'ordre de la qualification. Puis tout le monde
 		            revient au paddock À PIED, les trois premiers sur le podium ; la
-		            salle est dissoute (pour une revanche, on retourne sur la zone).
+		            salle est dissoute...
+		REVANCHE  : ... sauf si quelqu'un a voté REVANCHE à l'écran des
+		            résultats : la salle reste ouverte pour ceux qui ont voté,
+		            mêmes réglages, départ REMATCH_COUNTDOWN secondes plus tard
+		            (le temps du podium) ; les autres rentrent. Si tout le monde
+		            vote, on n'attend pas la fin des résultats.
 
 	INSTANCES : plusieurs courses peuvent tourner en même temps, même sur le même
 	circuit. Chaque client ne montre que les voitures de sa propre course
@@ -91,6 +96,8 @@ local LIGHT_INTERVAL = 0.7
 local LIGHTS_OUT_MIN, LIGHTS_OUT_MAX = 0.4, 1.8 -- délai aléatoire après le 5e feu
 local FINISH_WINDOW = 30 -- après le vainqueur, les autres ont 30 s pour finir
 local RESULTS_TIME = 12
+local REMATCH_COUNTDOWN = 25 -- départ de la revanche : podium, puis grille
+local PODIUM_DELAY = 3 -- le temps que chacun soit revenu au paddock
 
 local SAMPLE_INTERVAL = 0.1
 local LIVE_INTERVAL = 0.25
@@ -201,6 +208,9 @@ type Race = {
 	LastResults: { ResultRow }?,
 	GridOrder: { number }?, -- UserIds, pole en premier (manche suivante)
 	Pairs: { [string]: PairState }, -- dépassements, par paire de pilotes
+	-- Écran des résultats de la dernière manche : votes pour la revanche.
+	RematchOpen: boolean,
+	RematchVotes: { [number]: boolean },
 }
 
 local races: { [string]: Race } = {}
@@ -388,6 +398,7 @@ end
 
 local startRound: (Race, number) -> ()
 local updateAutoStart: (Race) -> ()
+local closeEvent: (Race) -> ()
 
 local function deleteRace(race: Race)
 	race.Token += 1
@@ -479,6 +490,9 @@ local function endRound(race: Race)
 	end
 	race.LastResults = rows
 	race.GridOrder = order
+	-- Dernière manche : on peut voter pour la revanche jusqu'à la fin des résultats.
+	race.RematchOpen = final
+	race.RematchVotes = {}
 
 	local nextAt = serverNow() + RESULTS_TIME
 	sendRaceState(race)
@@ -501,14 +515,10 @@ local function endRound(race: Race)
 		end
 		if not final and #race.Members > 0 then
 			startRound(race, race.Round + 1)
+		elseif final then
+			closeEvent(race)
 		else
-			local podium: { ResultRow } = {}
-			for _, row in ipairs(rows) do
-				if not row.Dnf and #podium < 3 then
-					table.insert(podium, row)
-				end
-			end
-			dissolve(race, if final then podium else nil)
+			dissolve(race, nil)
 		end
 	end)
 end
@@ -857,6 +867,8 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		LastResults = nil,
 		GridOrder = nil,
 		Pairs = {},
+		RematchOpen = false,
+		RematchVotes = {},
 	}
 	races[id] = race
 	table.insert(raceOrder, id)
@@ -974,6 +986,108 @@ function RaceService.PaddockRequest(player: Player): string
 		return "handled"
 	end
 	return "blocked"
+end
+
+--[[
+	Fin de l'épreuve (après la dernière manche) : revanche pour ceux qui l'ont
+	votée, sinon dissolution. Dans les deux cas, podium.
+]]
+closeEvent = function(race: Race)
+	race.Token += 1
+	race.RematchOpen = false
+	local podium: { ResultRow } = {}
+	for _, row in ipairs(race.LastResults or {}) do
+		if not row.Dnf and #podium < 3 then
+			table.insert(podium, row)
+		end
+	end
+	local voters: { [number]: boolean } = {}
+	local voterCount = 0
+	for _, member in ipairs(race.Members) do
+		if race.RematchVotes[member.UserId] and member.Player.Parent then
+			voters[member.UserId] = true
+			voterCount += 1
+		end
+	end
+	if voterCount == 0 then
+		dissolve(race, podium)
+		return
+	end
+
+	-- Ceux qui n'ont pas voté rentrent (et verront le podium quand même).
+	local everyone: { Player } = {}
+	for _, member in ipairs(table.clone(race.Members)) do
+		table.insert(everyone, member.Player)
+		if not voters[member.UserId] then
+			removeMember(race, member.Player)
+		end
+	end
+	-- Les autres reviennent au paddock à pied et attendent la revanche, inscrits
+	-- comme par le menu (ils peuvent se promener).
+	for _, member in ipairs(race.Members) do
+		member.Pinned = true
+		local runner = runnerOf(race, member.Player)
+		if not (runner and runner.Returned) then
+			local player = member.Player
+			task.spawn(function()
+				CarService.ReturnToPaddock(player)
+			end)
+		end
+	end
+	race.State = "Lobby"
+	race.Round = 1
+	race.RoundCount = if race.Format == "Event" then 2 else 1
+	race.Runners = {}
+	race.Pairs = {}
+	race.GridOrder = nil
+	race.LastResults = nil
+	race.StartTime = nil
+	race.LightsStart = nil
+	race.FinishDeadline = nil
+	race.Timeout = nil
+	race.RematchVotes = {}
+	scheduleStart(race, serverNow() + REMATCH_COUNTDOWN)
+	sendRaceState(race)
+	sendEvent(race, nil, "RematchStart", { Count = voterCount })
+	broadcastLobby()
+
+	if #podium > 0 then
+		task.delay(PODIUM_DELAY, function()
+			local present: { Player } = {}
+			for _, player in ipairs(everyone) do
+				if player.Parent then
+					table.insert(present, player)
+				end
+			end
+			RaceService.PodiumHandler(present, podium)
+		end)
+	end
+end
+
+-- Vote pour la revanche (écran des résultats de la dernière manche).
+local function onRematch(player: Player)
+	local race = raceOf[player]
+	if not race or race.State ~= "Results" or not race.RematchOpen then
+		return
+	end
+	-- Un second clic retire le vote.
+	if race.RematchVotes[player.UserId] then
+		race.RematchVotes[player.UserId] = nil
+	else
+		race.RematchVotes[player.UserId] = true
+	end
+	local votes, voters = 0, {}
+	for _, member in ipairs(race.Members) do
+		if race.RematchVotes[member.UserId] then
+			votes += 1
+			table.insert(voters, member.UserId)
+		end
+	end
+	sendEvent(race, nil, "Rematch", { Votes = votes, Members = #race.Members, Voters = voters })
+	-- Tout le monde est partant : inutile d'attendre la fin des résultats.
+	if votes == #race.Members then
+		closeEvent(race)
+	end
 end
 
 -- Arrivé, il préfère rester regarder la course plutôt que rentrer au paddock.
@@ -1259,6 +1373,8 @@ function RaceService.Start()
 			onSettings(player, payload)
 		elseif action == "Watch" then
 			onWatch(player)
+		elseif action == "Rematch" then
+			onRematch(player)
 		end
 	end)
 
