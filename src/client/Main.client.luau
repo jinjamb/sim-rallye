@@ -32,6 +32,8 @@ local RollReveal = require(script.Parent.UI.RollReveal)
 local Toast = require(script.Parent.UI.Toast)
 local Announcer = require(script.Parent.UI.Announcer)
 local XpEventNotice = require(script.Parent.UI.XpEventNotice)
+local CopilotVoice = require(script.Parent.Audio.CopilotVoice)
+local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
 local GhostChallenge = require(script.Parent.Stage.GhostChallenge)
 local Replay = require(script.Parent.Replay.Replay)
 local Banner = require(script.Parent.UI.Banner)
@@ -640,6 +642,9 @@ end)
 Remotes.Announce.OnClientEvent:Connect(Announcer.FromServer)
 XpEventNotice.Start()
 
+-- Voix du copilote : les phrases de la spéciale se préparent dès l'arrivée.
+task.defer(CopilotVoice.Prepare, Pacenotes.Generate(), 1)
+
 -- Trophées : la liste (menu, onglet CARRIÈRE), et l'annonce d'un nouveau.
 Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)
 	raceClient:SetAchievements(earned, news)
@@ -753,6 +758,10 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.CycleGhost()
 	elseif key == Enum.KeyCode.K then
 		actions.Horn()
+	elseif key == Enum.KeyCode.N then
+		local mode = CopilotVoice.Cycle(1)
+		Toast.Show("Voix du copilote : <b>" .. CopilotVoice.MODE_NAMES[mode] .. "</b>", Theme.BLUE)
+		raceClient:RefreshMenu()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		actions.ShiftUp()

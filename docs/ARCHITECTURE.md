@@ -78,7 +78,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Main.client.luau` | Point d'entrée. Il crée ce qui dure toute la partie et relie les modules entre eux.                   |
 | `Core/`    | Commandes (`InputManager`, `TouchControls`), avatar à pied (`CharacterControls`), journal console (`DebugLog`). |
 | `Physics/` | La voiture : roues, moteur, boîte, différentiels, aérodynamique.                                              |
-| `Audio/`   | Son des voitures (`CarAudio`) et identifiants audio (`SoundBank`).                                            |
+| `Audio/`   | Son des voitures (`CarAudio`), identifiants audio (`SoundBank`) et voix du copilote (`CopilotVoice` : mots enregistrés, sinon synthèse vocale). |
 | `Camera/`  | Caméra de poursuite et caméra de spectateur.                                                                  |
 | `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style. |
 | `Stage/`   | Ce qui sert sur la spéciale : chrono, copilote, fantômes, contrainte du défi.                                 |

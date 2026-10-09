@@ -221,6 +221,11 @@ function RaceClient:_refreshMenu()
 	})
 end
 
+-- Un réglage local affiché au menu a changé (voix du copilote...).
+function RaceClient:RefreshMenu()
+	self:_refreshMenu()
+end
+
 -- Livrée choisie dans le menu : sauvegardée (et repeinte par le serveur) après
 -- une courte pause, pour ne pas repeindre à chaque clic.
 function RaceClient:SaveLivery(livery: any)

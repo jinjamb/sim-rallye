@@ -10,8 +10,10 @@
 	disparaît quand on l'atteint.
 
 	AFFICHAGE : bandeau en haut au centre, la note immédiate en grand, les
-	suivantes déjà annoncées en dessous, plus petites. Texte seul pour l'instant :
-	pas de voix (il faudrait une série d'enregistrements de mots en français).
+	suivantes déjà annoncées en dessous, plus petites.
+
+	VOIX : chaque note affichée est aussi dite (CopilotVoice.luau : mots
+	enregistrés, sinon synthèse vocale), tant qu'elle n'est pas atteinte.
 
 	L'avancement le long du tracé est fourni par StageTimer (même calcul) ; un
 	bond d'avancement (retour au départ, remise en piste) resynchronise les notes.
@@ -21,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local CopilotVoice = require(script.Parent.Parent.Audio.CopilotVoice)
 
 local Copilot = {}
 Copilot.__index = Copilot
@@ -113,6 +116,7 @@ function Copilot:SetVisible(visible: boolean)
 end
 
 function Copilot:Destroy()
+	CopilotVoice.Stop()
 	self.Gui:Destroy()
 end
 
@@ -133,6 +137,18 @@ function Copilot:_resync(progress: number)
 			break
 		end
 	end
+	-- La voix se tait, et prépare d'abord les notes qui viennent.
+	CopilotVoice.Stop()
+	CopilotVoice.Prepare(self.Notes, self.NextIndex)
+end
+
+-- Dit la note, tant qu'elle n'est pas atteinte et que le copilote est affiché.
+function Copilot:_say(note: Pacenotes.Note)
+	CopilotVoice.Say(note, function()
+		local progress = self.LastProgress
+		local shown: boolean = self.Gui.Enabled == true
+		return shown and (progress or math.huge) < note.Distance
+	end)
 end
 
 local function lineText(note: Pacenotes.Note, line: number): string
@@ -169,6 +185,7 @@ function Copilot:Update(_dt: number, progress: number)
 	local lead = math.clamp(speed * LEAD_TIME, MIN_LEAD, MAX_LEAD)
 	while self.NextIndex <= #self.Notes and self.Notes[self.NextIndex].Distance - progress <= lead do
 		table.insert(self.Called, self.NextIndex)
+		self:_say(self.Notes[self.NextIndex])
 		self.NextIndex += 1
 	end
 
