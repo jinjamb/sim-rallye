@@ -33,6 +33,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
+local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
@@ -194,7 +195,21 @@ local function applyGrant(profile: Profile, grant: Products.Grant)
 	if grant.Item then
 		profile.Owned[grant.Item] = true
 	end
+	if grant.PassPremium then
+		-- Voie premium de la saison en cours (une saison passée repart de zéro).
+		local season = Pass.Current()
+		local state = profile.Pass
+		if not state or state.Key ~= season.Key then
+			state = { Key = season.Key, Xp = 0, Premium = false, FreeUpTo = 0, PremiumUpTo = 0 }
+			profile.Pass = state
+		end
+		(state :: ProfileSchema.PassState).Premium = true
+	end
 end
+
+-- Appelée quand la voie premium du Rallye Pass vient d'être achetée (joueur
+-- connecté) : PassService donne les récompenses premium déjà atteintes.
+EconomyService.PassPremiumGranted = function(_player: Player) end
 
 local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 	local product = Products.ByProductId(receipt.ProductId)
@@ -218,6 +233,9 @@ local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 		if player and profile then
 			applyGrant(profile, grant)
 			sendWallet(player, { Purchased = product.Key })
+			if grant.PassPremium then
+				EconomyService.PassPremiumGranted(player)
+			end
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -245,6 +263,9 @@ local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 		sendWallet(player, { Purchased = product.Key })
 		if grant.Item then
 			EconomyService.EquippedChanged(player)
+		end
+		if grant.PassPremium then
+			EconomyService.PassPremiumGranted(player)
 		end
 	end
 	return Enum.ProductPurchaseDecision.PurchaseGranted

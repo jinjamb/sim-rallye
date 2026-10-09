@@ -26,6 +26,7 @@ local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local EconomyService = require(script.Parent.EconomyService)
+local PassService = require(script.Parent.PassService)
 
 local ProgressService = {}
 
@@ -115,6 +116,8 @@ function ProgressService.Push(player: Player, announce: boolean)
 	Remotes.Progress:FireClient(player, snapshot, news)
 	if announce and previous then
 		rewardTransition(player, previous, snapshot)
+		-- L'XP gagnée compte aussi pour le Rallye Pass de la saison.
+		PassService.AddXp(player, snapshot.Xp - previous.Xp)
 	end
 	if not previous or previous.Level ~= snapshot.Level then
 		ProgressService.Changed(player, snapshot)

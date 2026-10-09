@@ -71,6 +71,15 @@ export type Profile = {
 	Receipts: { string }, -- derniers achats Robux accordés (jamais deux fois)
 	Rolls: number, -- tirages disponibles (Rolls.luau)
 	RollPity: number, -- tirages depuis le dernier objet Usine ou plus (garantie)
+	Pass: PassState?, -- Rallye Pass de la saison en cours (Pass.luau)
+}
+
+export type PassState = {
+	Key: string, -- saison ("s1")
+	Xp: number, -- XP gagnée pendant la saison
+	Premium: boolean, -- voie premium achetée pour cette saison
+	FreeUpTo: number, -- dernier palier dont la récompense gratuite a été donnée
+	PremiumUpTo: number, -- idem, voie premium
 }
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
@@ -101,6 +110,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		Receipts = {},
 		Rolls = 0,
 		RollPity = 0,
+		Pass = nil,
 	}
 end
 
@@ -183,6 +193,16 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.Credits = count(data.Credits)
 	profile.Rolls = count(data.Rolls)
 	profile.RollPity = count(data.RollPity)
+	local pass = data.Pass
+	if type(pass) == "table" and type(pass.Key) == "string" then
+		profile.Pass = {
+			Key = pass.Key,
+			Xp = count(pass.Xp),
+			Premium = pass.Premium == true,
+			FreeUpTo = count(pass.FreeUpTo),
+			PremiumUpTo = count(pass.PremiumUpTo),
+		}
+	end
 	-- Objets : gardés même s'ils ont quitté le catalogue (un achat ne se perd pas).
 	if type(data.Owned) == "table" then
 		for id, owned in pairs(data.Owned) do

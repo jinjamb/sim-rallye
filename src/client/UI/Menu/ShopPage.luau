@@ -74,6 +74,9 @@ local function robuxButton(ctx: Context, row: Frame, product: Products.Product):
 	return button
 end
 
+ShopPage.RobuxButton = robuxButton
+ShopPage.BUTTON_WIDTH = BUTTON_WIDTH
+
 -- Solde, et comment gagner des crédits.
 function ShopPage.Balance(ctx: Context, b: Builder)
 	local wallet = ctx.Data.Wallet

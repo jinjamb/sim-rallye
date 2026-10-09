@@ -41,6 +41,7 @@ export type Data = {
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
 	Wallet: Wallet?,
+	Pass: any, -- Rallye Pass { Key, Name, EndsAt, Xp, Premium } (PassService)
 }
 
 -- Solde et objets (EconomyService).

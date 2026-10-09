@@ -633,6 +633,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	end
 end)
 
+-- Rallye Pass : saison, XP, paliers atteints.
+Remotes.PassState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetPass(state, news)
+end)
+
 -- Tirage : la mise en scène de l'objet tiré par le serveur.
 local rollReveal = RollReveal.new(playerGui)
 Remotes.RollResult.OnClientEvent:Connect(function(result: any)

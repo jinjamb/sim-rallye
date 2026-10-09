@@ -71,6 +71,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Livery: any,
 	LiverySaveToken: number,
 	Wallet: MenuKit.Wallet?, -- crédits, objets (EconomyService)
+	Pass: any, -- Rallye Pass (PassService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
 	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
@@ -103,6 +104,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Livery = nil
 	self.LiverySaveToken = 0
 	self.Wallet = nil
+	self.Pass = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
@@ -201,6 +203,7 @@ function RaceClient:_refreshMenu()
 		Laps = self.LapBests,
 		Livery = self.Livery,
 		Wallet = self.Wallet,
+		Pass = self.Pass,
 	})
 end
 
@@ -467,6 +470,23 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	if type(news.Error) == "string" then
 		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
 		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+-- Rallye Pass : saison, XP, premium ; un palier atteint s'annonce.
+function RaceClient:SetPass(state: any, news: any)
+	if type(state) ~= "table" or type(state.Xp) ~= "number" then
+		return
+	end
+	self.Pass = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.TierReached) == "number" then
+		Banner.Show("RALLYE PASS", "Palier " .. tostring(news.TierReached) .. " atteint : récompense reçue", Theme.ACCENT, 3.5, true)
+	elseif news.Premium then
+		Banner.Show("RALLYE PASS PREMIUM", "Les récompenses premium des paliers atteints sont à toi", Theme.ACCENT, 4, true)
 	end
 end
 
