@@ -40,12 +40,14 @@ function StyleService.Add(player: Player, points: number)
 	end
 end
 
--- Défis du jour : points de style, combinaison, multiplicateur, saut.
+-- Défis du jour (points, combinaison, multiplicateur, saut) et roi du drift.
 local function dailyEvents(player: Player, kind: string, accepted: number, detail: any)
 	ChallengeService.DailyEvent(player, "Style", accepted)
 	local info = if type(detail) == "table" then detail else {}
 	if kind == "Drift" then
 		ChallengeService.DailyEvent(player, "DriftCombo", accepted)
+		-- Roi du drift : la meilleure combinaison de la semaine.
+		ChallengeService.DriftCombo(player, accepted)
 		local multiplier = info.Multiplier
 		if type(multiplier) == "number" and multiplier == multiplier then
 			ChallengeService.DailyEvent(player, "DriftMultiplier", math.clamp(math.floor(multiplier), 1, 5))

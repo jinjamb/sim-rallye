@@ -42,6 +42,7 @@ export type Data = {
 	Livery: Livery.Livery?,
 	Wallet: Wallet?,
 	Pass: any, -- Rallye Pass { Key, Name, EndsAt, Xp, Premium } (PassService)
+	Drift: any, -- Roi du drift { Key, EndsAt, Entries = { UserId, Name, Score }, Mine } (ChallengeService)
 }
 
 -- Solde et objets (EconomyService).

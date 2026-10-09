@@ -12,7 +12,7 @@
 		JOUER      PlayPage (spéciale et ralenti, rallycross, essais libres),
 		           SchoolPage (école de pilotage, en tête pour un débutant)
 		           et un rappel des défis ;
-		DÉFIS      ChallengesPage (défi de la semaine, défis du jour) ;
+		DÉFIS      ChallengesPage (défi de la semaine, défis du jour, roi du drift) ;
 		PASS       PassPage (Rallye Pass : paliers, récompenses, premium) ;
 		BOUTIQUE   ShopPage (solde, crédits, objets) ;
 		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière).
@@ -228,6 +228,7 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 	if tab == "Challenges" then
 		ChallengesPage.Weekly(ctx, b)
 		ChallengesPage.Daily(ctx, b)
+		ChallengesPage.DriftKing(ctx, b)
 	elseif tab == "Pass" then
 		PassPage.Pass(ctx, b)
 	elseif tab == "Shop" then

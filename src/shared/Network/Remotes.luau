@@ -38,6 +38,8 @@ export type Remotes = {
 	Leaderboard: RemoteEvent,
 	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
 	WeeklyBoard: RemoteEvent,
+	-- Serveur -> Client : (board) Roi du drift : meilleures combinaisons de la semaine, la sienne
+	DriftBoard: RemoteEvent,
 	-- Client -> Serveur : (classId, setup) réglages d'une catégorie de voiture à sauvegarder
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
@@ -109,6 +111,7 @@ local RELIABLE = {
 	"GhostOpponent",
 	"Leaderboard",
 	"WeeklyBoard",
+	"DriftBoard",
 	"SaveSetup",
 	"SaveLivery",
 	"Progress",

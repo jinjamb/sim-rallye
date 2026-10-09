@@ -72,6 +72,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	LiverySaveToken: number,
 	Wallet: MenuKit.Wallet?, -- crédits, objets (EconomyService)
 	Pass: any, -- Rallye Pass (PassService)
+	Drift: any, -- Roi du drift (ChallengeService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
 	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
@@ -105,6 +106,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.LiverySaveToken = 0
 	self.Wallet = nil
 	self.Pass = nil
+	self.Drift = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
@@ -204,6 +206,7 @@ function RaceClient:_refreshMenu()
 		Livery = self.Livery,
 		Wallet = self.Wallet,
 		Pass = self.Pass,
+		Drift = self.Drift,
 	})
 end
 
@@ -470,6 +473,14 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	if type(news.Error) == "string" then
 		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
 		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+-- Roi du drift : meilleures combinaisons de la semaine (menu, DÉFIS).
+function RaceClient:SetDrift(board: any)
+	if type(board) == "table" and type(board.Entries) == "table" then
+		self.Drift = board
+		self:_refreshMenu()
 	end
 end
 

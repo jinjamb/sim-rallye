@@ -633,6 +633,16 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	end
 end)
 
+-- Roi du drift : le classement (menu), et le titre au-dessus de la voiture du n°1.
+Remotes.DriftBoard.OnClientEvent:Connect(function(board: any)
+	if type(board) ~= "table" or type(board.Entries) ~= "table" then
+		return
+	end
+	raceClient:SetDrift(board)
+	local first = board.Entries[1]
+	remoteCars:SetDriftKing(if type(first) == "table" and type(first.UserId) == "number" then first.UserId else nil)
+end)
+
 -- Rallye Pass : saison, XP, paliers atteints.
 Remotes.PassState.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetPass(state, news)

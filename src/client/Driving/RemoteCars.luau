@@ -64,6 +64,9 @@ type View = {
 	Visible: boolean,
 }
 
+-- UserId du roi du drift de la semaine (ChallengeService), affiché sur sa voiture.
+local driftKing: number? = nil
+
 local function escape(text: string): string
 	return (string.gsub(string.gsub(string.gsub(text, "&", "&amp;"), "<", "&lt;"), ">", "&gt;"))
 end
@@ -79,6 +82,10 @@ local function nameText(model: Model): string
 	local licence = Progression.LICENCES[tonumber(model:GetAttribute("Licence")) or 0]
 	if licence and type(level) == "number" then
 		text ..= string.format(' <font color="%s">· %s %d</font>', Medals.Hex(licence.Color), licence.Short, level)
+	end
+	-- Roi du drift de la semaine : son titre.
+	if model:GetAttribute("OwnerUserId") == driftKing then
+		text ..= ' <font color="#ffcc00">· ★ ROI DU DRIFT</font>'
 	end
 	-- Sa catégorie de voiture (CarClasses.luau), en discret.
 	local class = model:GetAttribute("CarClass")
@@ -257,6 +264,10 @@ end
 
 -- Course de sa propre voiture (nil = paddock) : seules les voitures du même
 -- monde restent visibles.
+function RemoteCars:SetDriftKing(userId: number?)
+	driftKing = userId
+end
+
 function RemoteCars:SetLocalRaceId(raceId: string?)
 	if raceId == self.LocalRaceId then
 		return

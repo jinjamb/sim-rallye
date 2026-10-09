@@ -131,6 +131,32 @@ function ChallengesPage.Daily(ctx: Context, b: Builder)
 	), 12, Widgets.COLOR_DIM)
 end
 
+-- Roi du drift : les meilleures combinaisons de la semaine, et la sienne.
+function ChallengesPage.DriftKing(ctx: Context, b: Builder)
+	local board: any = ctx.Data.Drift
+	if not board then
+		return
+	end
+	b:Section("Roi du drift")
+	b:Text("La plus grosse combinaison de dérapages de la semaine, en spéciale chronométrée ou en course. Le n°1 porte le titre au-dessus de sa voiture. Remis à zéro le lundi.", 13, Widgets.COLOR_DIM)
+	local entries = board.Entries or {}
+	if #entries == 0 then
+		b:Text("Personne n'a encore le titre cette semaine : à toi !", 13, Widgets.COLOR_GREEN)
+	end
+	for index = 1, math.min(5, #entries) do
+		local entry = entries[index]
+		local color = if entry.UserId == ctx.LocalUserId then Widgets.COLOR_ACCENT elseif index == 1 then Theme.ACCENT else Widgets.COLOR_TEXT
+		local label = b:Text(string.format("   %s%d. %s  %s pts", if index == 1 then "★ " else "", index, entry.Name, Format.Thousands(entry.Score)), 14, color)
+		label.Font = Enum.Font.RobotoMono
+	end
+	local mine: number? = board.Mine
+	b:Text(
+		if mine then "Ta meilleure combinaison cette semaine : " .. Format.Thousands(mine) .. " pts" else "Pas encore de combinaison cette semaine.",
+		13,
+		if mine then Widgets.COLOR_TEXT else Widgets.COLOR_DIM
+	)
+end
+
 -- Rappel dans l'onglet JOUER : où en sont les défis, et un bouton pour y aller.
 function ChallengesPage.Summary(ctx: Context, b: Builder)
 	local parts = {}

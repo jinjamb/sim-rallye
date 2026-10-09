@@ -16,6 +16,12 @@
 	temps de la semaine du profil -- pas dans le record habituel, ni son
 	fantôme, ni ses médailles. La première fois de la semaine, il compte pour
 	l'XP (WeeklyCompleted).
+
+	ROI DU DRIFT : la meilleure combinaison de dérapages de la semaine
+	(points de style d'une combinaison, acceptés par StyleService : en
+	compétition seulement, à débit plausible). Un classement par semaine,
+	remis à zéro le lundi comme le défi ; son n°1 porte le titre (affiché
+	au-dessus de sa voiture).
 ]]
 
 local Players = game:GetService("Players")
@@ -35,6 +41,8 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local ChallengeService = {}
 
 local WEEKLY_STORE_PREFIX = "RallyWeekly_" .. ProfileSchema.STAGE_ID .. "_"
+local DRIFT_STORE_PREFIX = "RallyDrift_"
+local DRIFT_BOARD_SIZE = 10
 local BOARD_SIZE = 10
 local REFRESH_INTERVAL = 60 -- secondes (et au passage du lundi : nouvelle semaine)
 
@@ -232,6 +240,81 @@ function ChallengeService.WeeklyFinish(player: Player, ms: number, key: string):
 end
 
 --------------------------------------------------------------------------------
+-- Roi du drift
+--------------------------------------------------------------------------------
+
+local sessionDrift: { [string]: { [number]: number } } = {} -- par clé de semaine
+local driftEntries: { Boards.ScoreEntry } = {}
+local driftKey = ""
+
+local function driftStore(key: string): OrderedDataStore?
+	return Stores.Ordered(DRIFT_STORE_PREFIX .. key)
+end
+
+local function sendDrift(player: Player)
+	local profile = ProfileStore.Get(player)
+	if not profile or not player.Parent then
+		return
+	end
+	local week = Weekly.Current()
+	local mine = profile.DriftKing
+	Remotes.DriftBoard:FireClient(player, {
+		Key = week.Key,
+		EndsAt = week.EndsAt,
+		Entries = if driftKey == week.Key then driftEntries else {},
+		Mine = if mine and mine.Key == week.Key then mine.Score else nil,
+	})
+end
+
+local function refreshDrift()
+	local week = Weekly.Current()
+	local session = sessionDrift[week.Key] or {}
+	driftEntries = Boards.MergeScores(driftStore(week.Key), session, DRIFT_BOARD_SIZE, "roi du drift")
+	driftKey = week.Key
+	for _, player in ipairs(Players:GetPlayers()) do
+		sendDrift(player)
+	end
+end
+
+local scheduleDriftRefresh = Boards.Debounced(3, refreshDrift)
+
+-- Une combinaison de dérapages acceptée (StyleService) : la meilleure de la semaine ?
+function ChallengeService.DriftCombo(player: Player, score: number)
+	local profile = ProfileStore.Get(player)
+	if not profile or score <= 0 then
+		return
+	end
+	local week = Weekly.Current()
+	local current = profile.DriftKing
+	if current and current.Key == week.Key and current.Score >= score then
+		return
+	end
+	local key = week.Key
+	local best = math.floor(score)
+	profile.DriftKing = { Key = key, Score = best }
+	ProfileStore.Defer(player, "DriftKing", function(stored)
+		local old = stored.DriftKing
+		if not old or old.Key ~= key or old.Score < best then
+			stored.DriftKing = { Key = key, Score = best }
+		end
+	end)
+	local session = sessionDrift[key]
+	if not session then
+		session = {}
+		sessionDrift[key] = session
+	end
+	session[player.UserId] = best
+	Boards.SubmitHighest(driftStore(key), player.UserId, best, "roi du drift")
+	scheduleDriftRefresh()
+end
+
+-- Le roi du drift de la semaine (UserId), s'il y en a un.
+function ChallengeService.GetDriftKing(): number?
+	local first = driftEntries[1]
+	return if first and driftKey == Weekly.Current().Key then first.UserId else nil
+end
+
+--------------------------------------------------------------------------------
 -- Démarrage
 --------------------------------------------------------------------------------
 
@@ -239,10 +322,12 @@ function ChallengeService.Start()
 	ProfileStore.OnLoaded(function(player)
 		ChallengeService.SendWeekly(player)
 		sendDaily(player)
+		sendDrift(player)
 	end)
 	task.spawn(function()
 		while true do
 			refreshWeekly()
+			refreshDrift()
 			task.wait(REFRESH_INTERVAL)
 		end
 	end)
