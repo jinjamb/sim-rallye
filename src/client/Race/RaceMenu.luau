@@ -9,6 +9,8 @@
 		- DÉFI DE LA SEMAINE : la contrainte, le temps qu'il reste, le podium
 		  de la semaine, son temps, et RELEVER LE DÉFI ;
 		- DÉFIS DU JOUR : les trois objectifs, leur progression, l'XP ;
+		- ÉCOLE DE PILOTAGE : les leçons et leur médaille (en tête du menu
+		  pour un débutant) ;
 		- JOUER : lancer une spéciale ; une course de rallycross (un bouton par
 		  circuit : on ouvre la salle d'attente, ou on rejoint celle qui attend) ;
 		  des essais libres ; retour au paddock ;
@@ -34,6 +36,7 @@ local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
+local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
 local RaceUi = require(script.Parent.RaceUi)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -513,8 +516,46 @@ function RaceMenu:_daily(b: Builder)
 	), 12, RaceUi.COLOR_DIM)
 end
 
+-- École de pilotage : une ligne par leçon, sa médaille, le bouton.
+function RaceMenu:_school(b: Builder)
+	local width = PANEL_WIDTH - 32
+	local progress = self.Data.Progress
+	local bests: { [string]: number } = if progress and progress.Lessons then progress.Lessons else {}
+	b:Section("École de pilotage")
+	b:Text("Quatre leçons courtes sur la spéciale, notées de bronze à platine. Le meilleur moyen de progresser (et de l'XP).", 13, RaceUi.COLOR_DIM)
+	for _, lesson in ipairs(Lessons.LIST) do
+		local row = b:Row(40)
+		local name = RaceUi.Label(row, string.upper(lesson.Name), 16, Enum.Font.GothamBlack)
+		name.Position = UDim2.fromOffset(0, 0)
+		name.Size = UDim2.new(1, -150, 0, 20)
+		local goal = RaceUi.Label(row, lesson.Goal, 12, Enum.Font.GothamMedium, RaceUi.COLOR_DIM)
+		goal.Position = UDim2.fromOffset(0, 21)
+		goal.Size = UDim2.new(1, -150, 0, 16)
+		goal.TextTruncate = Enum.TextTruncate.AtEnd
+		local tier = bests[lesson.Id] or 0
+		local medal = Medals.Get(tier)
+		if medal then
+			local tag = Theme.Tag(row, medal.Short, medal.Color, Theme.ON_ACCENT, 12)
+			tag.AnchorPoint = Vector2.new(1, 0)
+			tag.Position = UDim2.new(1, -112, 0, 9)
+		end
+		local button = self:_button(row, if tier > 0 then "REFAIRE" else "LEÇON", width - 104, 104, function()
+			self.Action("Play", { Mode = "Lesson", TrackId = lesson.Id })
+		end)
+		if tier == 0 then
+			RaceUi.Primary(button)
+		end
+	end
+end
+
 function RaceMenu:_buildOutside(b: Builder)
 	local width = PANEL_WIDTH - 32
+	-- Débutant : l'école d'abord.
+	local progress = self.Data.Progress
+	local beginner = progress ~= nil and progress.Level <= 3
+	if beginner then
+		self:_school(b)
+	end
 	self:_weekly(b)
 	self:_daily(b)
 
@@ -531,6 +572,10 @@ function RaceMenu:_buildOutside(b: Builder)
 	b:Text("Seul ou jusqu'à 6 pilotes. Le départ est donné 20 s après le premier inscrit : les autres peuvent rejoindre d'ici là, et l'hôte peut lancer sans attendre. Joker obligatoire une fois par course.", 13, RaceUi.COLOR_DIM)
 	for _, id in ipairs(Tracks.List()) do
 		self:_circuitRow(b, id)
+	end
+
+	if not beginner then
+		self:_school(b)
 	end
 
 	b:Section("Et aussi")

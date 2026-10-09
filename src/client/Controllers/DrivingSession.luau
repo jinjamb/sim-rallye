@@ -7,6 +7,8 @@
 		- au paddock (pas d'attribut RaceId) : chrono de la spéciale, copilote,
 		  fantôme ; pour le défi de la semaine (attribut Weekly), la contrainte
 		  (StageModifier), sans fantôme ;
+		- à l'école de pilotage (attribut Lesson) : la leçon (DrivingSchool),
+		  sans chrono de spéciale ni fantôme ;
 		- en course de rallycross : contact avec les autres voitures de la course
 		  (si la course l'active), remise en piste sur le circuit.
 
@@ -33,6 +35,8 @@ local Copilot = require(script.Parent.Copilot)
 local Ghost = require(script.Parent.Ghost)
 local StylePoints = require(script.Parent.StylePoints)
 local StageModifier = require(script.Parent.StageModifier)
+local DrivingSchool = require(script.Parent.DrivingSchool)
+local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local CarContact = require(script.Parent.Parent.Race.CarContact)
 
@@ -51,6 +55,8 @@ export type Context = {
 	GhostHidden: boolean,
 	-- Défi de la semaine : son meilleur temps de la semaine.
 	WeeklyBestMs: number?,
+	-- École de pilotage : meilleure médaille (0 à 4) par leçon.
+	LessonBests: { [string]: number },
 }
 
 export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
@@ -70,6 +76,8 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	-- Défi de la semaine (clé de semaine) et de quoi défaire sa contrainte.
 	Weekly: string?,
 	UndoModifier: (() -> ())?,
+	-- Leçon de l'école de pilotage en cours.
+	School: DrivingSchool.DrivingSchool?,
 	HasControl: boolean,
 	GhostUploadPending: boolean,
 	LastRecoverAt: number,
@@ -94,6 +102,9 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local weekly = model:GetAttribute("Weekly")
 	self.Weekly = if type(weekly) == "string" and self.RaceId == nil then weekly else nil
 	self.UndoModifier = nil
+	self.School = nil
+	local lessonId = model:GetAttribute("Lesson")
+	local lesson = if self.RaceId == nil and type(lessonId) == "string" then Lessons.Get(lessonId) else nil
 
 	local car = CarClass.new(self.Chassis)
 	car:ApplySetup(context.Setup)
@@ -121,7 +132,14 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 		self.Dashboard:SetTouchLayout(true)
 	end
 
-	if self.RaceId == nil then
+	if lesson then
+		-- École de pilotage : la leçon seulement (pas de chrono de spéciale).
+		local school = DrivingSchool.new(car, context.PlayerGui, lesson, context.LessonBests[lesson.Id] or 0)
+		if context.TouchLayout then
+			school:SetTouchLayout(true)
+		end
+		self.School = school
+	elseif self.RaceId == nil then
 		-- Au paddock : la spéciale, son chrono, son copilote, son fantôme.
 		local timer = StageTimer.new(car, context.PlayerGui)
 		local copilot = Copilot.new(car, context.PlayerGui)
@@ -210,6 +228,10 @@ function DrivingSession:SetControl(granted: boolean)
 	self.Audio:SetActive(granted)
 	self.Effects:SetActive(granted)
 	local timer, copilot, ghost = self.StageTimer, self.Copilot, self.Ghost
+	local school = self.School
+	if school then
+		school:SetVisible(granted)
+	end
 	if timer then
 		timer:SetVisible(granted)
 	end
@@ -286,6 +308,12 @@ function DrivingSession:Recover()
 	if not self.HasControl or self.Car.Held then
 		return
 	end
+	local school = self.School
+	if school then
+		self.Style:Reset()
+		school:Recover()
+		return
+	end
 	local timer = self.StageTimer
 	if timer then
 		self.Style:Reset()
@@ -308,6 +336,12 @@ end
 
 -- Retour au départ de la spéciale (au paddock seulement).
 function DrivingSession:Restart()
+	local school = self.School
+	if school and self.HasControl then
+		self.Style:Reset(false)
+		school:Restart()
+		return
+	end
 	local timer = self.StageTimer
 	if timer and self.HasControl then
 		self.Style:Reset(false)
@@ -337,6 +371,10 @@ function DrivingSession:RenderUpdate(dt: number): CarAudio.AudioState?
 	end
 	self.Audio:Update(dt, audioState)
 	self.Effects:Update(dt)
+	local school = self.School
+	if school then
+		school:Update(dt)
+	end
 	local timer = self.StageTimer
 	if timer then
 		timer:Update(dt)
@@ -382,6 +420,11 @@ function DrivingSession:Destroy()
 	self.Style:Destroy()
 	self.Audio:Destroy()
 	self.Effects:Destroy()
+	local school: DrivingSchool.DrivingSchool? = self.School
+	self.School = nil
+	if school then
+		school:Destroy()
+	end
 	local timer, copilot, ghost = self.StageTimer, self.Copilot, self.Ghost
 	if timer then
 		timer:Destroy()

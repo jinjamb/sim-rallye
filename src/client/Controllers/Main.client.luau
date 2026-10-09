@@ -411,6 +411,12 @@ local function endSession()
 	applyDrivingUi()
 end
 
+-- Médailles d'école déjà obtenues (progression envoyée par le serveur).
+local function lessonBests(): { [string]: number }
+	local progress = raceClient:GetProgress()
+	return if progress and progress.Lessons then progress.Lessons else {}
+end
+
 local function startSession(model: Model)
 	endSession()
 	sessionToken += 1
@@ -423,6 +429,7 @@ local function startSession(model: Model)
 		StageBestMs = stageBestMs,
 		StageGhost = stageGhost,
 		WeeklyBestMs = if weeklyBoard then weeklyBoard.Mine else nil,
+		LessonBests = lessonBests(),
 		GhostOpponent = ghostChallenge.Opponent,
 		GhostHidden = ghostChallenge:IsHidden(),
 	})

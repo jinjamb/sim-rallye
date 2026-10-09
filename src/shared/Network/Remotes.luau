@@ -52,6 +52,8 @@ export type Remotes = {
 	Recovered: RemoteEvent,
 	-- Serveur -> Client : (state, news?) défis du jour : objectifs, progression ; news : réussis
 	Daily: RemoteEvent,
+	-- Client -> Serveur : (lessonId, tier) médaille obtenue à une leçon de l'école de pilotage
+	LessonResult: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
 	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
@@ -92,6 +94,7 @@ local RELIABLE = {
 	"SubmitStyle",
 	"Recovered",
 	"Daily",
+	"LessonResult",
 	"ReturnToPaddock",
 	"PlayMode",
 	"RaceAction",

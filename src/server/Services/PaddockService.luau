@@ -22,6 +22,8 @@
 		- Lancer une spéciale : la voiture est posée sur la ligne de départ ;
 		- Défi de la semaine : pareil, avec la contrainte de la semaine
 		  (Weekly.luau ; attributs Weekly et Modifier sur la voiture) ;
+		- École de pilotage : la voiture au départ de la leçon (Lessons.luau ;
+		  attribut Lesson) ;
 		- Rallycross : rejoindre (ou ouvrir) la salle d'attente d'un circuit ;
 		  on y reste sans avoir à se tenir dans la zone ;
 		- Essais libres : la voiture à sa place au paddock.
@@ -45,6 +47,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
+local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
@@ -390,6 +393,10 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		if RaceService.GetLobbyTrack(player) == trackId then
 			return -- déjà dans cette salle d'attente
 		end
+	elseif mode == "Lesson" then
+		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
+			return
+		end
 	elseif mode ~= "Stage" and mode ~= "Practice" and mode ~= "Weekly" then
 		return
 	end
@@ -402,6 +409,9 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 
 	if mode == "Stage" then
 		CarService.Spawn(player, StageTrack.StartFrame(), nil)
+	elseif mode == "Lesson" then
+		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
+		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id } })
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
 		CarService.Spawn(player, StageTrack.StartFrame(), {

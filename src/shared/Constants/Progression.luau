@@ -25,6 +25,7 @@
 ]]
 
 local Tracks = require(script.Parent.Parent.Tracks.Tracks)
+local Lessons = require(script.Parent.Lessons)
 
 local Progression = {}
 
@@ -97,6 +98,7 @@ export type Record = {
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
 	Medals: { [string]: number },
+	Lessons: { [string]: number }, -- médaille (0 à 4) par leçon de l'école (Lessons.luau)
 }
 
 function Progression.XpOf(record: Record): number
@@ -110,6 +112,9 @@ function Progression.XpOf(record: Record): number
 		+ record.Style // Progression.XP.STYLE_PER_XP
 	for _, tier in pairs(record.Medals) do
 		xp += Progression.MEDAL_XP[tier] or 0
+	end
+	for _, tier in pairs(record.Lessons) do
+		xp += Lessons.MEDAL_XP[tier] or 0
 	end
 	return xp
 end
@@ -125,6 +130,7 @@ export type Snapshot = {
 	StageRuns: number,
 	Wins: number,
 	Medals: { [string]: number },
+	Lessons: { [string]: number },
 }
 
 function Progression.Snapshot(record: Record): Snapshot
@@ -141,6 +147,7 @@ function Progression.Snapshot(record: Record): Snapshot
 		StageRuns = record.StageRuns,
 		Wins = record.Wins,
 		Medals = record.Medals,
+		Lessons = record.Lessons,
 	}
 end
 

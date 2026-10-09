@@ -61,6 +61,11 @@
 	acceptés. Chaque défi réussi rapporte de l'XP (DailyXp), sauvegardée par
 	lots avec les autres compteurs.
 
+	ÉCOLE DE PILOTAGE (Lessons.luau) : la leçon se déroule chez le pilote, qui
+	envoie sa médaille (LessonResult) ; le profil garde la meilleure de chaque
+	leçon, et elle rapporte de l'XP. Une voiture d'école (attribut Lesson)
+	n'est pas chronométrée sur la spéciale.
+
 	DÉFI DU FANTÔME : un joueur peut demander le fantôme d'un autre pilote pour
 	courir contre lui -- le rival juste devant lui au classement, le recordman,
 	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
@@ -82,6 +87,7 @@ local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
 local Daily = require(ReplicatedStorage.Shared.Constants.Daily)
+local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
 
 local RecordService = {}
 
@@ -133,6 +139,7 @@ type Profile = {
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	Daily: DailyState?, -- défis du jour : progression du jour en cours
 	DailyXp: number, -- XP gagnée aux défis du jour, cumulée
+	Lessons: { [string]: number }, -- meilleure médaille (1 à 4) par leçon de l'école
 }
 
 type DailyState = {
@@ -255,6 +262,7 @@ local function sanitizeProfile(data: any, userId: number): Profile
 		WeeklyCompleted = 0,
 		Daily = nil,
 		DailyXp = 0,
+		Lessons = {},
 	}
 	if type(data) ~= "table" then
 		return profile
@@ -263,6 +271,13 @@ local function sanitizeProfile(data: any, userId: number): Profile
 	profile.Style = count(data.Style)
 	profile.WeeklyCompleted = count(data.WeeklyCompleted)
 	profile.DailyXp = count(data.DailyXp)
+	if type(data.Lessons) == "table" then
+		for id, tier in pairs(data.Lessons) do
+			if type(id) == "string" and Lessons.Get(id) then
+				profile.Lessons[id] = math.clamp(count(tier), 0, 4)
+			end
+		end
+	end
 	local daily = data.Daily
 	if type(daily) == "table" and type(daily.Key) == "string" then
 		local state: DailyState = { Key = daily.Key, Progress = {}, Done = {}, Bonus = daily.Bonus == true }
@@ -370,6 +385,7 @@ local function snapshotOf(profile: Profile): Progression.Snapshot
 		WeeklyCompleted = profile.WeeklyCompleted,
 		DailyXp = profile.DailyXp,
 		Medals = medalsOf(profile),
+		Lessons = profile.Lessons,
 	})
 end
 
@@ -1232,8 +1248,8 @@ end
 
 local function carChassisOf(player: Player): BasePart?
 	local car = workspace:FindFirstChild("Car_" .. player.UserId)
-	if not car or car:GetAttribute("RaceId") ~= nil then
-		return nil -- en course de rallycross : pas de chrono de spéciale
+	if not car or car:GetAttribute("RaceId") ~= nil or car:GetAttribute("Lesson") ~= nil then
+		return nil -- en course de rallycross, ou à l'école : pas de chrono de spéciale
 	end
 	local chassis = car:FindFirstChild("Chassis")
 	if chassis and chassis:IsA("BasePart") and chassis:GetAttribute("Driven") == true then
@@ -1401,6 +1417,36 @@ function RecordService.Start()
 				end
 			end
 		end
+	end)
+
+	-- École de pilotage : la meilleure médaille de chaque leçon.
+	local lastLessonAt: { [Player]: number } = {}
+	Remotes.LessonResult.OnServerEvent:Connect(function(player: Player, id: any, tier: any)
+		local profile = profiles[player]
+		if not profile or type(id) ~= "string" or not Lessons.Get(id) or type(tier) ~= "number" or tier ~= tier then
+			return
+		end
+		local now = os.clock()
+		if now - (lastLessonAt[player] or 0) < 1 then
+			return
+		end
+		lastLessonAt[player] = now
+		local medal = math.clamp(math.floor(tier), 0, 4)
+		if medal <= (profile.Lessons[id] or 0) then
+			return
+		end
+		profile.Lessons[id] = medal
+		updateStoredProfile(player.UserId, "école de pilotage", function(stored)
+			if (stored.Lessons[id] or 0) >= medal then
+				return false
+			end
+			stored.Lessons[id] = medal
+			return true
+		end)
+		pushProgress(player, true)
+	end)
+	Players.PlayerRemoving:Connect(function(player: Player)
+		lastLessonAt[player] = nil
 	end)
 
 	-- Remise en piste pendant la spéciale : le passage n'est plus « propre ».
