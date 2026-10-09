@@ -24,7 +24,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Stage/`       | La spéciale : `StageTrack` (tracé, abscisse) et `Pacenotes` (notes du copilote).         |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
 | `Paddock/`     | La disposition du paddock (zones, panneaux).                                             |
-| `Progression/` | `Progression` (XP, niveaux, licences, déblocages), `Medals` (seuils bronze → platine) et `Achievements` (trophées et badges Roblox). |
+| `Progression/` | `Progression` (XP, niveaux, licences, déblocages), `Medals` (seuils bronze → platine), `Achievements` (trophées et badges Roblox) et `XpEvents` (calendrier du double XP). |
 | `Challenges/`  | `Weekly` (défi de la semaine) et `Daily` (défis du jour).                                |
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
@@ -62,6 +62,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `PassService`      | Rallye Pass : XP de la saison, paliers, récompenses gratuites et premium.             |
 | `TeamService`      | Écuries : fondation, invitations, couleurs communes, classement de la saison.         |
 | `AchievementService` | Trophées : les décerne et donne leur badge Roblox (BadgeService).                 |
+| `AnnounceService`  | Annonces à tout le serveur : records battus, platine, roi du drift, grands trophées. |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |
@@ -84,7 +85,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
-| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), classement, réglages, garage, et le menu principal (`UI/Menu`). |
+| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), classement, réglages, garage, et le menu principal (`UI/Menu`). |
 
 Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaque rubrique est un module (`PlayPage`, `ChallengesPage`, `PassPage`, `TeamPage`, `ShopPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
 

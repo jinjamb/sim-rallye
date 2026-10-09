@@ -30,6 +30,8 @@ local DrivingSession = require(script.Parent.Driving.DrivingSession)
 local Horn = require(script.Parent.Driving.Horn)
 local RollReveal = require(script.Parent.UI.RollReveal)
 local Toast = require(script.Parent.UI.Toast)
+local Announcer = require(script.Parent.UI.Announcer)
+local XpEventNotice = require(script.Parent.UI.XpEventNotice)
 local GhostChallenge = require(script.Parent.Stage.GhostChallenge)
 local Replay = require(script.Parent.Replay.Replay)
 local Banner = require(script.Parent.UI.Banner)
@@ -632,6 +634,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 		refreshLeaderboard()
 	end
 end)
+
+-- Annonces à tout le serveur (records, platine, roi du drift, grands
+-- trophées), et l'événement double XP en cours, dans le bandeau du haut.
+Remotes.Announce.OnClientEvent:Connect(Announcer.FromServer)
+XpEventNotice.Start()
 
 -- Trophées : la liste (menu, onglet CARRIÈRE), et l'annonce d'un nouveau.
 Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)

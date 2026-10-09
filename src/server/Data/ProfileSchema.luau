@@ -64,6 +64,7 @@ export type Profile = {
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	Daily: DailyState?, -- défis du jour : progression du jour en cours
 	DailyXp: number, -- XP gagnée aux défis du jour, cumulée
+	BonusXp: number, -- XP en plus gagnée pendant les événements double XP (XpEvents.luau)
 	Lessons: { [string]: number }, -- meilleure médaille (1 à 4) par leçon de l'école
 	Credits: number, -- monnaie du jeu (Credits.luau)
 	Owned: { [string]: boolean }, -- objets possédés (Catalog.luau), hors objets gratuits
@@ -89,7 +90,7 @@ export type PassState = {
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
 -- peut ajouter à ce qu'un autre serveur a écrit sans rien écraser.
-export type Counter = "StageRuns" | "Style" | "DailyXp" | "Credits" | "Rolls"
+export type Counter = "StageRuns" | "Style" | "DailyXp" | "BonusXp" | "Credits" | "Rolls"
 
 function ProfileSchema.EmptyStats(): Stats
 	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
@@ -108,6 +109,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		WeeklyCompleted = 0,
 		Daily = nil,
 		DailyXp = 0,
+		BonusXp = 0,
 		Lessons = {},
 		Credits = 0,
 		Owned = {},
@@ -192,6 +194,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.Style = count(data.Style)
 	profile.WeeklyCompleted = count(data.WeeklyCompleted)
 	profile.DailyXp = count(data.DailyXp)
+	profile.BonusXp = count(data.BonusXp)
 	if type(data.Lessons) == "table" then
 		for id, tier in pairs(data.Lessons) do
 			if type(id) == "string" and Lessons.Get(id) then

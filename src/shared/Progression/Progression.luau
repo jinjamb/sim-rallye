@@ -7,8 +7,9 @@
 
 	XP DÉDUITE DU PROFIL, PAS ACCUMULÉE À PART : elle se recalcule à partir de
 	ce que le profil garde déjà -- médailles (meilleurs temps), courses,
-	victoires, podiums, points -- plus deux compteurs : spéciales terminées et
-	points de style (dérapages, sauts, dépassements). Les joueurs existants
+	victoires, podiums, points -- plus des compteurs : spéciales terminées,
+	points de style (dérapages, sauts, dépassements), XP des défis du jour, et
+	XP en plus des événements double XP (XpEvents.luau). Les joueurs existants
 	partent donc avec l'XP de ce qu'ils ont déjà fait, et un barème retouché
 	s'applique à tous. Revers : baisser un barème peut faire redescendre un
 	niveau (et reverrouiller un cosmétique) ; on ne le fait qu'en connaissance
@@ -98,6 +99,7 @@ export type Record = {
 	Style: number,
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
+	BonusXp: number, -- XP en plus des événements double XP (XpEvents.luau)
 	Medals: { [string]: number },
 	Lessons: { [string]: number }, -- médaille (0 à 4) par leçon de l'école (Lessons.luau)
 }
@@ -110,6 +112,7 @@ function Progression.XpOf(record: Record): number
 		+ record.StageRuns * Progression.XP.STAGE_RUN
 		+ record.WeeklyCompleted * Progression.XP.WEEKLY
 		+ record.DailyXp
+		+ record.BonusXp
 		+ record.Style // Progression.XP.STYLE_PER_XP
 	for _, tier in pairs(record.Medals) do
 		xp += Progression.MEDAL_XP[tier] or 0

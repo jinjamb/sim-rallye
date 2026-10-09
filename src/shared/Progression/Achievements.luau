@@ -40,6 +40,7 @@ export type Achievement = {
 	Description: string,
 	BadgeId: number, -- badge Roblox (0 : pas encore créé)
 	Check: ((Facts) -> boolean)?, -- nil : décerné par un événement
+	Announce: boolean?, -- annoncé à tout le serveur (les plus rares)
 }
 
 local GOLD, PLATINUM = 3, 4
@@ -113,6 +114,7 @@ Achievements.LIST = {
 		Name = "Habitué de la plus haute marche",
 		Description = "Gagner 25 courses.",
 		BadgeId = 0,
+		Announce = true,
 		Check = function(facts: Facts)
 			return facts.Wins >= 25
 		end,
@@ -131,6 +133,7 @@ Achievements.LIST = {
 		Name = "Grand chelem d'or",
 		Description = "La médaille d'or sur la spéciale et sur chaque circuit.",
 		BadgeId = 0,
+		Announce = true,
 		Check = function(facts: Facts)
 			return everyMedal(facts, GOLD)
 		end,
@@ -140,6 +143,7 @@ Achievements.LIST = {
 		Name = "Intouchable",
 		Description = "La médaille de platine sur la spéciale et sur chaque circuit.",
 		BadgeId = 0,
+		Announce = true,
 		Check = function(facts: Facts)
 			return everyMedal(facts, PLATINUM)
 		end,
@@ -149,6 +153,7 @@ Achievements.LIST = {
 		Name = "Major de promo",
 		Description = "L'or ou mieux à toutes les leçons de l'école de pilotage.",
 		BadgeId = 0,
+		Announce = true,
 		Check = function(facts: Facts)
 			for _, lesson in ipairs(Lessons.LIST) do
 				if (facts.Lessons[lesson.Id] or 0) < GOLD then
@@ -190,6 +195,7 @@ Achievements.LIST = {
 		Name = "Légende du rallye",
 		Description = "Atteindre le niveau 30, le plus haut.",
 		BadgeId = 0,
+		Announce = true,
 		Check = function(facts: Facts)
 			return facts.Level >= 30
 		end,
@@ -212,12 +218,14 @@ Achievements.LIST = {
 		Name = "Main en or",
 		Description = "Tirer un objet de rareté Légende.",
 		BadgeId = 0,
+		Announce = true,
 	},
 	{
 		Id = "pass_complete",
 		Name = "Saison bouclée",
 		Description = "Atteindre le dernier palier du Rallye Pass.",
 		BadgeId = 0,
+		Announce = true,
 	},
 } :: { Achievement }
 

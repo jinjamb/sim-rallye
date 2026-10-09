@@ -251,6 +251,7 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 	else
 		local progress = ctx.Data.Progress
 		local beginner = progress ~= nil and progress.Level <= BEGINNER_LEVEL
+		PlayPage.XpEvent(ctx, b)
 		if beginner then
 			SchoolPage.School(ctx, b)
 		end

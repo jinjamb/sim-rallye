@@ -3,13 +3,16 @@
 	PlayPage.luau
 	Rubriques du menu pour JOUER : la spéciale (et son ralenti), le
 	rallycross (un bouton par circuit : on ouvre la salle d'attente, ou on
-	rejoint celle qui attend), les essais libres, le retour au paddock.
+	rejoint celle qui attend), les essais libres, le retour au paddock ; et
+	l'événement double XP en cours ou à venir (XpEvents.luau).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -61,6 +64,26 @@ local function circuitRow(ctx: Context, b: Builder, id: string)
 	end)
 	if waiting then
 		Widgets.Primary(button)
+	end
+end
+
+-- Double XP : l'événement en cours, sinon le prochain.
+function PlayPage.XpEvent(_ctx: Context, b: Builder)
+	local now = workspace:GetServerTimeNow()
+	local active = XpEvents.Active(now)
+	if active then
+		b:Text(string.format(
+			"★ XP ×%d · %s : toute l'XP compte %d fois (Rallye Pass et écurie compris) · encore %s",
+			active.Multiplier,
+			active.Name,
+			active.Multiplier,
+			Format.Remaining(active.EndsAt - now)
+		), 14, Widgets.COLOR_ACCENT)
+		return
+	end
+	local upcoming = XpEvents.Next(now)
+	if upcoming then
+		b:Text(string.format("Prochain XP ×%d : %s, dans %s.", upcoming.Multiplier, upcoming.Name, Format.Remaining(upcoming.StartsAt - now)), 12, Widgets.COLOR_DIM)
 	end
 end
 

@@ -8,6 +8,10 @@
 	changement (Push), avec les nouveautés à annoncer (niveau gagné,
 	cosmétique débloqué).
 
+	DOUBLE XP (XpEvents.luau) : pendant un événement, l'XP gagnée est
+	multipliée. Le surplus va dans un compteur du profil (BonusXp), compté
+	dans l'XP comme le reste.
+
 	Un niveau gagné ou une nouvelle médaille rapportent aussi des crédits
 	(Credits.luau), et un niveau un tirage (Rolls.luau), une fois : à la
 	transition, pendant la partie. Au chargement, ce qui est déjà acquis ne
@@ -21,6 +25,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
@@ -29,6 +34,7 @@ local EconomyService = require(script.Parent.EconomyService)
 local PassService = require(script.Parent.PassService)
 local TeamService = require(script.Parent.TeamService)
 local AchievementService = require(script.Parent.AchievementService)
+local AnnounceService = require(script.Parent.AnnounceService)
 
 local ProgressService = {}
 
@@ -65,6 +71,7 @@ function ProgressService.SnapshotOf(profile: ProfileSchema.Profile): Progression
 		Style = profile.Style,
 		WeeklyCompleted = profile.WeeklyCompleted,
 		DailyXp = profile.DailyXp,
+		BonusXp = profile.BonusXp,
 		Medals = medalsOf(profile),
 		Lessons = profile.Lessons,
 	})
@@ -87,6 +94,11 @@ local function rewardTransition(player: Player, previous: Progression.Snapshot, 
 		for reached = (previous.Medals[track] or 0) + 1, tier do
 			medalCredits += Credits.REWARDS.Medal[reached] or 0
 		end
+		-- Une médaille de platine s'annonce à tout le serveur.
+		if tier == #Medals.TIERS and (previous.Medals[track] or 0) < tier then
+			local circuit = if track == "stage" then nil else Tracks.Get(track)
+			AnnounceService.Send("Platinum", player.DisplayName, "décroche le platine sur " .. (if circuit then "le circuit " .. circuit.Name else "la spéciale"))
+		end
 	end
 	if medalCredits > 0 then
 		EconomyService.Earn(player, medalCredits, "Nouvelle médaille")
@@ -104,6 +116,15 @@ function ProgressService.Push(player: Player, announce: boolean)
 	end
 	local snapshot = ProgressService.SnapshotOf(profile)
 	local previous = lastProgress[player]
+	-- Double XP : le surplus de ce qui vient d'être gagné.
+	local multiplier = XpEvents.Multiplier(os.time())
+	if announce and previous and multiplier > 1 and snapshot.Xp > previous.Xp then
+		local bonus = math.floor((snapshot.Xp - previous.Xp) * (multiplier - 1))
+		if bonus > 0 then
+			ProfileStore.AddCounter(player, "BonusXp", bonus)
+			snapshot = ProgressService.SnapshotOf(profile)
+		end
+	end
 	lastProgress[player] = snapshot
 	local news: any = nil
 	if announce and previous then

@@ -9,8 +9,10 @@
 	le redemander à Roblox que s'il ne l'a pas encore été (badge créé après
 	coup, ou échec passager de BadgeService). On réessaie à chaque connexion.
 
-	Ne dépend que des données : les autres services l'appellent (Award,
-	CheckProgress) sans risque de cycle.
+	Ne dépend que des données (et des annonces) : les autres services
+	l'appellent (Award, CheckProgress) sans risque de cycle.
+
+	Les trophées les plus rares (Announce) s'annoncent à tout le serveur.
 ]]
 
 local BadgeService = game:GetService("BadgeService")
@@ -22,6 +24,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
+local AnnounceService = require(script.Parent.AnnounceService)
 
 local AchievementService = {}
 
@@ -77,6 +80,14 @@ local function awardBadge(player: Player, id: string)
 	end)
 end
 
+-- Les trophées les plus rares s'annoncent à tout le serveur.
+local function announceToServer(player: Player, id: string)
+	local achievement = Achievements.Get(id)
+	if achievement and achievement.Announce then
+		AnnounceService.Send("Trophy", player.DisplayName, "obtient le trophée « " .. achievement.Name .. " »")
+	end
+end
+
 -- Le trophée `id` est obtenu : gardé, annoncé (sauf `quiet`), et son badge donné.
 local function earn(player: Player, id: string, quiet: boolean): boolean
 	local profile = ProfileStore.Get(player)
@@ -93,6 +104,7 @@ local function earn(player: Player, id: string, quiet: boolean): boolean
 	awardBadge(player, id)
 	if not quiet then
 		sendState(player, { New = { id } })
+		announceToServer(player, id)
 	end
 	return true
 end
@@ -131,6 +143,11 @@ function AchievementService.CheckProgress(player: Player, snapshot: Progression.
 	end
 	if #new > 0 or not announce then
 		sendState(player, if announce then { New = new } else nil)
+	end
+	if announce then
+		for _, id in ipairs(new) do
+			announceToServer(player, id)
+		end
 	end
 end
 

@@ -37,7 +37,9 @@ local Boards = require(script.Parent.Parent.Data.Boards)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
 local AchievementService = require(script.Parent.AchievementService)
+local AnnounceService = require(script.Parent.AnnounceService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 local ChallengeService = {}
 
@@ -247,6 +249,7 @@ end
 local sessionDrift: { [string]: { [number]: number } } = {} -- par clé de semaine
 local driftEntries: { Boards.ScoreEntry } = {}
 local driftKey = ""
+local driftKing: number? = nil -- n°1 à la dernière lecture (pour annoncer un changement)
 
 local function driftStore(key: string): OrderedDataStore?
 	return Stores.Ordered(DRIFT_STORE_PREFIX .. key)
@@ -270,8 +273,15 @@ end
 local function refreshDrift()
 	local week = Weekly.Current()
 	local session = sessionDrift[week.Key] or {}
+	local sameWeek = driftKey == week.Key
 	driftEntries = Boards.MergeScores(driftStore(week.Key), session, DRIFT_BOARD_SIZE, "roi du drift")
 	driftKey = week.Key
+	-- Un nouveau n°1 dans la semaine s'annonce (pas à la première lecture).
+	local leader = driftEntries[1]
+	if leader and sameWeek and leader.UserId ~= driftKing then
+		AnnounceService.Send("DriftKing", leader.Name, string.format("est le nouveau Roi du drift : %s points", Format.Thousands(leader.Score)))
+	end
+	driftKing = if leader then leader.UserId else nil
 	for _, player in ipairs(Players:GetPlayers()) do
 		sendDrift(player)
 	end

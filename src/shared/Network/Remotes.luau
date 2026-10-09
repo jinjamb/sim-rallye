@@ -107,6 +107,9 @@ export type Remotes = {
 	-- TROPHÉES (AchievementService)
 	-- Serveur -> Client : (earned, news?) trophées obtenus (id -> date) ; news : { New = { id } }
 	Achievements: RemoteEvent,
+	-- Serveur -> Clients : (announce) annonce à tout le serveur { Kind, Name, Text } :
+	-- record battu, platine, roi du drift, grand trophée (AnnounceService)
+	Announce: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -147,6 +150,7 @@ local RELIABLE = {
 	"TeamAction",
 	"TeamState",
 	"Achievements",
+	"Announce",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

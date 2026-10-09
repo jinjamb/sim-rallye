@@ -14,6 +14,9 @@
 	records et ses classements -- une Rally4 ne se mesure pas à un Groupe B.
 	La Rally2 garde les clés d'avant les catégories.
 
+	Un temps qui prend la tête d'un classement s'annonce à tout le serveur
+	(AnnounceService), une fois ce classement lu au moins une fois.
+
 	C'est aussi ce service qui envoie au joueur son profil à l'arrivée
 	(ProfileLoaded : records et fantômes par catégorie, réglages, livrée,
 	statistiques).
@@ -28,7 +31,9 @@ local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
 local Boards = require(script.Parent.Parent.Data.Boards)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 local ProgressService = require(script.Parent.ProgressService)
+local AnnounceService = require(script.Parent.AnnounceService)
 
 local RecordService = {}
 
@@ -49,6 +54,16 @@ local LAP_BOARD_ROTATE = 120
 
 -- Session : UserId -> meilleur temps, par clé de classement.
 type Session = { [string]: { [number]: number } }
+
+-- Ce temps prend-il la tête de ce classement ? Pas tant qu'il n'a pas été
+-- lu (au démarrage du serveur, il est vide).
+local function beatsFirst(entries: { Boards.Entry }?, ms: number): boolean
+	if not entries then
+		return false
+	end
+	local first = entries[1]
+	return first == nil or ms < first.Ms
+end
 
 local function sessionOf(session: Session, key: string): { [number]: number }
 	local entries = session[key]
@@ -136,6 +151,13 @@ function RecordService.StageFinish(player: Player, ms: number, classId: string):
 	local previous = profile.Records[key]
 	local isBest = previous == nil or ms < previous.Ms
 	if isBest then
+		if beatsFirst(leaderboards[classId], ms) then
+			AnnounceService.Send("Record", player.DisplayName, string.format(
+				"bat le record de la spéciale en %s : %s",
+				CarClasses.Get(classId).Name,
+				Format.Ms(ms)
+			))
+		end
 		profile.Records[key] = { Ms = ms, Ghost = nil } -- le fantôme suit (GhostService)
 		sessionOf(sessionBest, classId)[player.UserId] = ms
 		ProfileStore.Update(player.UserId, "record", function(stored)
@@ -217,6 +239,17 @@ function RecordService.SubmitLap(player: Player, trackKey: string, classId: stri
 	local previous = profile.Laps[key]
 	if previous and previous <= ms then
 		return false
+	end
+	for id, board in pairs(lapBoards[classId] or {}) do
+		local circuit = Tracks.Get(id)
+		if board.Key == key and circuit and beatsFirst(board.Entries, ms) then
+			AnnounceService.Send("Record", player.DisplayName, string.format(
+				"bat le record du tour de %s en %s : %s",
+				circuit.Name,
+				CarClasses.Get(classId).Name,
+				Format.Ms(ms)
+			))
+		end
 	end
 	profile.Laps[key] = ms
 	sessionOf(sessionLaps, key)[player.UserId] = ms
