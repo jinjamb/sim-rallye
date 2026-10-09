@@ -46,7 +46,8 @@ local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
-local RecordService = require(script.Parent.RecordService)
+local GarageService = require(script.Parent.GarageService)
+local ProgressService = require(script.Parent.ProgressService)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 
 local CarService = {}
@@ -347,7 +348,7 @@ end
 -- Niveau et licence du pilote, affichés au-dessus de sa voiture chez les
 -- autres (RemoteCars.luau). Progression.luau.
 local function tagProgress(car: Model, player: Player)
-	local snapshot = RecordService.GetProgress(player)
+	local snapshot = ProgressService.Get(player)
 	if snapshot then
 		car:SetAttribute("Level", snapshot.Level)
 		car:SetAttribute("Licence", snapshot.Licence)
@@ -411,7 +412,7 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car.Parent = workspace
 	-- Couleur et numéro du joueur (les rayons qui placent les numéros exigent
 	-- une voiture dans le monde).
-	LiveryPainter.Apply(car, RecordService.GetLivery(player))
+	LiveryPainter.Apply(car, GarageService.GetLivery(player))
 	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
 	chassis:SetNetworkOwnershipAuto(false)
 	chassis:SetNetworkOwner(nil)
@@ -465,7 +466,7 @@ end
 function CarService.RefreshLivery(player: Player)
 	local car = carByPlayer[player]
 	if car then
-		LiveryPainter.Apply(car, RecordService.GetLivery(player))
+		LiveryPainter.Apply(car, GarageService.GetLivery(player))
 	end
 end
 

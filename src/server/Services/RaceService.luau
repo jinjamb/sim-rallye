@@ -50,7 +50,7 @@
 	dépassé d'un tour reste derrière : le prendre d'un tour n'est pas un
 	dépassement). Le nouvel ordre doit tenir OVERTAKE_CONFIRM secondes (pas de
 	points pour deux voitures qui se chamaillent sur la ligne). Ils rapportent
-	des points de style (RecordService.AddStyle, progression), au plus
+	des points de style (StyleService.Add, progression), au plus
 	MAX_PASSES_PER_PAIR fois par paire et par manche : deux amis qui
 	s'échangent la place ne font pas fortune.
 
@@ -71,9 +71,11 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
-local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local CarService = require(script.Parent.CarService)
 local RecordService = require(script.Parent.RecordService)
+local StyleService = require(script.Parent.StyleService)
+local ChallengeService = require(script.Parent.ChallengeService)
 
 local RaceService = {}
 
@@ -539,7 +541,7 @@ end
 local function finishRunner(race: Race, runner: Runner, crossing: number)
 	runner.Finished = true
 	if runner.Player.Parent then
-		RecordService.DailyEvent(runner.Player, "RaceFinished", 1)
+		ChallengeService.DailyEvent(runner.Player, "RaceFinished", 1)
 	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then
@@ -1342,10 +1344,10 @@ local function checkOvertakes(race: Race, now: number)
 					state.PassesB += 1
 				end
 				if points > 0 and passer.Player.Parent then
-					RecordService.AddStyle(passer.Player, points)
+					StyleService.Add(passer.Player, points)
 					-- Défi du jour : dépassements dans UNE course.
 					passer.Overtakes += 1
-					RecordService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
+					ChallengeService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
 				end
 				sendEvent(race, passer.Player, "Overtake", { Name = passed.Name, Points = points })
 				sendEvent(race, passed.Player, "Overtaken", { Name = passer.Name })

@@ -25,7 +25,7 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Units = require(ReplicatedStorage.Shared.Constants.Units)
+local Units = require(ReplicatedStorage.Shared.Util.Units)
 local StageTrack = require(script.Parent.StageTrack)
 
 local Pacenotes = {}

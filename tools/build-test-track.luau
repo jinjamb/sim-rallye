@@ -19,7 +19,7 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Surfaces = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Constants"):WaitForChild("Surfaces"))
+local Surfaces = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Vehicle"):WaitForChild("Surfaces"))
 
 local MATERIALS = {
 	Enum.Material.Asphalt,

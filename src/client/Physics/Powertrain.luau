@@ -7,7 +7,7 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Units = require(ReplicatedStorage.Shared.Constants.Units)
+local Units = require(ReplicatedStorage.Shared.Util.Units)
 local GearboxClass = require(script.Parent.Gearbox)
 
 local Powertrain = {}

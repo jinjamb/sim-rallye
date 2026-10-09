@@ -44,10 +44,11 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
-local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
-local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
-local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
+local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
@@ -282,12 +283,6 @@ end
 -- Panneaux
 --------------------------------------------------------------------------------
 
-local function formatTime(ms: number): string
-	local seconds = ms / 1000
-	local minutes = math.floor(seconds / 60)
-	return string.format("%d:%05.2f", minutes, seconds - minutes * 60)
-end
-
 local recordText: { [string]: string } = {}
 
 local function updateSigns()
@@ -323,7 +318,7 @@ local function onTrackRecords(boards: any)
 	for padId, boardData in pairs(boards) do
 		local entries = type(boardData) == "table" and boardData.Entries
 		local best = type(entries) == "table" and entries[1]
-		recordText[padId] = if best then string.format("Record du tour : %s — %s", formatTime(best.Ms), best.Name) else "Record du tour : —"
+		recordText[padId] = if best then string.format("Record du tour : %s — %s", Format.Ms(best.Ms), best.Name) else "Record du tour : —"
 	end
 end
 

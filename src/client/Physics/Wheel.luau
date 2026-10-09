@@ -15,7 +15,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
-local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
+local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 
 local CAR_COLLISION_GROUP = "Cars" -- voir CarService.server.luau
 

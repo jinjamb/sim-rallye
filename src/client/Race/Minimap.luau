@@ -10,7 +10,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
-local RaceUi = require(script.Parent.RaceUi)
+local Widgets = require(script.Parent.Parent.UI.Widgets)
 
 local Minimap = {}
 Minimap.__index = Minimap
@@ -38,7 +38,7 @@ function Minimap.new(parent: Instance, circuit: Circuit.Circuit): Minimap
 	self.Circuit = circuit
 	self.Dots = {}
 
-	local frame = RaceUi.Panel(parent, 0.35)
+	local frame = Widgets.Panel(parent, 0.35)
 	frame.Name = "Minimap"
 	frame.Size = UDim2.fromOffset(SIZE, SIZE)
 	frame.ClipsDescendants = true
@@ -61,7 +61,7 @@ function Minimap.new(parent: Instance, circuit: Circuit.Circuit): Minimap
 		d.BorderSizePixel = 0
 		d.ZIndex = z
 		d.Position = self:_map(position)
-		RaceUi.Corner(d, math.ceil(size / 2))
+		Widgets.Corner(d, math.ceil(size / 2))
 		d.Parent = frame
 		return d
 	end
@@ -73,7 +73,7 @@ function Minimap.new(parent: Instance, circuit: Circuit.Circuit): Minimap
 	end
 	for index, sample in ipairs(circuit.JokerSamples) do
 		if index % TRACK_EVERY == 0 then
-			dot(sample.Position, TRACK_DOT, RaceUi.COLOR_ORANGE, 2)
+			dot(sample.Position, TRACK_DOT, Widgets.COLOR_ORANGE, 2)
 		end
 	end
 	-- Ligne de départ / arrivée.
@@ -105,7 +105,7 @@ function Minimap:Update(cars: { CarDot })
 			d = Instance.new("Frame")
 			d.AnchorPoint = Vector2.new(0.5, 0.5)
 			d.BorderSizePixel = 0
-			RaceUi.Corner(d, 8)
+			Widgets.Corner(d, 8)
 			local stroke = Instance.new("UIStroke")
 			stroke.Color = Color3.new(0, 0, 0)
 			stroke.Thickness = 1.5
@@ -115,7 +115,7 @@ function Minimap:Update(cars: { CarDot })
 		end
 		local size = if car.Me then MY_DOT else CAR_DOT
 		d.Size = UDim2.fromOffset(size, size)
-		d.BackgroundColor3 = if car.Me then RaceUi.COLOR_ACCENT else Color3.new(1, 1, 1)
+		d.BackgroundColor3 = if car.Me then Widgets.COLOR_ACCENT else Color3.new(1, 1, 1)
 		d.ZIndex = if car.Me then 6 else 5
 		d.Position = self:_map(car.Position)
 		d.Visible = true

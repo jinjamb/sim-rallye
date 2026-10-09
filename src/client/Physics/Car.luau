@@ -3,9 +3,9 @@ local WheelClass = require(script.Parent.Wheel)
 local PowertrainClass = require(script.Parent.Powertrain)
 local AerodynamicsClass = require(script.Parent.Aerodynamics)
 local DifferentialClass = require(script.Parent.Differential)
-local InputManager = require(script.Parent.Parent.Controllers.InputManager)
+local InputManager = require(script.Parent.Parent.Core.InputManager)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
+local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 
 local Car = {}
 Car.__index = Car
