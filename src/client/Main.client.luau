@@ -27,6 +27,7 @@ local Leaderboard = require(script.Parent.UI.Leaderboard)
 local SetupMenu = require(script.Parent.UI.SetupMenu)
 local TouchControls = require(script.Parent.Core.TouchControls)
 local DrivingSession = require(script.Parent.Driving.DrivingSession)
+local Horn = require(script.Parent.Driving.Horn)
 local GhostChallenge = require(script.Parent.Stage.GhostChallenge)
 local Replay = require(script.Parent.Replay.Replay)
 local Banner = require(script.Parent.UI.Banner)
@@ -345,6 +346,12 @@ local actions: TouchControls.Actions = {
 			print("[Paddock] Pas de voiture : C (menu) pour lancer une spéciale, une course de rallycross ou des essais libres")
 		end
 	end,
+	-- Klaxon : le serveur le relaie à tous (HornService), soi compris.
+	Horn = function()
+		if drivingSession() then
+			Remotes.Horn:FireServer()
+		end
+	end,
 	ExitCar = function()
 		-- En course, on ne descend pas de voiture : on abandonne depuis le menu.
 		if isRacing() then
@@ -413,7 +420,7 @@ local function setControl(granted: boolean)
 		if current:IsRacing() then
 			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), K klaxon, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
@@ -624,6 +631,14 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	end
 end)
 
+-- Un pilote klaxonne (soi compris) : son klaxon, sur sa voiture.
+Remotes.HornPlayed.OnClientEvent:Connect(function(userId: any)
+	local car = workspace:FindFirstChild("Car_" .. tostring(userId))
+	if car and car:IsA("Model") then
+		Horn.Play(car)
+	end
+end)
+
 -- Crédits et objets : solde, boutique, et ce qu'on vient de gagner ou d'acheter.
 Remotes.Wallet.OnClientEvent:Connect(function(wallet: any, news: any)
 	raceClient:SetWallet(wallet, news)
@@ -689,6 +704,8 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.ReturnToPaddock()
 	elseif key == Enum.KeyCode.G then
 		actions.CycleGhost()
+	elseif key == Enum.KeyCode.K then
+		actions.Horn()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
 	elseif key == Enum.KeyCode.R or key == Enum.KeyCode.ButtonB or key == Enum.KeyCode.ButtonR1 then
 		actions.ShiftUp()

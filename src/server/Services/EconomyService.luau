@@ -136,7 +136,7 @@ local function buyItem(player: Player, itemId: any)
 		return
 	end
 	local price = item.Credits
-	if not price or Catalog.Owns(profile.Owned, item.Id) then
+	if not price or not Catalog.IsAvailable(item) or Catalog.Owns(profile.Owned, item.Id) then
 		return
 	end
 	if profile.Credits < price then

@@ -27,7 +27,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Progression/` | `Progression` (XP, niveaux, licences, déblocages) et `Medals` (seuils bronze → platine).  |
 | `Challenges/`  | `Weekly` (défi de la semaine) et `Daily` (défis du jour).                                |
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
-| `Cosmetics/`   | `Livery` (livrée) et `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client). |
+| `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
 | `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux). |
 
 ## `src/server` : l'autorité
@@ -56,6 +56,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `ChallengeService` | Défis du jour et de la semaine.                                                       |
 | `StyleService`     | Points de style (dérapages, sauts, dépassements), à débit plausible.                  |
 | `SchoolService`    | Médailles de l'école de pilotage.                                                     |
+| `HornService`      | Klaxon : relaie le coup de klaxon d'un pilote à tous les joueurs.                     |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |
@@ -73,7 +74,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Physics/` | La voiture : roues, moteur, boîte, différentiels, aérodynamique.                                              |
 | `Audio/`   | Son des voitures (`CarAudio`) et identifiants audio (`SoundBank`).                                            |
 | `Camera/`  | Caméra de poursuite et caméra de spectateur.                                                                  |
-| `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets, voitures des autres joueurs, points de style. |
+| `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style. |
 | `Stage/`   | Ce qui sert sur la spéciale : chrono, copilote, fantômes, contrainte du défi.                                 |
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |

@@ -167,7 +167,8 @@ local function shownItems(ctx: Context, kind: Catalog.Kind): ({ Catalog.Item }, 
 	local owned = MenuKit.OwnedSet(ctx)
 	local items = {}
 	for _, item in ipairs(Catalog.OfKind(kind)) do
-		if item.Credits or item.Robux or item.Free or owned[item.Id] then
+		local listed = item.Credits or item.Robux or item.Free or owned[item.Id]
+		if listed and Catalog.IsAvailable(item) then
 			table.insert(items, item)
 		end
 	end

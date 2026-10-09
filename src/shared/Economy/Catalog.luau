@@ -44,6 +44,9 @@ Catalog.KIND_NAMES = {
 -- Les objets de chaque sorte, chacun dans son module (Items/).
 local LISTS: { { Item } } = {
 	require(script.Parent.Items.Cars),
+	require(script.Parent.Items.Smokes),
+	require(script.Parent.Items.Horns),
+	require(script.Parent.Items.Celebrations),
 }
 
 Catalog.ITEMS = {} :: { Item }
@@ -79,6 +82,15 @@ function Catalog.Default(kind: Kind): Item?
 		end
 	end
 	return nil
+end
+
+-- Utilisable : un klaxon a besoin d'un son (Items/Horns.luau). Un objet
+-- indisponible n'est ni vendu ni tiré au sort.
+function Catalog.IsAvailable(item: Item): boolean
+	if item.Kind == "Horn" then
+		return item.Sound ~= nil and item.Sound ~= ""
+	end
+	return true
 end
 
 -- La voiture du catalogue d'une catégorie (CarClasses.luau).

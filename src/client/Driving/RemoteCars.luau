@@ -32,6 +32,7 @@ local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local CarEffects = require(script.Parent.CarEffects)
+local TireSmoke = require(script.Parent.TireSmoke)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
 local RemoteCars = {}
@@ -56,6 +57,7 @@ type View = {
 	Wheels: { RemoteWheel },
 	Audio: CarAudio.CarAudio,
 	Effects: CarEffects.CarEffects,
+	Smoke: TireSmoke.TireSmoke, -- fumée de glisse, à la couleur portée par son pilote
 	RayParams: RaycastParams,
 	NameTag: BillboardGui,
 	NameLabel: TextLabel,
@@ -194,6 +196,7 @@ function RemoteCars:_add(instance: Instance)
 		Wheels = wheels,
 		Audio = CarAudio.new(chassis, attachments, false),
 		Effects = CarEffects.new(chassis, wheels :: any),
+		Smoke = TireSmoke.new(model, chassis, attachments),
 		RayParams = params,
 		NameTag = tag,
 		NameLabel = label,
@@ -222,6 +225,7 @@ function RemoteCars:_remove(instance: Instance)
 	self.Views[instance :: BasePart] = nil
 	view.Audio:Destroy()
 	view.Effects:Destroy()
+	view.Smoke:Destroy()
 	view.NameTag:Destroy()
 end
 
@@ -247,6 +251,7 @@ function RemoteCars:_applyVisibility(view: View)
 	if not visible then
 		view.Audio:SetActive(false)
 		view.Effects:SetActive(false)
+		view.Smoke:SetActive(false)
 	end
 end
 
@@ -301,6 +306,7 @@ function RemoteCars:Update(dt: number)
 		local driven = chassis:GetAttribute("Driven") == true
 		view.Audio:SetActive(driven)
 		view.Effects:SetActive(driven)
+		view.Smoke:SetActive(driven)
 
 		local frame = chassis.CFrame
 		local down = -frame.UpVector * SUSPENSION_LENGTH
@@ -335,6 +341,8 @@ function RemoteCars:Update(dt: number)
 
 		if driven then
 			local screech = attributeNumber(chassis, "Screech", 0)
+			-- Un seul niveau diffusé : la fumée sort des quatre roues à la fois.
+			view.Smoke:Update({ screech, screech, screech, screech })
 			view.Audio:Update(dt, {
 				Rpm = attributeNumber(chassis, "Rpm", 1000),
 				Load = attributeNumber(chassis, "Load", 0),

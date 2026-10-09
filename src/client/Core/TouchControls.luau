@@ -45,6 +45,7 @@ export type Actions = {
 	ReturnToPaddock: () -> (),
 	EnterCar: () -> (),
 	ExitCar: () -> (),
+	Horn: () -> (),
 }
 
 type Hold = {
@@ -250,6 +251,7 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 		{ "RÉGLAGES", actions.ToggleSetup },
 		{ "TEMPS", actions.ToggleLeaderboard },
 		{ "FANTÔME", actions.CycleGhost },
+		{ "KLAXON", actions.Horn },
 		{ "MENU", actions.ToggleMenu },
 		{ "PADDOCK", actions.ReturnToPaddock },
 		{ "SORTIR", actions.ExitCar },

@@ -83,6 +83,12 @@ export type Remotes = {
 	BuyItem: RemoteEvent,
 	-- Client -> Serveur : (kind, itemId) porter un objet possédé
 	EquipItem: RemoteEvent,
+
+	-- COSMÉTIQUES VISIBLES PAR TOUS
+	-- Client -> Serveur : () coup de klaxon (au volant)
+	Horn: RemoteEvent,
+	-- Serveur -> Clients : (userId) ce pilote klaxonne : chacun joue le son sur sa voiture
+	HornPlayed: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -114,6 +120,8 @@ local RELIABLE = {
 	"Wallet",
 	"BuyItem",
 	"EquipItem",
+	"Horn",
+	"HornPlayed",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

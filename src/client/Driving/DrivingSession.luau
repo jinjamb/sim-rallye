@@ -31,6 +31,7 @@ local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local StageTimer = require(script.Parent.Parent.Stage.StageTimer)
 local ChaseCamera = require(script.Parent.Parent.Camera.ChaseCamera)
 local CarEffects = require(script.Parent.CarEffects)
+local TireSmoke = require(script.Parent.TireSmoke)
 local Copilot = require(script.Parent.Parent.Stage.Copilot)
 local Ghost = require(script.Parent.Parent.Stage.Ghost)
 local StylePoints = require(script.Parent.StylePoints)
@@ -72,6 +73,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Dashboard: Dashboard.Dashboard,
 	Audio: CarAudio.CarAudio,
 	Effects: CarEffects.CarEffects,
+	Smoke: TireSmoke.TireSmoke, -- fumée de glisse, à la couleur portée
 	ChaseCamera: ChaseCamera.ChaseCamera,
 	Style: StylePoints.StylePoints,
 	StageTimer: StageTimer.StageTimer?,
@@ -124,6 +126,7 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	self.Dashboard = Dashboard.new(car, context.PlayerGui)
 	self.Audio = CarAudio.new(self.Chassis, wheelAttachments, true)
 	self.Effects = CarEffects.new(self.Chassis, car.Wheels :: any)
+	self.Smoke = TireSmoke.new(model, self.Chassis, wheelAttachments)
 	self.ChaseCamera = ChaseCamera.new(car, context.Camera)
 	self.Style = StylePoints.new(car, context.PlayerGui)
 	-- Les points de style comptent en compétition : course, ou spéciale chronométrée.
@@ -242,6 +245,7 @@ function DrivingSession:SetControl(granted: boolean)
 	self.Style:SetVisible(granted)
 	self.Audio:SetActive(granted)
 	self.Effects:SetActive(granted)
+	self.Smoke:SetActive(granted)
 	local timer, copilot, ghost = self.StageTimer, self.Copilot, self.Ghost
 	local school = self.School
 	if school then
@@ -391,6 +395,7 @@ function DrivingSession:RenderUpdate(dt: number): CarAudio.AudioState?
 	end
 	self.Audio:Update(dt, audioState)
 	self.Effects:Update(dt)
+	self.Smoke:Update(audioState.Screech)
 	local school = self.School
 	if school then
 		school:Update(dt)
@@ -440,6 +445,7 @@ function DrivingSession:Destroy()
 	self.Style:Destroy()
 	self.Audio:Destroy()
 	self.Effects:Destroy()
+	self.Smoke:Destroy()
 	local school: DrivingSchool.DrivingSchool? = self.School
 	self.School = nil
 	if school then

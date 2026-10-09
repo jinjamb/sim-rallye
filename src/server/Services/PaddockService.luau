@@ -49,10 +49,14 @@ local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local Celebrations = require(ReplicatedStorage.Shared.Cosmetics.Celebrations)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
+local EconomyService = require(script.Parent.EconomyService)
+local GarageService = require(script.Parent.GarageService)
 
 local PaddockService = {}
 
@@ -437,6 +441,25 @@ type PodiumRow = { UserId: number, Name: string, Position: number }
 
 local podiumToken = 0
 
+--[[
+	La célébration portée par le pilote (Items/Celebrations.luau) au-dessus
+	de sa marche ; les confettis (célébration de série) sont ceux du décor.
+	Les fumigènes prennent la couleur de sa voiture.
+]]
+local function celebrate(player: Player, index: number, top: Vector3)
+	local item = EconomyService.Equipped(player, "Celebration")
+	local effect = if item and Celebrations.Exists(item.Effect) then item.Effect :: string else "Confetti"
+	if effect == "Confetti" then
+		local emitter = confetti[index]
+		if emitter then
+			emitter.Enabled = true
+		end
+		return
+	end
+	local color = if item and item.Color then item.Color else Livery.ColorOf(GarageService.GetLivery(player))
+	Celebrations.Play(workspace, top, effect, color, PODIUM_DURATION)
+end
+
 function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 	podiumToken += 1
 	local token = podiumToken
@@ -447,11 +470,9 @@ function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 		if step and player then
 			local top = PaddockLayout.PODIUM_CENTER + step.Offset + Vector3.new(0, step.Height + 3, 0)
 			CarService.PlaceCharacter(player, CFrame.lookAt(top, top + Vector3.new(0, 0, 1)))
+			celebrate(player, index, top)
 		end
 		table.insert(names, row.Name)
-	end
-	for _, emitter in ipairs(confetti) do
-		emitter.Enabled = true
 	end
 	for _, player in ipairs(players) do
 		Remotes.RaceEvent:FireClient(player, "Podium", {
