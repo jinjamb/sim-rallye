@@ -44,6 +44,7 @@ local SchoolService = require(Services.SchoolService)
 local CarService = require(Services.CarService)
 local RaceService = require(Services.RaceService)
 local HornService = require(Services.HornService)
+local RollService = require(Services.RollService)
 local PaddockService = require(Services.PaddockService)
 
 -- Crochets entre services (sans dépendance circulaire entre modules).
@@ -66,5 +67,6 @@ SchoolService.Start()
 ProgressService.Start()
 RaceService.Start()
 HornService.Start()
+RollService.Start()
 
 ProfileStore.Start()

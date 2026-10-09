@@ -117,6 +117,8 @@ function RaceClient.new(options: Options): RaceClient
 			if type(payload) == "table" then
 				Remotes.EquipItem:FireServer(payload.Kind, payload.Id)
 			end
+		elseif action == "Roll" then
+			Remotes.RequestRoll:FireServer()
 		elseif action == "BuyRobux" then
 			local product = Products.Get(if type(payload) == "string" then payload else nil)
 			if product and Products.IsAvailable(product) then
@@ -449,6 +451,9 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	end
 	if type(news.Gain) == "number" then
 		Toast.Show(string.format("<b>+%s</b>  ·  %s", Credits.Format(news.Gain), tostring(news.Reason or "")))
+	end
+	if type(news.RollsGained) == "number" then
+		Toast.Show(string.format("<b>+%d tirage%s</b>  ·  %s", news.RollsGained, if news.RollsGained > 1 then "s" else "", tostring(news.Reason or "")), Theme.PURPLE)
 	end
 	local item = Catalog.Get(news.Bought or news.Unlocked)
 	if item then

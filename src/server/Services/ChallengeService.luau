@@ -136,6 +136,7 @@ function ChallengeService.DailyEvent(player: Player, event: string, value: numbe
 	end
 	if bonus then
 		EconomyService.Earn(player, Credits.REWARDS.DailyBonus, "Les trois défis du jour")
+		EconomyService.AddRolls(player, 1, "Les trois défis du jour")
 	end
 	if xp > 0 then
 		ProgressService.Push(player, true)

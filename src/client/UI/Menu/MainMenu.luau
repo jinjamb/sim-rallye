@@ -227,6 +227,7 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 		ChallengesPage.Daily(ctx, b)
 	elseif tab == "Shop" then
 		ShopPage.Balance(ctx, b)
+		ShopPage.Rolls(ctx, b)
 		for _, kind in ipairs(Catalog.KINDS) do
 			ShopPage.Items(ctx, b, kind :: Catalog.Kind)
 		end

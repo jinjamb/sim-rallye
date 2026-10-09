@@ -89,6 +89,10 @@ export type Remotes = {
 	Horn: RemoteEvent,
 	-- Serveur -> Clients : (userId) ce pilote klaxonne : chacun joue le son sur sa voiture
 	HornPlayed: RemoteEvent,
+	-- Client -> Serveur : () utiliser un tirage
+	RequestRoll: RemoteEvent,
+	-- Serveur -> Client : (result) l'objet tiré { ItemId, Duplicate, Credits } ou { Error }
+	RollResult: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -122,6 +126,8 @@ local RELIABLE = {
 	"EquipItem",
 	"Horn",
 	"HornPlayed",
+	"RequestRoll",
+	"RollResult",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

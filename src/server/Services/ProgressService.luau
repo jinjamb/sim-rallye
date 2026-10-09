@@ -9,8 +9,9 @@
 	cosmétique débloqué).
 
 	Un niveau gagné ou une nouvelle médaille rapportent aussi des crédits
-	(Credits.luau), une fois : à la transition, pendant la partie. Au
-	chargement, ce qui est déjà acquis ne rapporte rien.
+	(Credits.luau), et un niveau un tirage (Rolls.luau), une fois : à la
+	transition, pendant la partie. Au chargement, ce qui est déjà acquis ne
+	rapporte rien.
 ]]
 
 local Players = game:GetService("Players")
@@ -75,6 +76,8 @@ local function rewardTransition(player: Player, previous: Progression.Snapshot, 
 	local levels = snapshot.Level - previous.Level
 	if levels > 0 then
 		EconomyService.Earn(player, Credits.REWARDS.LevelUp * levels, "Niveau " .. snapshot.Level)
+		-- Un tirage par niveau gagné (Rolls.luau).
+		EconomyService.AddRolls(player, levels, "Niveau " .. snapshot.Level)
 	end
 	local medalCredits = 0
 	for track, tier in pairs(snapshot.Medals) do

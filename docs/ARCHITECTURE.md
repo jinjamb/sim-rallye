@@ -28,7 +28,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Challenges/`  | `Weekly` (défi de la semaine) et `Daily` (défis du jour).                                |
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
-| `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux). |
+| `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux), `Rolls` (règles et probabilités des tirages). |
 
 ## `src/server` : l'autorité
 
@@ -57,6 +57,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `StyleService`     | Points de style (dérapages, sauts, dépassements), à débit plausible.                  |
 | `SchoolService`    | Médailles de l'école de pilotage.                                                     |
 | `HornService`      | Klaxon : relaie le coup de klaxon d'un pilote à tous les joueurs.                     |
+| `RollService`      | Tirages : tire l'objet côté serveur, le donne ou le convertit en crédits.             |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |

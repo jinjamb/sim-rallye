@@ -48,6 +48,8 @@ export type Wallet = {
 	Credits: number,
 	Owned: { string },
 	Equipped: { [string]: string },
+	Rolls: number?, -- tirages disponibles
+	Pity: number?, -- tirages depuis le dernier objet Usine ou plus
 }
 
 export type Context = {

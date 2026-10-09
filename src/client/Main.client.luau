@@ -28,6 +28,8 @@ local SetupMenu = require(script.Parent.UI.SetupMenu)
 local TouchControls = require(script.Parent.Core.TouchControls)
 local DrivingSession = require(script.Parent.Driving.DrivingSession)
 local Horn = require(script.Parent.Driving.Horn)
+local RollReveal = require(script.Parent.UI.RollReveal)
+local Toast = require(script.Parent.UI.Toast)
 local GhostChallenge = require(script.Parent.Stage.GhostChallenge)
 local Replay = require(script.Parent.Replay.Replay)
 local Banner = require(script.Parent.UI.Banner)
@@ -629,6 +631,19 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 		stageBoards = boards
 		refreshLeaderboard()
 	end
+end)
+
+-- Tirage : la mise en scène de l'objet tiré par le serveur.
+local rollReveal = RollReveal.new(playerGui)
+Remotes.RollResult.OnClientEvent:Connect(function(result: any)
+	if type(result) ~= "table" then
+		return
+	end
+	if type(result.Error) == "string" then
+		Toast.Show(result.Error, Theme.RED)
+		return
+	end
+	rollReveal:Show(result)
 end)
 
 -- Un pilote klaxonne (soi compris) : son klaxon, sur sa voiture.

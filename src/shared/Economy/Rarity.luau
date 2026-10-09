@@ -36,8 +36,10 @@ Rarity.INFO = {
 	Legende = { Id = "Legende", Name = "Légende", Rank = 6, Color = Color3.fromRGB(255, 204, 0), Weight = 8 },
 } :: { [Id]: Info }
 
-function Rarity.Get(id: Id): Info
-	return Rarity.INFO[id]
+-- Une rareté inconnue compte comme Série.
+function Rarity.Get(id: string): Info
+	local byId: { [string]: Info } = Rarity.INFO :: any
+	return byId[id] or byId.Serie
 end
 
 return Rarity

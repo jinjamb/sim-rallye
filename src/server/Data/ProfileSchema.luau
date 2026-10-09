@@ -69,11 +69,13 @@ export type Profile = {
 	Owned: { [string]: boolean }, -- objets possédés (Catalog.luau), hors objets gratuits
 	Equipped: { [string]: string }, -- objet porté, par sorte (Catalog.Kind -> id)
 	Receipts: { string }, -- derniers achats Robux accordés (jamais deux fois)
+	Rolls: number, -- tirages disponibles (Rolls.luau)
+	RollPity: number, -- tirages depuis le dernier objet Usine ou plus (garantie)
 }
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
 -- peut ajouter à ce qu'un autre serveur a écrit sans rien écraser.
-export type Counter = "StageRuns" | "Style" | "DailyXp" | "Credits"
+export type Counter = "StageRuns" | "Style" | "DailyXp" | "Credits" | "Rolls"
 
 function ProfileSchema.EmptyStats(): Stats
 	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
@@ -97,6 +99,8 @@ function ProfileSchema.Empty(userId: number): Profile
 		Owned = {},
 		Equipped = {},
 		Receipts = {},
+		Rolls = 0,
+		RollPity = 0,
 	}
 end
 
@@ -177,6 +181,8 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	end
 	profile.Daily = sanitizeDaily(data.Daily)
 	profile.Credits = count(data.Credits)
+	profile.Rolls = count(data.Rolls)
+	profile.RollPity = count(data.RollPity)
 	-- Objets : gardés même s'ils ont quitté le catalogue (un achat ne se perd pas).
 	if type(data.Owned) == "table" then
 		for id, owned in pairs(data.Owned) do

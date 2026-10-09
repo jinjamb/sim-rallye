@@ -56,7 +56,7 @@ local function walletOf(profile: Profile): any
 	for id in pairs(profile.Owned) do
 		table.insert(owned, id)
 	end
-	return { Credits = profile.Credits, Owned = owned, Equipped = profile.Equipped }
+	return { Credits = profile.Credits, Owned = owned, Equipped = profile.Equipped, Rolls = profile.Rolls, Pity = profile.RollPity }
 end
 
 -- `news` : { Gain, Reason } (crédits gagnés), { Bought = itemId }...
@@ -65,6 +65,16 @@ local function sendWallet(player: Player, news: any?)
 	if profile and player.Parent then
 		Remotes.Wallet:FireClient(player, walletOf(profile), news)
 	end
+end
+EconomyService.SendWallet = sendWallet
+
+-- Tirages gagnés (niveau, défis, Rallye Pass) : Rolls.luau, RollService.
+function EconomyService.AddRolls(player: Player, count: number, reason: string)
+	if count <= 0 or not ProfileStore.Get(player) then
+		return
+	end
+	ProfileStore.AddCounter(player, "Rolls", count)
+	sendWallet(player, { RollsGained = count, Reason = reason })
 end
 
 --------------------------------------------------------------------------------

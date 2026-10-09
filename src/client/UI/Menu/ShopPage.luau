@@ -1,9 +1,10 @@
 --!strict
 --[[
 	ShopPage.luau
-	L'onglet BOUTIQUE : son solde de crédits, les packs de crédits (Robux),
-	et les objets du catalogue qui s'achètent (crédits ou Robux), par sorte.
-	Un objet possédé se porte d'ici aussi.
+	L'onglet BOUTIQUE : son solde de crédits, ses tirages (avec les
+	probabilités, affichées en entier), les packs de crédits (Robux), et les
+	objets du catalogue qui s'achètent (crédits ou Robux), par sorte. Un
+	objet possédé se porte d'ici aussi.
 
 	PRIX EN ROBUX : lus chez Roblox (GetProductInfo), une fois par produit,
 	en tâche de fond : le menu se reconstruit quand ils arrivent. Un produit
@@ -17,6 +18,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
+local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -90,6 +92,55 @@ function ShopPage.Balance(ctx: Context, b: Builder)
 		rewards.Medal[1],
 		rewards.Medal[#rewards.Medal]
 	), 12, Widgets.COLOR_DIM)
+end
+
+-- Tirages : combien, la garantie, le bouton, et les probabilités (sur demande).
+function ShopPage.Rolls(ctx: Context, b: Builder)
+	local wallet = ctx.Data.Wallet
+	local count = if wallet and wallet.Rolls then wallet.Rolls else 0
+	local pity = if wallet and wallet.Pity then wallet.Pity else 0
+	b:Section("Tirages")
+	local row = b:Row(40)
+	local label = Widgets.Label(row, string.format("%d tirage%s disponible%s", count, if count > 1 then "s" else "", if count > 1 then "s" else ""), 18, Enum.Font.GothamBlack, if count > 0 then Theme.ACCENT else Widgets.COLOR_DIM)
+	label.Size = UDim2.new(1, -BUTTON_WIDTH - 8, 1, 0)
+	local button = ctx.Button(row, "TIRER", MenuKit.CONTENT_WIDTH - BUTTON_WIDTH, BUTTON_WIDTH, function()
+		if count > 0 then
+			ctx.Action("Roll", nil)
+		end
+	end)
+	if count > 0 then
+		Widgets.Primary(button)
+	else
+		button.TextColor3 = Widgets.COLOR_DIM
+	end
+	local left = math.max(1, Rolls.PITY_LIMIT - pity)
+	b:Text(string.format(
+		"Un tirage par niveau gagné, et un pour les trois défis du jour. Garantie : un objet Usine ou plus %s. Doublon : converti en crédits.",
+		if left <= 1 then "au prochain tirage" else string.format("d'ici %d tirages", left)
+	), 12, Widgets.COLOR_DIM)
+	local details = b:Row(30)
+	ctx.Button(details, if ctx.View.ShowOdds then "MASQUER LES PROBABILITÉS" else "VOIR LES PROBABILITÉS", 0, MenuKit.CONTENT_WIDTH, function()
+		ctx.View.ShowOdds = not ctx.View.ShowOdds
+		ctx.Rebuild()
+	end)
+	if ctx.View.ShowOdds then
+		for _, entry in ipairs(Rolls.Odds(false)) do
+			local info = Rarity.Get(entry.Rarity)
+			local names = {}
+			for _, item in ipairs(entry.Items) do
+				table.insert(names, item.Name)
+			end
+			local text = b:Text(string.format(
+				'<font color="%s"><b>%s %s</b></font> · %s par objet · %s',
+				Theme.Hex(info.Color),
+				string.upper(info.Name),
+				Rolls.FormatChance(entry.Chance),
+				Rolls.FormatChance(entry.Chance / #entry.Items),
+				table.concat(names, ", ")
+			), 12, Widgets.COLOR_TEXT)
+			text.RichText = true
+		end
+	end
 end
 
 -- Packs de crédits, en Robux.
