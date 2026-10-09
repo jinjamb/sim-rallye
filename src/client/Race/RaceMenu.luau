@@ -31,6 +31,7 @@ local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local RaceUi = require(script.Parent.RaceUi)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local RaceMenu = {}
 RaceMenu.__index = RaceMenu
@@ -63,7 +64,7 @@ export type RaceMenu = typeof(setmetatable({}, RaceMenu)) & {
 }
 
 local PANEL_WIDTH = 540
-local HEADER_HEIGHT = 44
+local HEADER_HEIGHT = 70 -- en-tête du jeu : titre, sous-titre, damier
 local ROW_HEIGHT = 30
 local SCREEN_PADDING = 24
 local TOUCH_SCALE = 1.1
@@ -110,9 +111,16 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Panel = panel
 	self.Scale = scale
 
-	local title = RaceUi.Label(panel, "MENU", 18, Enum.Font.GothamBlack)
-	title.Position = UDim2.fromOffset(16, 10)
-	title.Size = UDim2.new(1, -70, 0, 24)
+	-- En-tête du jeu : le titre en capitales condensées, une étiquette jaune,
+	-- un filet à damier dessous.
+	local title = RaceUi.Label(panel, "SIM RALLYE", 30, Enum.Font.GothamBlack)
+	title.Position = UDim2.fromOffset(18, 8)
+	title.Size = UDim2.fromOffset(170, 38)
+	local tag = Theme.Tag(panel, "SPÉCIALE · RALLYCROSS", Theme.ACCENT, Theme.ON_ACCENT, 13)
+	tag.Position = UDim2.fromOffset(176, 17)
+	local checker = Theme.Checker(panel, PANEL_WIDTH, 5, 2)
+	checker.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 14)
+	checker.BackgroundTransparency = 0.2
 	local close = RaceUi.Button(panel, "×", function()
 		self:SetOpen(false)
 	end)
@@ -169,11 +177,18 @@ function RaceMenu:_builder(): Builder
 		row.Parent = body
 		return row
 	end
+	-- Titre de section façon télévision : un pavé jaune, des capitales condensées.
 	function builder.Section(b: Builder, text: string)
-		local row = b:Row(26)
-		local label = RaceUi.Label(row, string.upper(text), 12, Enum.Font.GothamBold, RaceUi.COLOR_ACCENT)
-		label.Position = UDim2.fromOffset(0, 8)
-		label.Size = UDim2.new(1, 0, 0, 18)
+		local row = b:Row(34)
+		local mark = Instance.new("Frame")
+		mark.BorderSizePixel = 0
+		mark.BackgroundColor3 = Theme.ACCENT
+		mark.Position = UDim2.fromOffset(0, 12)
+		mark.Size = UDim2.fromOffset(6, 18)
+		mark.Parent = row
+		local label = RaceUi.Label(row, string.upper(text), 19, Enum.Font.GothamBlack, RaceUi.COLOR_TEXT)
+		label.Position = UDim2.fromOffset(14, 10)
+		label.Size = UDim2.new(1, -14, 0, 22)
 	end
 	function builder.Text(b: Builder, text: string, textSize: number?, color: Color3?): TextLabel
 		local row = b:Row(20)
@@ -381,7 +396,7 @@ function RaceMenu:_circuitRow(b: Builder, id: string)
 		self.Action("Play", { Mode = "Rallycross", TrackId = id })
 	end)
 	if waiting then
-		button.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+		RaceUi.Primary(button)
 	end
 end
 
@@ -394,7 +409,7 @@ function RaceMenu:_buildOutside(b: Builder)
 	local stage = self:_button(stageRow, "LANCER UNE SPÉCIALE", 0, width, function()
 		self.Action("Play", { Mode = "Stage" })
 	end)
-	stage.BackgroundColor3 = Color3.fromRGB(40, 120, 60)
+	RaceUi.Primary(stage)
 	stage.TextSize = 16
 
 	b:Section("Rallycross")
@@ -498,8 +513,11 @@ function RaceMenu:_buildRace(b: Builder, race: RaceUi.RaceSnapshot)
 					self.Action("Start", nil)
 				end
 			end)
-			start.BackgroundColor3 = if canStart then Color3.fromRGB(40, 120, 60) else RaceUi.COLOR_BUTTON
-			start.TextColor3 = if canStart then RaceUi.COLOR_TEXT else RaceUi.COLOR_DIM
+			if canStart then
+				RaceUi.Primary(start)
+			else
+				start.TextColor3 = RaceUi.COLOR_DIM
+			end
 		end
 		self:_button(row, "QUITTER", if isHost then half + 8 else 0, if isHost then half else width, function()
 			self.Action("Leave", nil)
@@ -508,7 +526,7 @@ function RaceMenu:_buildRace(b: Builder, race: RaceUi.RaceSnapshot)
 		local abandon = self:_button(row, "ABANDONNER", 0, width, function()
 			self.Action("Abandon", nil)
 		end)
-		abandon.BackgroundColor3 = Color3.fromRGB(130, 40, 35)
+		RaceUi.Danger(abandon)
 	end
 
 	b:Section("Records du tour")

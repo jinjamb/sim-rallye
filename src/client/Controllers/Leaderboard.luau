@@ -13,6 +13,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local Leaderboard = {}
 Leaderboard.__index = Leaderboard
@@ -37,16 +38,16 @@ export type Leaderboard = typeof(setmetatable({}, Leaderboard)) & {
 local ROWS = 10
 local PANEL_WIDTH = 300
 local ROW_HEIGHT = 20
-local HEADER_HEIGHT = 30
+local HEADER_HEIGHT = 38 -- titre et filet à damier
 local FOOTER_HEIGHT = 34
 local DOT_SIZE = 10
 local SCREEN_MARGIN = 24
 local TOP_OFFSET = 64 -- sous la barre de Roblox
 
-local COLOR_PANEL = Color3.fromRGB(14, 15, 18)
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_DIM = Color3.fromRGB(130, 134, 145)
-local COLOR_SELF = Color3.fromRGB(245, 200, 55)
+local COLOR_PANEL = Theme.PANEL
+local COLOR_TEXT = Theme.TEXT
+local COLOR_DIM = Theme.DIM
+local COLOR_SELF = Theme.ACCENT
 
 local function formatTime(ms: number): string
 	local seconds = ms / 1000
@@ -74,11 +75,11 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	panel.Position = UDim2.new(1, -SCREEN_MARGIN, 0, TOP_OFFSET)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + ROWS * ROW_HEIGHT + FOOTER_HEIGHT + 6)
 	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.25
+	panel.BackgroundTransparency = 0.15
 	panel.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
+	Theme.Corner(panel)
+	Theme.Shade(panel)
+	Theme.AccentBar(panel)
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	panel.Parent = gui
@@ -89,12 +90,16 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	title.BackgroundTransparency = 1
 	title.Position = UDim2.fromOffset(12, 6)
 	title.Size = UDim2.new(1, -24, 0, 20)
-	title.Font = Enum.Font.GothamBold
-	title.TextSize = 13
-	title.TextColor3 = COLOR_DIM
+	title.Font = Enum.Font.GothamBlack
+	title.TextSize = 17
+	title.TextColor3 = COLOR_TEXT
 	title.TextXAlignment = Enum.TextXAlignment.Left
-	title.Text = "CLASSEMENT DE LA SPÉCIALE"
+	title.Text = "CLASSEMENT · SPÉCIALE"
 	title.Parent = panel
+	-- Filet à damier sous le titre, comme un tableau de chronométrage TV.
+	local checker = Theme.Checker(panel, PANEL_WIDTH, 3, 2)
+	checker.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 9)
+	checker.BackgroundTransparency = 0.4
 
 	self.Rows = {}
 	self.Dots = {}

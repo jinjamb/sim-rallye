@@ -28,10 +28,21 @@ local DrivingSession = require(script.Parent.DrivingSession)
 local GhostChallenge = require(script.Parent.GhostChallenge)
 local RaceClient = require(script.Parent.Parent.Race.RaceClient)
 local Garage = require(script.Parent.Parent.Race.Garage)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
 local playerGui = player:WaitForChild("PlayerGui")
+
+-- Identité visuelle (Theme.luau) : tous les écrans du joueur, et les panneaux
+-- du paddock, prennent les polices du thème.
+Theme.Skin(playerGui)
+task.spawn(function()
+	local paddock = workspace:WaitForChild("Paddock", 30)
+	if paddock then
+		Theme.Skin(paddock)
+	end
+end)
 
 -- Toute la calibration (suspension, freins, aéro) est déduite du poids au moment
 -- de Car.new : une gravité qui ne correspond pas à l'échelle fausse tout en silence.

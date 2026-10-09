@@ -32,6 +32,7 @@ local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local Ghost = {}
 Ghost.__index = Ghost
@@ -322,8 +323,8 @@ function Ghost:_attachTag()
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.GothamBlack
-	label.TextSize = 16
+	label.FontFace = Theme.HEADLINE
+	label.TextSize = 18
 	label.TextStrokeTransparency = 0.4
 	label.TextTransparency = 0.15
 	label.Parent = billboard

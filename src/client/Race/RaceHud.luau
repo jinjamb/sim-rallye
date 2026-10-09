@@ -23,6 +23,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local RaceUi = require(script.Parent.RaceUi)
+local Theme = require(script.Parent.Parent.UI.Theme)
 local Minimap = require(script.Parent.Minimap)
 
 local RaceHud = {}
@@ -97,8 +98,9 @@ local COLOR_LIGHT_OFF = Color3.fromRGB(45, 20, 20)
 local COLOR_LIGHT_RED = Color3.fromRGB(240, 30, 30)
 local COLOR_LIGHT_GREEN = Color3.fromRGB(40, 230, 80)
 
+-- « P2/6 » dans la case jaune : le nombre de pilotes plus petit, en gris foncé.
 local function positionText(position: number, count: number): string
-	return string.format('P%d<font size="26" color="#8288A0">/%d</font>', position, count)
+	return string.format('P%d<font size="24" color="#4A4A52">/%d</font>', position, count)
 end
 
 function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callbacks): RaceHud
@@ -139,10 +141,15 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.RoundLabel.Position = UDim2.fromOffset(14, 6)
 	self.RoundLabel.Size = UDim2.new(1, -28, 0, 16)
 
-	self.PositionLabel = RaceUi.Label(info, "", 52, Enum.Font.GothamBlack)
+	-- Position : la case jaune des retransmissions.
+	self.PositionLabel = RaceUi.Label(info, "", 50, Enum.Font.GothamBlack, Theme.ON_ACCENT)
 	self.PositionLabel.RichText = true
-	self.PositionLabel.Position = UDim2.fromOffset(14, 22)
-	self.PositionLabel.Size = UDim2.fromOffset(130, 58)
+	self.PositionLabel.BackgroundTransparency = 0
+	self.PositionLabel.BackgroundColor3 = Theme.ACCENT
+	self.PositionLabel.TextXAlignment = Enum.TextXAlignment.Center
+	self.PositionLabel.Position = UDim2.fromOffset(14, 24)
+	self.PositionLabel.Size = UDim2.fromOffset(126, 56)
+	Theme.Corner(self.PositionLabel, 2)
 
 	self.LapLabel = RaceUi.Label(info, "", 15, Enum.Font.GothamBold, RaceUi.COLOR_DIM)
 	self.LapLabel.Position = UDim2.fromOffset(150, 24)
@@ -172,17 +179,26 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	-- Classement ------------------------------------------------------------------
 	local standings = RaceUi.Panel(root, 0.3)
 	standings.Position = UDim2.fromOffset(16, 64)
-	standings.Size = UDim2.fromOffset(STANDINGS_WIDTH, 30 + MAX_ROWS * ROW_HEIGHT + 8)
+	standings.Size = UDim2.fromOffset(STANDINGS_WIDTH, 34 + MAX_ROWS * ROW_HEIGHT + 8)
 	self.Standings = standings
-	local header = RaceUi.Label(standings, "CLASSEMENT", 12, Enum.Font.GothamBold, RaceUi.COLOR_DIM)
-	header.Position = UDim2.fromOffset(12, 6)
-	header.Size = UDim2.new(1, -24, 0, 18)
+	local header = RaceUi.Label(standings, "CLASSEMENT", 16, Enum.Font.GothamBlack)
+	header.Position = UDim2.fromOffset(12, 4)
+	header.Size = UDim2.new(1, -24, 0, 20)
+	local headerChecker = Theme.Checker(standings, STANDINGS_WIDTH, 3, 2)
+	headerChecker.Position = UDim2.fromOffset(0, 24)
+	headerChecker.BackgroundTransparency = 0.4
 	self.StandingRows = {}
 	for i = 1, MAX_ROWS do
 		local row = RaceUi.Label(standings, "", 15, Enum.Font.RobotoMono)
-		row.Position = UDim2.fromOffset(12, 28 + (i - 1) * ROW_HEIGHT)
-		row.Size = UDim2.new(1, -24, 0, ROW_HEIGHT)
+		row.Position = UDim2.fromOffset(8, 32 + (i - 1) * ROW_HEIGHT)
+		row.Size = UDim2.new(1, -16, 0, ROW_HEIGHT)
 		row.RichText = true
+		-- Sa propre ligne : surlignée en jaune (voir Update).
+		row.BackgroundColor3 = Theme.ACCENT
+		row.BackgroundTransparency = 1
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 4)
+		padding.Parent = row
 		self.StandingRows[i] = row
 	end
 
@@ -238,9 +254,12 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	results.Size = UDim2.fromOffset(560, 80 + MAX_ROWS * 30)
 	results.Visible = false
 	self.Results = results
-	self.ResultsTitle = RaceUi.Label(results, "", 20, Enum.Font.GothamBlack)
-	self.ResultsTitle.Position = UDim2.fromOffset(16, 10)
-	self.ResultsTitle.Size = UDim2.new(1, -32, 0, 26)
+	-- Tableau des résultats : damier en tête, titre en capitales condensées.
+	local resultsChecker = Theme.Checker(results, 600, 5, 2)
+	resultsChecker.BackgroundTransparency = 0.2
+	self.ResultsTitle = RaceUi.Label(results, "", 24, Enum.Font.GothamBlack)
+	self.ResultsTitle.Position = UDim2.fromOffset(16, 12)
+	self.ResultsTitle.Size = UDim2.new(1, -32, 0, 28)
 	local rows = Instance.new("Frame")
 	rows.BackgroundTransparency = 1
 	rows.Position = UDim2.fromOffset(16, 42)
@@ -427,6 +446,13 @@ function RaceHud:ShowResults(results: RaceUi.Results)
 		label.Position = UDim2.fromOffset(0, (index - 1) * 30)
 		label.Size = UDim2.new(1, 0, 0, 28)
 		label.RichText = true
+		-- Lignes alternées, la sienne surlignée en jaune.
+		local mine = row.UserId == self.LocalUserId
+		label.BackgroundColor3 = if mine then Theme.ACCENT else Theme.PANEL_2
+		label.BackgroundTransparency = if mine then 0.75 elseif index % 2 == 1 then 0.55 else 1
+		local padding = Instance.new("UIPadding")
+		padding.PaddingLeft = UDim.new(0, 6)
+		padding.Parent = label
 		local name = row.Name
 		if (utf8.len(name) or #name) > 14 then
 			local cut = utf8.offset(name, 14)
@@ -611,9 +637,12 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 			end
 			local joker = if row.J > 0 then "" else ' <font color="#FF8C28">J</font>'
 			label.Text = string.format("%d %s%s%s%s", row.P, name, padding, gap, joker)
-			label.TextColor3 = if row.U == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
+			local mine = row.U == self.LocalUserId
+			label.TextColor3 = if mine then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
+			label.BackgroundTransparency = if mine then 0.82 else 1
 		else
 			label.Text = ""
+			label.BackgroundTransparency = 1
 		end
 	end
 

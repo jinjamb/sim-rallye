@@ -3,9 +3,11 @@
 	RaceUi.luau
 	Ce que partagent les écrans du rallycross (menu, HUD, résultats) : formes des
 	données envoyées par RaceService, couleurs, et petits constructeurs
-	d'interface au style du reste du jeu (panneaux sombres arrondis, chiffres en
-	police à chasse fixe).
+	d'interface au style du jeu (Theme.luau : panneaux noirs à angles vifs et
+	liseré jaune, chiffres à chasse fixe).
 ]]
+
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local RaceUi = {}
 
@@ -94,15 +96,15 @@ export type Stats = { Races: number, Wins: number, Podiums: number, Points: numb
 
 -- Style ---------------------------------------------------------------------------
 
-RaceUi.COLOR_PANEL = Color3.fromRGB(14, 15, 18)
-RaceUi.COLOR_BUTTON = Color3.fromRGB(45, 47, 55)
-RaceUi.COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-RaceUi.COLOR_DIM = Color3.fromRGB(130, 134, 145)
-RaceUi.COLOR_ACCENT = Color3.fromRGB(245, 200, 55)
-RaceUi.COLOR_GREEN = Color3.fromRGB(70, 200, 95)
-RaceUi.COLOR_RED = Color3.fromRGB(235, 65, 55)
-RaceUi.COLOR_ORANGE = Color3.fromRGB(255, 140, 40)
-RaceUi.COLOR_BLUE = Color3.fromRGB(70, 150, 255)
+RaceUi.COLOR_PANEL = Theme.PANEL
+RaceUi.COLOR_BUTTON = Theme.PANEL_2
+RaceUi.COLOR_TEXT = Theme.TEXT
+RaceUi.COLOR_DIM = Theme.DIM
+RaceUi.COLOR_ACCENT = Theme.ACCENT
+RaceUi.COLOR_GREEN = Theme.GREEN
+RaceUi.COLOR_RED = Theme.RED
+RaceUi.COLOR_ORANGE = Theme.ORANGE
+RaceUi.COLOR_BLUE = Theme.BLUE
 
 function RaceUi.FormatTime(seconds: number?): string
 	if seconds == nil then
@@ -113,22 +115,26 @@ function RaceUi.FormatTime(seconds: number?): string
 	return string.format("%d:%05.2f", minutes, s - minutes * 60)
 end
 
+-- Angles presque vifs (Theme) ; un rond (rayon égal à la taille) reste un rond.
 function RaceUi.Corner(parent: GuiObject, radius: number)
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
+	corner.CornerRadius = UDim.new(0, if radius >= 20 then radius else Theme.CORNER)
 	corner.Parent = parent
 end
 
+-- Panneau du jeu : noir, angles vifs, léger dégradé, liseré jaune à gauche.
 function RaceUi.Panel(parent: Instance, transparency: number?): Frame
 	local frame = Instance.new("Frame")
 	frame.BackgroundColor3 = RaceUi.COLOR_PANEL
-	frame.BackgroundTransparency = transparency or 0.2
+	frame.BackgroundTransparency = transparency or 0.12
 	frame.BorderSizePixel = 0
-	RaceUi.Corner(frame, 10)
+	Theme.Corner(frame)
+	Theme.Shade(frame)
 	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.new(1, 1, 1)
+	stroke.Color = Theme.LINE
 	stroke.Transparency = 0.9
 	stroke.Parent = frame
+	Theme.AccentBar(frame)
 	frame.Parent = parent
 	return frame
 end
@@ -155,10 +161,33 @@ function RaceUi.Button(parent: Instance, text: string, callback: () -> ()): Text
 	button.BorderSizePixel = 0
 	button.AutoButtonColor = true
 	button.Selectable = true -- navigation à la manette
-	RaceUi.Corner(button, 6)
+	Theme.Corner(button)
+	-- Sélection à la manette ou survol : cadre jaune.
+	local stroke = Instance.new("UIStroke")
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Color = Theme.ACCENT
+	stroke.Thickness = 2
+	stroke.Enabled = false
+	stroke.Parent = button
+	button.SelectionGained:Connect(function()
+		stroke.Enabled = true
+	end)
+	button.SelectionLost:Connect(function()
+		stroke.Enabled = false
+	end)
+	button.MouseEnter:Connect(function()
+		stroke.Enabled = true
+	end)
+	button.MouseLeave:Connect(function()
+		stroke.Enabled = false
+	end)
 	button.Activated:Connect(callback)
 	button.Parent = parent
 	return button
 end
+
+-- Action principale (lancer, rejoindre) : jaune, texte noir.
+RaceUi.Primary = Theme.Primary
+RaceUi.Danger = Theme.Danger
 
 return RaceUi

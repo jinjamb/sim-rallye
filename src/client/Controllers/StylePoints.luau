@@ -32,6 +32,7 @@ local TweenService = game:GetService("TweenService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local StylePoints = {}
 StylePoints.__index = StylePoints
@@ -80,9 +81,9 @@ local JUMP_RATE = 120 -- points par seconde en l'air
 local RECOVER_GRACE = 1.2 -- s ignorées après une remise en piste
 local COUNTING_GRACE = 4 -- s après l'arrivée où une combinaison finie compte encore
 
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_DIM = Color3.fromRGB(150, 154, 165)
-local COLOR_LOST = Color3.fromRGB(235, 65, 55)
+local COLOR_TEXT = Theme.TEXT
+local COLOR_DIM = Theme.DIM
+local COLOR_LOST = Theme.RED
 local MULTIPLIER_COLORS = {
 	Color3.fromRGB(235, 236, 240),
 	Color3.fromRGB(120, 210, 255),

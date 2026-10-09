@@ -31,6 +31,7 @@ local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local CarAudio = require(script.Parent.Parent.Audio.CarAudio)
 local CarEffects = require(script.Parent.CarEffects)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local RemoteCars = {}
 RemoteCars.__index = RemoteCars
@@ -170,8 +171,8 @@ function RemoteCars:_add(instance: Instance)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
 	label.Size = UDim2.fromScale(1, 1)
-	label.Font = Enum.Font.GothamBold
-	label.TextSize = 16
+	label.FontFace = Theme.BODY_BOLD
+	label.TextSize = 17
 	label.TextColor3 = Color3.new(1, 1, 1)
 	label.TextStrokeTransparency = 0.4
 	label.RichText = true

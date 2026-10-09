@@ -24,6 +24,7 @@ local Units = require(ReplicatedStorage.Shared.Constants.Units)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local WheelClass = require(script.Parent.Parent.Physics.Wheel)
 local InputManager = require(script.Parent.InputManager)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local Dashboard = {}
 Dashboard.__index = Dashboard
@@ -61,14 +62,14 @@ local POWER_PEAK_RPM = 5500 -- fin du vert : pic de puissance de la courbe (Powe
 local DETAIL_REFRESH = 0.1 -- le texte détaillé n'a pas besoin de 60 Hz
 local BLINK_FREQUENCY = 6 -- Hz
 
-local COLOR_PANEL = Color3.fromRGB(14, 15, 18)
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_TEXT_DIM = Color3.fromRGB(120, 124, 135)
-local COLOR_GREEN = Color3.fromRGB(70, 200, 95)
-local COLOR_YELLOW = Color3.fromRGB(245, 200, 55)
-local COLOR_RED = Color3.fromRGB(235, 65, 55)
-local COLOR_BLUE = Color3.fromRGB(70, 150, 255)
-local COLOR_ORANGE = Color3.fromRGB(255, 140, 40)
+local COLOR_PANEL = Theme.PANEL
+local COLOR_TEXT = Theme.TEXT
+local COLOR_TEXT_DIM = Theme.DIM
+local COLOR_GREEN = Theme.GREEN
+local COLOR_YELLOW = Theme.ACCENT
+local COLOR_RED = Theme.RED
+local COLOR_BLUE = Theme.BLUE
+local COLOR_ORANGE = Theme.ORANGE
 local COLOR_GREY = Color3.fromRGB(70, 72, 80)
 
 --------------------------------------------------------------------------------

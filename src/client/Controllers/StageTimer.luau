@@ -29,6 +29,7 @@ local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local Ghost = require(script.Parent.Ghost)
 local Banner = require(script.Parent.Banner)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local StageTimer = {}
 StageTimer.__index = StageTimer
@@ -91,12 +92,12 @@ local PANEL_WIDTH = 380
 local PANEL_HEIGHT = 170
 local SCREEN_MARGIN = 24
 
-local COLOR_PANEL = Color3.fromRGB(14, 15, 18)
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_DIM = Color3.fromRGB(130, 134, 145)
-local COLOR_FASTER = Color3.fromRGB(70, 200, 95)
-local COLOR_SLOWER = Color3.fromRGB(235, 65, 55)
-local COLOR_INVALID = Color3.fromRGB(235, 65, 55)
+local COLOR_PANEL = Theme.PANEL
+local COLOR_TEXT = Theme.TEXT
+local COLOR_DIM = Theme.DIM
+local COLOR_FASTER = Theme.GREEN
+local COLOR_SLOWER = Theme.RED
+local COLOR_INVALID = Theme.RED
 local DELTA_INTERVAL = 0.1 -- l'écart en direct change 10 fois par seconde : lisible
 
 local function formatTime(seconds: number): string
@@ -163,15 +164,14 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	panel.Position = UDim2.new(0, SCREEN_MARGIN, 1, -SCREEN_MARGIN)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
 	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.2
+	panel.BackgroundTransparency = 0.12
 	panel.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 255, 255)
-	stroke.Transparency = 0.9
-	stroke.Parent = panel
+	-- Habillage du thème : angles vifs, liseré jaune, filet à damier en tête.
+	Theme.Corner(panel)
+	Theme.Shade(panel)
+	Theme.AccentBar(panel)
+	local checker = Theme.Checker(panel, PANEL_WIDTH, 3, 2)
+	checker.BackgroundTransparency = 0.4
 	panel.Parent = gui
 	self.Panel = panel
 
@@ -182,8 +182,17 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 
 	-- Chiffres en police à chasse fixe : sinon le chrono "tremble" à chaque
 	-- centième, les chiffres n'ayant pas tous la même largeur.
-	self.StatusLabel = makeLabel(panel, 12, 16, 13, Enum.Font.GothamBold)
-	self.StatusLabel.TextColor3 = COLOR_DIM
+	-- Statut : étiquette pleine (jaune, verte pour un record, rouge si refusé).
+	self.StatusLabel = makeLabel(panel, 11, 18, 13, Enum.Font.GothamBlack)
+	self.StatusLabel.Size = UDim2.fromOffset(0, 18)
+	self.StatusLabel.AutomaticSize = Enum.AutomaticSize.X
+	self.StatusLabel.BackgroundTransparency = 0
+	self.StatusLabel.TextColor3 = Theme.ON_ACCENT
+	Theme.Corner(self.StatusLabel, 2)
+	local statusPadding = Instance.new("UIPadding")
+	statusPadding.PaddingLeft = UDim.new(0, 7)
+	statusPadding.PaddingRight = UDim.new(0, 7)
+	statusPadding.Parent = self.StatusLabel
 	self.TimeLabel = makeLabel(panel, 30, 58, 56, Enum.Font.RobotoMono)
 	self.SplitLabels = {}
 	for i = 1, #StageTrack.SPLITS do
@@ -194,10 +203,19 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.BestLabel.RichText = true
 	-- Écart au fantôme, et contre qui : une colonne à droite du chrono, qui
 	-- ne déborde pas sur ses chiffres (un nom long est tronqué).
-	self.DeltaLabel = makeLabel(panel, 38, 30, 28, Enum.Font.RobotoMono)
-	self.DeltaLabel.Position = UDim2.new(1, -142, 0, 38)
-	self.DeltaLabel.Size = UDim2.fromOffset(130, 30)
-	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Right
+	-- Écart : pastille pleine, verte devant le fantôme, rouge derrière.
+	self.DeltaLabel = makeLabel(panel, 38, 30, 26, Enum.Font.RobotoMono)
+	self.DeltaLabel.AnchorPoint = Vector2.new(1, 0)
+	self.DeltaLabel.Position = UDim2.new(1, -12, 0, 38)
+	self.DeltaLabel.Size = UDim2.fromOffset(0, 30)
+	self.DeltaLabel.AutomaticSize = Enum.AutomaticSize.X
+	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Center
+	self.DeltaLabel.TextColor3 = Theme.ON_ACCENT
+	Theme.Corner(self.DeltaLabel, 2)
+	local deltaPadding = Instance.new("UIPadding")
+	deltaPadding.PaddingLeft = UDim.new(0, 8)
+	deltaPadding.PaddingRight = UDim.new(0, 8)
+	deltaPadding.Parent = self.DeltaLabel
 	self.VersusLabel = makeLabel(panel, 68, 16, 12, Enum.Font.GothamBold)
 	self.VersusLabel.Position = UDim2.new(1, -142, 0, 68)
 	self.VersusLabel.Size = UDim2.fromOffset(130, 16)
@@ -416,9 +434,10 @@ function StageTimer:_refresh(now: number)
 	self.Scale.Scale = math.clamp(viewport.Y / 1080, 0.6, 1.2)
 
 	local state = self.State
-	self.StatusLabel.TextColor3 = COLOR_DIM
+	-- Couleur de l'étiquette de statut : jaune par défaut.
+	local tone = Theme.ACCENT
 	if state == "Running" then
-		self.StatusLabel.Text = "EN COURSE"
+		self.StatusLabel.Text = "SPÉCIALE · EN COURSE"
 		self.TimeLabel.Text = formatTime(now - self.StartClock)
 		self.TimeLabel.TextColor3 = COLOR_TEXT
 	elseif state == "Finished" then
@@ -426,22 +445,26 @@ function StageTimer:_refresh(now: number)
 		local official = self.OfficialText
 		if official then
 			self.StatusLabel.Text = official
-			self.StatusLabel.TextColor3 = self.OfficialColor
+			if self.OfficialColor ~= COLOR_DIM then
+				tone = self.OfficialColor
+			end
 		else
 			self.StatusLabel.Text = "ARRIVÉE — VALIDATION…"
-			self.StatusLabel.TextColor3 = COLOR_DIM
 		end
 		self.TimeLabel.Text = formatTime(self.FinalTime)
 		self.TimeLabel.TextColor3 = if isBest then COLOR_FASTER else COLOR_TEXT
 	elseif state == "Invalid" then
 		self.StatusLabel.Text = "TEMPS ANNULÉ : " .. string.upper(self.InvalidReason)
+		tone = COLOR_INVALID
 		self.TimeLabel.Text = formatTime(self.FinalTime)
 		self.TimeLabel.TextColor3 = COLOR_INVALID
 	else
-		self.StatusLabel.Text = "SPÉCIALE — FRANCHIS LE DÉPART"
+		self.StatusLabel.Text = "SPÉCIALE · FRANCHIS LE DÉPART"
 		self.TimeLabel.Text = formatTime(0)
 		self.TimeLabel.TextColor3 = COLOR_DIM
 	end
+	self.StatusLabel.BackgroundColor3 = tone
+	self.StatusLabel.TextColor3 = if tone == COLOR_INVALID then Theme.TEXT else Theme.ON_ACCENT
 
 	for i, label in ipairs(self.SplitLabels) do
 		local splitTime = self.SplitTimes[i]
@@ -465,10 +488,12 @@ function StageTimer:_refresh(now: number)
 	local ghost = self.Ghost
 	if delta then
 		self.DeltaLabel.Text = formatDelta(delta)
-		self.DeltaLabel.TextColor3 = if delta <= 0 then COLOR_FASTER else COLOR_SLOWER
+		self.DeltaLabel.BackgroundTransparency = 0
+		self.DeltaLabel.BackgroundColor3 = if delta <= 0 then COLOR_FASTER else COLOR_SLOWER
 		self.VersusLabel.Text = if ghost and self:_hasGhost() then "VS " .. ghost:Describe() else "VS MEILLEURS INTERS"
 	else
 		self.DeltaLabel.Text = ""
+		self.DeltaLabel.BackgroundTransparency = 1
 		self.VersusLabel.Text = if state ~= "Running" and ghost and self:_hasGhost() then "VS " .. ghost:Describe() else ""
 	end
 

@@ -20,6 +20,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local Copilot = {}
 Copilot.__index = Copilot
@@ -47,7 +48,7 @@ local MAIN_SIZES = { 40, 26, 21 }
 local DETAIL_SIZES = { 22, 17, 15 }
 local LINE_TRANSPARENCY = { 0, 0.35, 0.55 }
 
-local COLOR_PANEL = Color3.fromRGB(14, 15, 18)
+local COLOR_PANEL = Theme.PANEL
 
 function Copilot.new(car: CarClass.Car, playerGui: Instance): Copilot
 	local self = (setmetatable({}, Copilot) :: any) :: Copilot

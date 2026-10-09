@@ -27,6 +27,7 @@
 local UserInputService = game:GetService("UserInputService")
 
 local InputManager = require(script.Parent.InputManager)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local TouchControls = {}
 TouchControls.__index = TouchControls
@@ -81,12 +82,12 @@ local PEDAL_WIDTH = 84
 local GAP = 8
 local PEDAL_MIN = 0.35 -- un appui tout en bas de la pédale
 
-local COLOR_FILL = Color3.fromRGB(20, 21, 26)
+local COLOR_FILL = Theme.PANEL
 local COLOR_EDGE = Color3.fromRGB(255, 255, 255)
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_THROTTLE = Color3.fromRGB(70, 200, 95)
-local COLOR_BRAKE = Color3.fromRGB(235, 65, 55)
-local COLOR_HANDBRAKE = Color3.fromRGB(255, 140, 40)
+local COLOR_TEXT = Theme.TEXT
+local COLOR_THROTTLE = Theme.GREEN
+local COLOR_BRAKE = Theme.RED
+local COLOR_HANDBRAKE = Theme.ORANGE
 
 local function styled(frame: GuiObject, radius: number)
 	frame.BackgroundColor3 = COLOR_FILL

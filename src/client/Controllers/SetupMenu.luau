@@ -19,6 +19,7 @@ local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local SetupMenu = {}
 SetupMenu.__index = SetupMenu
@@ -44,11 +45,11 @@ local GROUP_HEIGHT = 24
 local SCREEN_PADDING = 24 -- marge haute + basse quand le menu est limité par l'écran
 local TOUCH_SCALE = 1.15 -- sur mobile : boutons plus gros, le contenu défile
 
-local COLOR_PANEL = Color3.fromRGB(14, 15, 18)
-local COLOR_BUTTON = Color3.fromRGB(45, 47, 55)
-local COLOR_TEXT = Color3.fromRGB(235, 236, 240)
-local COLOR_DIM = Color3.fromRGB(130, 134, 145)
-local COLOR_ACCENT = Color3.fromRGB(245, 200, 55)
+local COLOR_PANEL = Theme.PANEL
+local COLOR_BUTTON = Theme.PANEL_2
+local COLOR_TEXT = Theme.TEXT
+local COLOR_DIM = Theme.DIM
+local COLOR_ACCENT = Theme.ACCENT
 
 local function makeLabel(parent: Instance, position: UDim2, size: UDim2, text: string, textSize: number, font: Enum.Font, color: Color3, alignment: Enum.TextXAlignment): TextLabel
 	local label = Instance.new("TextLabel")

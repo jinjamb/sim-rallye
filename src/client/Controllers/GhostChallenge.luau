@@ -29,6 +29,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Ghost = require(script.Parent.Ghost)
 local Banner = require(script.Parent.Banner)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local GhostChallenge = {}
 GhostChallenge.__index = GhostChallenge
@@ -52,10 +53,10 @@ local CYCLE: { Mode } = { "Perso", "Rival", "Record", "Off" }
 local REQUEST_COOLDOWN = 2.1 -- le serveur refuse les demandes à moins de 2 s d'intervalle
 local BEATEN_DELAY = 5.5 -- laisse d'abord passer l'annonce du record perso ou de la médaille (5 s)
 
-local COLOR_INFO = Color3.fromRGB(235, 236, 240)
-local COLOR_OPPONENT = Color3.fromRGB(255, 140, 40)
-local COLOR_ERROR = Color3.fromRGB(235, 65, 55)
-local COLOR_BEATEN = Color3.fromRGB(70, 200, 95)
+local COLOR_INFO = Theme.TEXT
+local COLOR_OPPONENT = Theme.ORANGE
+local COLOR_ERROR = Theme.RED
+local COLOR_BEATEN = Theme.GREEN
 
 local MODE_TITLES: { [string]: string } = {
 	Perso = "FANTÔME : TON RECORD",

@@ -30,6 +30,7 @@ local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 local RaceUi = require(script.Parent.RaceUi)
+local Theme = require(script.Parent.Parent.UI.Theme)
 
 local Garage = {}
 Garage.__index = Garage
@@ -68,7 +69,7 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 local PANEL_WIDTH = 380
 local PANEL_HEIGHT = 470
 local SPIN_SPEED = 0.35 -- rad/s
-local COLOR_LOCKED = Color3.fromRGB(255, 140, 40)
+local COLOR_LOCKED = Theme.ORANGE
 local HINT_TEXT = "Ta livrée se voit sur ta voiture, en course comme aux essais. Les cosmétiques verrouillés se gagnent en jouant : niveaux, médailles, victoires, points de style."
 
 function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
