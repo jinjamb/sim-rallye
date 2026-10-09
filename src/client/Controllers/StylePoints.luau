@@ -176,13 +176,14 @@ function StylePoints:_flash(text: string, color: Color3)
 end
 
 -- Envoie des points encaissés ; false s'ils ne comptent pas (essais libres).
-function StylePoints:_submit(points: number, kind: string): boolean
+-- `detail` : multiplicateur d'une combinaison, temps en l'air d'un saut (défis du jour).
+function StylePoints:_submit(points: number, kind: string, detail: any): boolean
 	if os.clock() >= self.CountingUntil then
 		return false
 	end
 	self.Session += points
 	self.TotalLabel.Text = "STYLE  " .. Progression.Thousands(self.Session)
-	Remotes.SubmitStyle:FireServer(points, kind)
+	Remotes.SubmitStyle:FireServer(points, kind, detail)
 	return true
 end
 
@@ -200,7 +201,7 @@ end
 function StylePoints:_bank()
 	local total = math.floor(self.Points * self.Multiplier)
 	if self.DriftTime >= MIN_DRIFT_TIME and total >= MIN_BANK then
-		local counted = self:_submit(total, "Drift")
+		local counted = self:_submit(total, "Drift", { Multiplier = self.Multiplier })
 		local text = "+" .. Progression.Thousands(total)
 		if self.Multiplier > 1 then
 			text ..= string.format("  (×%d)", self.Multiplier)
@@ -272,7 +273,7 @@ function StylePoints:Update(dt: number)
 		self.AirTime = 0
 		if air >= MIN_AIR and grounded >= 2 then
 			local points = math.floor(JUMP_RATE * air)
-			local counted = self:_submit(points, "Jump")
+			local counted = self:_submit(points, "Jump", { Air = air })
 			self:_flash(
 				string.format("SAUT %.1f s  +%s%s", air, Progression.Thousands(points), if counted then "" else "  · essais"),
 				if counted then COLOR_TEXT else COLOR_DIM

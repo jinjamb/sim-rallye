@@ -546,6 +546,11 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(entries: any)
 	end
 end)
 
+-- Défis du jour : objectifs et progression (menu), réussites annoncées.
+Remotes.Daily.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetDaily(state, news)
+end)
+
 -- Défi de la semaine : contrainte, fin, classement, son temps (menu et L).
 Remotes.WeeklyBoard.OnClientEvent:Connect(function(board: any)
 	if type(board) == "table" and type(board.Entries) == "table" then

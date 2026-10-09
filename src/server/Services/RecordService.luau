@@ -55,6 +55,12 @@
 	habituel, ni son fantôme, ni ses médailles. La première fois de la
 	semaine, il compte pour l'XP (WeeklyCompleted).
 
+	DÉFIS DU JOUR (Daily.luau) : leur progression est dans le profil (remise à
+	zéro au changement de jour), avancée par DailyEvent : arrivées, spéciale
+	sans remise en piste, dépassements (RaceService), points de style
+	acceptés. Chaque défi réussi rapporte de l'XP (DailyXp), sauvegardée par
+	lots avec les autres compteurs.
+
 	DÉFI DU FANTÔME : un joueur peut demander le fantôme d'un autre pilote pour
 	courir contre lui -- le rival juste devant lui au classement, le recordman,
 	ou un pilote choisi dans le classement. Le fantôme est lu dans le profil de
@@ -75,6 +81,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
 local Progression = require(ReplicatedStorage.Shared.Constants.Progression)
 local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
+local Daily = require(ReplicatedStorage.Shared.Constants.Daily)
 
 local RecordService = {}
 
@@ -124,6 +131,15 @@ type Profile = {
 	Style: number, -- points de style cumulés
 	Weekly: { Key: string, Ms: number }?, -- meilleur temps au défi de la semaine
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
+	Daily: DailyState?, -- défis du jour : progression du jour en cours
+	DailyXp: number, -- XP gagnée aux défis du jour, cumulée
+}
+
+type DailyState = {
+	Key: string, -- jour (Daily.luau)
+	Progress: { [string]: number }, -- par défi
+	Done: { [string]: boolean },
+	Bonus: boolean, -- bonus des trois défis déjà donné
 }
 
 type Run = {
@@ -134,6 +150,8 @@ type Run = {
 	-- Points de style acceptés jusqu'à cette heure (os.clock) : pendant le
 	-- passage chronométré, et un peu après (combinaison finie sur la ligne).
 	StyleUntil: number,
+	-- Remise en piste pendant le passage (défi du jour « sans remise en piste »).
+	Recovered: boolean,
 }
 
 --------------------------------------------------------------------------------
@@ -235,6 +253,8 @@ local function sanitizeProfile(data: any, userId: number): Profile
 		Style = 0,
 		Weekly = nil,
 		WeeklyCompleted = 0,
+		Daily = nil,
+		DailyXp = 0,
 	}
 	if type(data) ~= "table" then
 		return profile
@@ -242,6 +262,26 @@ local function sanitizeProfile(data: any, userId: number): Profile
 	profile.StageRuns = count(data.StageRuns)
 	profile.Style = count(data.Style)
 	profile.WeeklyCompleted = count(data.WeeklyCompleted)
+	profile.DailyXp = count(data.DailyXp)
+	local daily = data.Daily
+	if type(daily) == "table" and type(daily.Key) == "string" then
+		local state: DailyState = { Key = daily.Key, Progress = {}, Done = {}, Bonus = daily.Bonus == true }
+		if type(daily.Progress) == "table" then
+			for id, value in pairs(daily.Progress) do
+				if type(id) == "string" then
+					state.Progress[id] = count(value)
+				end
+			end
+		end
+		if type(daily.Done) == "table" then
+			for id, done in pairs(daily.Done) do
+				if type(id) == "string" and done == true then
+					state.Done[id] = true
+				end
+			end
+		end
+		profile.Daily = state
+	end
 	local weekly = data.Weekly
 	if type(weekly) == "table" and type(weekly.Key) == "string" and type(weekly.Ms) == "number" and weekly.Ms > 0 then
 		profile.Weekly = { Key = weekly.Key, Ms = weekly.Ms }
@@ -328,6 +368,7 @@ local function snapshotOf(profile: Profile): Progression.Snapshot
 		StageRuns = profile.StageRuns,
 		Style = profile.Style,
 		WeeklyCompleted = profile.WeeklyCompleted,
+		DailyXp = profile.DailyXp,
 		Medals = medalsOf(profile),
 	})
 end
@@ -375,9 +416,19 @@ local function pushProfile(player: Player)
 	end
 end
 
--- Compteurs sauvegardés par lots (spéciales terminées, points de style) :
--- ce qui s'est ajouté depuis la dernière écriture.
-local pendingCounters: { [Player]: { StageRuns: number, Style: number } } = {}
+-- Compteurs sauvegardés par lots (spéciales terminées, points de style, XP
+-- des défis du jour) : ce qui s'est ajouté depuis la dernière écriture.
+type Pending = { StageRuns: number, Style: number, DailyXp: number, DailyDirty: boolean }
+local pendingCounters: { [Player]: Pending } = {}
+
+local function pendingOf(player: Player): Pending
+	local pending = pendingCounters[player]
+	if not pending then
+		pending = { StageRuns = 0, Style = 0, DailyXp = 0, DailyDirty = false }
+		pendingCounters[player] = pending
+	end
+	return pending
+end
 
 local function addCounters(player: Player, stageRuns: number, style: number)
 	local profile = profiles[player]
@@ -386,14 +437,14 @@ local function addCounters(player: Player, stageRuns: number, style: number)
 	end
 	profile.StageRuns += stageRuns
 	profile.Style += style
-	local pending = pendingCounters[player]
-	if not pending then
-		pending = { StageRuns = 0, Style = 0 }
-		pendingCounters[player] = pending
-	end
+	local pending = pendingOf(player)
 	pending.StageRuns += stageRuns
 	pending.Style += style
 	pushProgress(player, true)
+end
+
+local function copyDaily(state: DailyState): DailyState
+	return { Key = state.Key, Progress = table.clone(state.Progress), Done = table.clone(state.Done), Bonus = state.Bonus }
 end
 
 local function flushCounters(player: Player)
@@ -402,11 +453,113 @@ local function flushCounters(player: Player)
 		return
 	end
 	pendingCounters[player] = nil
+	local profile = profiles[player]
+	local daily = if pending.DailyDirty and profile and profile.Daily then copyDaily(profile.Daily) else nil
 	updateStoredProfile(player.UserId, "progression", function(stored)
 		stored.StageRuns += pending.StageRuns
 		stored.Style += pending.Style
+		stored.DailyXp += pending.DailyXp
+		if daily then
+			stored.Daily = daily
+		end
 		return true
 	end)
+end
+
+--------------------------------------------------------------------------------
+-- Défis du jour (Daily.luau)
+--------------------------------------------------------------------------------
+
+-- La progression du jour en cours (remise à zéro au changement de jour).
+local function dailyStateOf(profile: Profile, day: Daily.Day): DailyState
+	local state = profile.Daily
+	if not state or state.Key ~= day.Key then
+		state = { Key = day.Key, Progress = {}, Done = {}, Bonus = false }
+		profile.Daily = state
+	end
+	return state :: DailyState
+end
+
+local function sendDaily(player: Player, news: any?)
+	local profile = profiles[player]
+	if not profile or not player.Parent then
+		return
+	end
+	local day = Daily.Current()
+	local state = dailyStateOf(profile, day)
+	local challenges = {}
+	for _, challenge in ipairs(day.Challenges) do
+		table.insert(challenges, {
+			Id = challenge.Id,
+			Text = challenge.Text,
+			Goal = challenge.Goal,
+			Progress = math.min(state.Progress[challenge.Id] or 0, challenge.Goal),
+			Done = state.Done[challenge.Id] == true,
+		})
+	end
+	Remotes.Daily:FireClient(player, {
+		Key = day.Key,
+		EndsAt = day.EndsAt,
+		Challenges = challenges,
+		Bonus = state.Bonus,
+		Xp = Daily.XP,
+		BonusXp = Daily.BONUS_XP,
+	}, news)
+end
+
+--[[
+	Un événement de jeu (Daily.POOL : Event) : fait avancer les défis du jour
+	qu'il concerne. Count : `value` s'ajoute ; Max : on garde la meilleure.
+]]
+function RecordService.DailyEvent(player: Player, event: string, value: number)
+	local profile = profiles[player]
+	if not profile or value <= 0 then
+		return
+	end
+	local day = Daily.Current()
+	local state = dailyStateOf(profile, day)
+	local changed = false
+	local completed = {}
+	local xp = 0
+	for _, challenge in ipairs(day.Challenges) do
+		if challenge.Event == event and not state.Done[challenge.Id] then
+			local current = state.Progress[challenge.Id] or 0
+			local updated = if challenge.Kind == "Count" then current + value else math.max(current, value)
+			if updated ~= current then
+				changed = true
+				state.Progress[challenge.Id] = math.min(updated, challenge.Goal)
+				if updated >= challenge.Goal then
+					state.Done[challenge.Id] = true
+					table.insert(completed, challenge.Id)
+					xp += Daily.XP
+				end
+			end
+		end
+	end
+	if not changed then
+		return
+	end
+	local allDone = true
+	for _, challenge in ipairs(day.Challenges) do
+		if not state.Done[challenge.Id] then
+			allDone = false
+		end
+	end
+	local bonus = allDone and not state.Bonus
+	if bonus then
+		state.Bonus = true
+		xp += Daily.BONUS_XP
+	end
+	local pending = pendingOf(player)
+	pending.DailyDirty = true
+	if xp > 0 then
+		profile.DailyXp += xp
+		pending.DailyXp += xp
+	end
+	sendDaily(player, if #completed > 0 then { Completed = completed, AllDone = bonus } else nil)
+	if xp > 0 then
+		pushProgress(player, true)
+	end
 end
 
 -- Points de style décidés par le serveur (dépassements, RaceService).
@@ -699,7 +852,18 @@ local pendingGhost: { [Player]: { Ms: number, Expires: number } } = {}
 	et meilleur temps de la semaine du joueur ; la première fois de la semaine,
 	le défi compte comme terminé (XP).
 ]]
-local function onWeeklyFinish(player: Player, ms: number, key: string)
+-- Une spéciale terminée (habituelle ou défi) : les défis du jour qui en dépendent.
+local function stageFinished(player: Player, clean: boolean, weekly: boolean)
+	RecordService.DailyEvent(player, "StageRun", 1)
+	if clean then
+		RecordService.DailyEvent(player, "CleanStage", 1)
+	end
+	if weekly then
+		RecordService.DailyEvent(player, "WeeklyRun", 1)
+	end
+end
+
+local function onWeeklyFinish(player: Player, ms: number, key: string, clean: boolean)
 	local profile = profiles[player]
 	if not profile then
 		return
@@ -756,9 +920,11 @@ local function onWeeklyFinish(player: Player, ms: number, key: string)
 	})
 	addCounters(player, 1, 0)
 	sendWeekly(player)
+	stageFinished(player, clean, true)
 end
 
-local function onFinish(player: Player, ms: number)
+-- `clean` : pas de remise en piste pendant le passage.
+local function onFinish(player: Player, ms: number, clean: boolean)
 	local profile = profiles[player]
 	if not profile then
 		return
@@ -767,7 +933,7 @@ local function onFinish(player: Player, ms: number)
 	local car = workspace:FindFirstChild("Car_" .. player.UserId)
 	local weeklyKeyOfCar = if car then car:GetAttribute("Weekly") else nil
 	if type(weeklyKeyOfCar) == "string" then
-		onWeeklyFinish(player, ms, weeklyKeyOfCar)
+		onWeeklyFinish(player, ms, weeklyKeyOfCar, clean)
 		return
 	end
 	local previous = profile.Records[STAGE_ID]
@@ -817,6 +983,7 @@ local function onFinish(player: Player, ms: number)
 	})
 	-- Une spéciale de plus (et peut-être une médaille) : la progression suit.
 	addCounters(player, 1, 0)
+	stageFinished(player, clean, false)
 end
 
 local function onInvalid(player: Player, reason: string)
@@ -1031,7 +1198,7 @@ local function onPlayerAdded(player: Player)
 	local default = Livery.Default(player.UserId)
 	profile.Livery = Progression.Enforce(profile.Livery, default, default, snapshotOf(profile))
 	profiles[player] = profile
-	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0 }
+	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0, Recovered = false }
 	nameCache[player.UserId] = player.DisplayName
 
 	local record = profile.Records[STAGE_ID]
@@ -1059,6 +1226,7 @@ local function onPlayerAdded(player: Player)
 	Remotes.Leaderboard:FireClient(player, leaderboard)
 	Remotes.TrackRecords:FireClient(player, lapBoards)
 	sendWeekly(player)
+	sendDaily(player)
 	pushProgress(player, false)
 end
 
@@ -1194,7 +1362,7 @@ function RecordService.Start()
 	-- Points de style (dérapages, sauts) : au volant, à débit plausible.
 	type Allowance = { Points: number, At: number }
 	local styleAllowance: { [Player]: Allowance } = {}
-	Remotes.SubmitStyle.OnServerEvent:Connect(function(player: Player, points: any, kind: any)
+	Remotes.SubmitStyle.OnServerEvent:Connect(function(player: Player, points: any, kind: any, detail: any)
 		if type(points) ~= "number" or points ~= points or points <= 0 or not STYLE_KINDS[kind] then
 			return
 		end
@@ -1217,6 +1385,29 @@ function RecordService.Start()
 		styleAllowance[player] = allowance
 		if accepted > 0 then
 			addCounters(player, 0, accepted)
+			-- Défis du jour : points de style, combinaison, multiplicateur, saut.
+			RecordService.DailyEvent(player, "Style", accepted)
+			local info = if type(detail) == "table" then detail else {}
+			if kind == "Drift" then
+				RecordService.DailyEvent(player, "DriftCombo", accepted)
+				local multiplier = info.Multiplier
+				if type(multiplier) == "number" and multiplier == multiplier then
+					RecordService.DailyEvent(player, "DriftMultiplier", math.clamp(math.floor(multiplier), 1, 5))
+				end
+			elseif kind == "Jump" then
+				local air = info.Air
+				if type(air) == "number" and air == air and air >= 1 and air <= 10 then
+					RecordService.DailyEvent(player, "LongJump", 1)
+				end
+			end
+		end
+	end)
+
+	-- Remise en piste pendant la spéciale : le passage n'est plus « propre ».
+	Remotes.Recovered.OnServerEvent:Connect(function(player: Player)
+		local run = runs[player]
+		if run and run.Running then
+			run.Recovered = true
 		end
 	end)
 	Players.PlayerRemoving:Connect(function(player: Player)
@@ -1333,7 +1524,7 @@ function RecordService.Start()
 					if ms < minimumMs then
 						onInvalid(player, "temps impossible")
 					else
-						onFinish(player, ms)
+						onFinish(player, ms, not run.Recovered)
 					end
 				end
 			elseif last < startDistance
@@ -1341,6 +1532,7 @@ function RecordService.Start()
 				and delta <= maxStep
 				and math.abs(lateral) <= START_LATERAL_TOLERANCE then
 				run.Running = true
+				run.Recovered = false
 				run.StartTime = crossingTime(startDistance)
 			end
 		end

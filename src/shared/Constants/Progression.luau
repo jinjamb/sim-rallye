@@ -95,6 +95,7 @@ export type Record = {
 	StageRuns: number,
 	Style: number,
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
+	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
 	Medals: { [string]: number },
 }
 
@@ -105,6 +106,7 @@ function Progression.XpOf(record: Record): number
 		+ record.Points * Progression.XP.POINT
 		+ record.StageRuns * Progression.XP.STAGE_RUN
 		+ record.WeeklyCompleted * Progression.XP.WEEKLY
+		+ record.DailyXp
 		+ record.Style // Progression.XP.STYLE_PER_XP
 	for _, tier in pairs(record.Medals) do
 		xp += Progression.MEDAL_XP[tier] or 0

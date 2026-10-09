@@ -155,6 +155,8 @@ type Runner = {
 	Milestones: { [number]: number },
 	LastMilestone: number,
 
+	Overtakes: number, -- dépassements récompensés dans cette manche (défis du jour)
+
 	-- Après l'arrivée : ramené à pied au paddock (Returned), sauf s'il a choisi
 	-- de rester regarder la course (Watching).
 	Watching: boolean,
@@ -526,6 +528,9 @@ end
 
 local function finishRunner(race: Race, runner: Runner, crossing: number)
 	runner.Finished = true
+	if runner.Player.Parent then
+		RecordService.DailyEvent(runner.Player, "RaceFinished", 1)
+	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then
 		runner.Penalty += JOKER_MISSED_PENALTY
@@ -650,6 +655,7 @@ startRound = function(race: Race, round: number)
 			LastPosition = Vector3.zero,
 			LastTime = 0,
 			Laps = 0,
+			Overtakes = 0,
 			LapStart = 0,
 			LapTimes = {},
 			BestLap = nil,
@@ -1223,6 +1229,9 @@ local function checkOvertakes(race: Race, now: number)
 				end
 				if points > 0 and passer.Player.Parent then
 					RecordService.AddStyle(passer.Player, points)
+					-- Défi du jour : dépassements dans UNE course.
+					passer.Overtakes += 1
+					RecordService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
 				end
 				sendEvent(race, passer.Player, "Overtake", { Name = passed.Name, Points = points })
 				sendEvent(race, passed.Player, "Overtaken", { Name = passer.Name })

@@ -45,8 +45,13 @@ export type Remotes = {
 	-- Serveur -> Client : (snapshot, news?) progression (XP, niveau, licence, médailles) ;
 	-- news : niveau gagné, cosmétiques débloqués (Progression.luau)
 	Progress: RemoteEvent,
-	-- Client -> Serveur : (points, kind) points de style gagnés (dérapage, saut)
+	-- Client -> Serveur : (points, kind, detail?) points de style gagnés (dérapage, saut) ;
+	-- detail : multiplicateur d'une combinaison, temps en l'air d'un saut (défis du jour)
 	SubmitStyle: RemoteEvent,
+	-- Client -> Serveur : () remise en piste pendant la spéciale (défi « sans remise en piste »)
+	Recovered: RemoteEvent,
+	-- Serveur -> Client : (state, news?) défis du jour : objectifs, progression ; news : réussis
+	Daily: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
 	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
@@ -85,6 +90,8 @@ local RELIABLE = {
 	"SaveLivery",
 	"Progress",
 	"SubmitStyle",
+	"Recovered",
+	"Daily",
 	"ReturnToPaddock",
 	"PlayMode",
 	"RaceAction",

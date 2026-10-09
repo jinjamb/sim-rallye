@@ -49,6 +49,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Stats: RaceUi.Stats?,
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- défi de la semaine (RecordService : WeeklyBoard)
+	Daily: any, -- défis du jour (RecordService : Daily)
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
 	Livery: any,
@@ -78,6 +79,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Stats = nil
 	self.Progress = nil
 	self.Weekly = nil
+	self.Daily = nil
 	self.LapBests = {}
 	self.MyChassis = nil
 	self.Livery = nil
@@ -156,6 +158,7 @@ function RaceClient:_refreshMenu()
 		Stats = self.Stats,
 		Progress = self.Progress,
 		Weekly = self.Weekly,
+		Daily = self.Daily,
 		Laps = self.LapBests,
 		Livery = self.Livery,
 	})
@@ -358,6 +361,31 @@ function RaceClient:SetProgress(snapshot: any, news: any)
 				Banner.Show("DÉBLOQUÉ", Livery.ItemName(tostring(item.Kind), tonumber(item.Index) or 0) .. "  ·  au garage", RaceUi.COLOR_ACCENT, 3.5, true)
 			end
 		end
+	end
+end
+
+--[[
+	Défis du jour : gardés pour le menu ; un défi réussi (et les trois) est
+	annoncé en grand.
+]]
+function RaceClient:SetDaily(state: any, news: any)
+	if type(state) ~= "table" or type(state.Challenges) ~= "table" then
+		return
+	end
+	self.Daily = state
+	self:_refreshMenu()
+	if type(news) ~= "table" or type(news.Completed) ~= "table" then
+		return
+	end
+	for _, id in ipairs(news.Completed) do
+		for _, challenge in ipairs(state.Challenges) do
+			if challenge.Id == id then
+				Banner.Show("DÉFI DU JOUR RÉUSSI", tostring(challenge.Text) .. "  ·  +" .. tostring(state.Xp) .. " XP", RaceUi.COLOR_GREEN, 3.5, true)
+			end
+		end
+	end
+	if news.AllDone then
+		Banner.Show("LES TROIS DÉFIS DU JOUR !", "Bonus  +" .. tostring(state.BonusXp) .. " XP  ·  nouveaux défis demain", RaceUi.COLOR_ACCENT, 4, true)
 	end
 end
 

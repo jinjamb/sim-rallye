@@ -290,6 +290,8 @@ function DrivingSession:Recover()
 	if timer then
 		self.Style:Reset()
 		timer:Recover()
+		-- Le serveur note que ce passage n'est plus « sans remise en piste ».
+		Remotes.Recovered:FireServer()
 		return
 	end
 	local now = os.clock()

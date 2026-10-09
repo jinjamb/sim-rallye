@@ -8,6 +8,7 @@
 	HORS COURSE :
 		- DÉFI DE LA SEMAINE : la contrainte, le temps qu'il reste, le podium
 		  de la semaine, son temps, et RELEVER LE DÉFI ;
+		- DÉFIS DU JOUR : les trois objectifs, leur progression, l'XP ;
 		- JOUER : lancer une spéciale ; une course de rallycross (un bouton par
 		  circuit : on ouvre la salle d'attente, ou on rejoint celle qui attend) ;
 		  des essais libres ; retour au paddock ;
@@ -46,6 +47,7 @@ export type Data = {
 	Stats: RaceUi.Stats?,
 	Progress: Progression.Snapshot?,
 	Weekly: any, -- { Key, Modifier, EndsAt, Entries, Mine } (RecordService)
+	Daily: any, -- { EndsAt, Challenges = { Id, Text, Goal, Progress, Done }, Bonus, Xp, BonusXp }
 	Laps: { [string]: number },
 	Livery: Livery.Livery?,
 }
@@ -92,7 +94,7 @@ function RaceMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Action = action
 	self.LocalUserId = localUserId
 	self.TouchLayout = false
-	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Progress = nil, Weekly = nil, Laps = {}, Livery = nil }
+	self.Data = { Lobby = {}, Race = nil, Records = {}, Stats = nil, Progress = nil, Weekly = nil, Daily = nil, Laps = {}, Livery = nil }
 	self.Status = ""
 	self.StatusColor = RaceUi.COLOR_DIM
 	self.CountdownLabel = nil
@@ -453,9 +455,68 @@ function RaceMenu:_weekly(b: Builder)
 	go.TextSize = 16
 end
 
+-- Défis du jour : chaque objectif, sa barre, l'XP ; et quand ils changent.
+function RaceMenu:_daily(b: Builder)
+	local state: any = self.Data.Daily
+	if not state then
+		return
+	end
+	b:Section("Défis du jour")
+	for _, challenge in ipairs(state.Challenges) do
+		local row = b:Row(38)
+		local done = challenge.Done == true
+		-- Case cochée ou vide.
+		local box = Instance.new("TextLabel")
+		box.BorderSizePixel = 0
+		box.Position = UDim2.fromOffset(0, 4)
+		box.Size = UDim2.fromOffset(22, 22)
+		box.BackgroundColor3 = if done then Theme.GREEN else Theme.PANEL_2
+		box.Text = if done then "✓" else ""
+		box.TextColor3 = Theme.ON_ACCENT
+		box.FontFace = Theme.HEADLINE
+		box.TextSize = 16
+		Theme.Corner(box, 2)
+		box.Parent = row
+		local text = RaceUi.Label(row, challenge.Text, 14, Enum.Font.GothamBold, if done then RaceUi.COLOR_DIM else RaceUi.COLOR_TEXT)
+		text.Position = UDim2.fromOffset(32, 2)
+		text.Size = UDim2.new(1, -120, 0, 20)
+		text.TextTruncate = Enum.TextTruncate.AtEnd
+		local amount = RaceUi.Label(
+			row,
+			if done then "+" .. tostring(state.Xp) .. " XP ✓" else string.format("%s / %s", Progression.Thousands(challenge.Progress), Progression.Thousands(challenge.Goal)),
+			13,
+			Enum.Font.GothamBold,
+			if done then RaceUi.COLOR_GREEN else RaceUi.COLOR_DIM
+		)
+		amount.Position = UDim2.new(1, -110, 0, 2)
+		amount.Size = UDim2.fromOffset(110, 20)
+		amount.TextXAlignment = Enum.TextXAlignment.Right
+		-- Barre de progression.
+		local track = Instance.new("Frame")
+		track.BorderSizePixel = 0
+		track.BackgroundColor3 = Theme.PANEL_2
+		track.Position = UDim2.fromOffset(32, 26)
+		track.Size = UDim2.new(1, -32, 0, 5)
+		track.Parent = row
+		local fill = Instance.new("Frame")
+		fill.BorderSizePixel = 0
+		fill.BackgroundColor3 = if done then Theme.GREEN else Theme.ACCENT
+		fill.Size = UDim2.fromScale(math.clamp(challenge.Progress / math.max(1, challenge.Goal), 0, 1), 1)
+		fill.Parent = track
+	end
+	b:Text(string.format(
+		"%s · +%d XP par défi, +%d pour les trois · nouveaux défis dans %s",
+		if state.Bonus then "Les trois sont faits, bravo !" else "Spéciale, défi ou course",
+		state.Xp,
+		state.BonusXp,
+		Weekly.FormatRemaining(state.EndsAt - workspace:GetServerTimeNow())
+	), 12, RaceUi.COLOR_DIM)
+end
+
 function RaceMenu:_buildOutside(b: Builder)
 	local width = PANEL_WIDTH - 32
 	self:_weekly(b)
+	self:_daily(b)
 
 	b:Section("Spéciale")
 	b:Text("1,6 km chronométrés, terre et asphalte, un saut et deux épingles. Bats ton record et grimpe au classement (L).", 13, RaceUi.COLOR_DIM)
