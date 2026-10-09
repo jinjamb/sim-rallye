@@ -194,7 +194,7 @@ function RemoteCars:_add(instance: Instance)
 		Model = model,
 		Chassis = chassis,
 		Wheels = wheels,
-		Audio = CarAudio.new(chassis, attachments, false),
+		Audio = CarAudio.new(chassis, attachments, false, model),
 		Effects = CarEffects.new(chassis, wheels :: any),
 		Smoke = TireSmoke.new(model, chassis, attachments),
 		RayParams = params,

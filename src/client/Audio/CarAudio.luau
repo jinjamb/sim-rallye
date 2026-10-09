@@ -10,7 +10,10 @@
 		- celles des autres joueurs : état reconstitué à partir de la télémétrie
 		  qu'ils diffusent (RemoteCars.luau).
 
-	MOTEUR : deux familles d'échantillons bouclés (voir SoundBank.luau).
+	MOTEUR : deux familles d'échantillons bouclés (voir SoundBank.luau), passés
+	par la TONALITÉ de la voiture -- celle du son moteur porté par son pilote
+	(attribut EquippedEngine, Items/Engines.luau), sinon celle de sa
+	catégorie (attribut CarClass). Elle change en direct si l'attribut change.
 		- Dans chaque famille, on joue les deux échantillons qui encadrent le
 		  régime, en fondu à puissance constante (cos/sin : pas de creux de
 		  volume au milieu du fondu), chacun transposé au régime exact.
@@ -34,7 +37,11 @@
 local ContentProvider = game:GetService("ContentProvider")
 local SoundService = game:GetService("SoundService")
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local SoundBank = require(script.Parent.SoundBank)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local WheelClass = require(script.Parent.Parent.Physics.Wheel)
 
@@ -65,6 +72,12 @@ type TireVoice = {
 
 export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 	IsLocal: boolean,
+	Chassis: BasePart,
+	Model: Model?,
+	ToneId: string,
+	Tone: SoundBank.EngineTone,
+	Recording: SoundBank.EngineProfile,
+	Connections: { RBXScriptConnection },
 	OnLoad: { Voice },
 	OffLoad: { Voice },
 	Screeches: { TireVoice },
@@ -150,6 +163,47 @@ local function makeVoices(samples: { SoundBank.EngineSample }, prefix: string, p
 	return voices
 end
 
+-- Égaliseur et distorsion de la tonalité, sur un son moteur.
+local function applyTone(sound: Sound, tone: SoundBank.EngineTone)
+	local equalizer = sound:FindFirstChildOfClass("EqualizerSoundEffect")
+	if not equalizer then
+		local created = Instance.new("EqualizerSoundEffect")
+		created.Parent = sound
+		equalizer = created
+	end
+	if equalizer then
+		equalizer.LowGain = tone.Low
+		equalizer.MidGain = tone.Mid
+		equalizer.HighGain = tone.High
+	end
+	local distortion = sound:FindFirstChildOfClass("DistortionSoundEffect")
+	if tone.Distortion > 0 then
+		if not distortion then
+			local created = Instance.new("DistortionSoundEffect")
+			created.Parent = sound
+			distortion = created
+		end
+		if distortion then
+			distortion.Level = tone.Distortion
+		end
+	elseif distortion then
+		distortion:Destroy()
+	end
+end
+
+-- Tonalité d'une voiture : son moteur porté, sinon celui de sa catégorie.
+function CarAudio.ToneIdOf(model: Model?): string
+	if not model then
+		return SoundBank.DEFAULT_TONE
+	end
+	local itemId = model:GetAttribute("EquippedEngine")
+	local item = Catalog.Get(if type(itemId) == "string" then itemId else nil)
+	if item and item.Engine and SoundBank.TONES[item.Engine] then
+		return item.Engine
+	end
+	return CarClasses.Get(model:GetAttribute("CarClass")).Engine
+end
+
 --[[
 	chassis : les sons moteur et de roulement émettent depuis lui ;
 	wheelAttachments : un crissement par roue, émis depuis chacune (FL, FR, RL, RR) ;
@@ -157,17 +211,28 @@ end
 	Les sons sont directement sous une BasePart ou une Attachment, jamais dans un
 	Folder : un Sound n'est positionnel qu'à cette condition.
 ]]
-function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLocal: boolean): CarAudio
+function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLocal: boolean, model: Model?): CarAudio
 	local self = (setmetatable({}, CarAudio) :: any) :: CarAudio
 	self.IsLocal = isLocal
+	self.Chassis = chassis
+	self.Model = model
 	self.Load = 0
 	self.GravelLevel = 0
 	self.TarmacLevel = 0
 	self.Active = false
-
-	local profile = SoundBank.Engine
-	self.OnLoad = makeVoices(profile.OnLoad, "EngineOn", chassis)
-	self.OffLoad = makeVoices(profile.OffLoad, "EngineOff", chassis)
+	self.Connections = {}
+	self.OnLoad = {}
+	self.OffLoad = {}
+	self.ToneId = ""
+	self:_setTone(CarAudio.ToneIdOf(model))
+	-- Son moteur changé (garage) ou voiture d'une autre catégorie : la tonalité suit.
+	if model then
+		for _, attribute in ipairs({ "EquippedEngine", "CarClass" }) do
+			table.insert(self.Connections, model:GetAttributeChangedSignal(attribute):Connect(function()
+				self:_setTone(CarAudio.ToneIdOf(model))
+			end))
+		end
+	end
 	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, chassis)
 	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, chassis)
 	-- Le vent n'a pas de source : parent SoundService = son non spatialisé.
@@ -204,6 +269,32 @@ function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLoc
 	end
 
 	return self
+end
+
+-- Change de tonalité : nouvel enregistrement s'il le faut, traitement sinon.
+function CarAudio:_setTone(toneId: string)
+	if toneId == self.ToneId then
+		return
+	end
+	local tone = SoundBank.Tone(toneId)
+	local recording = SoundBank.RECORDINGS[tone.Recording] or SoundBank.RECORDINGS.LS3
+	if recording ~= self.Recording then
+		for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
+			for _, voice in ipairs(layer) do
+				voice.Sound:Destroy()
+			end
+		end
+		self.OnLoad = makeVoices(recording.OnLoad, "EngineOn", self.Chassis)
+		self.OffLoad = makeVoices(recording.OffLoad, "EngineOff", self.Chassis)
+		self.Recording = recording
+	end
+	self.ToneId = toneId
+	self.Tone = tone
+	for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
+		for _, voice in ipairs(layer) do
+			applyTone(voice.Sound, tone)
+		end
+	end
 end
 
 local function allSounds(self: CarAudio): { Sound }
@@ -252,6 +343,9 @@ function CarAudio:SetActive(active: boolean)
 end
 
 function CarAudio:Destroy()
+	for _, connection in ipairs(self.Connections) do
+		connection:Disconnect()
+	end
 	for _, sound in ipairs(allSounds(self)) do
 		sound:Destroy()
 	end
@@ -364,11 +458,14 @@ function CarAudio:Update(dt: number, state: AudioState)
 	end
 	local now = os.clock()
 
-	-- Moteur
+	-- Moteur : la tonalité transpose le régime (un moteur plus aigu « tourne
+	-- plus vite ») avant de choisir et d'accélérer les échantillons.
 	self.Load = approach(self.Load, state.Load, dt, LOAD_SMOOTH_TIME)
-	local master = SoundBank.Engine.Volume
-	updateLayer(self.OnLoad, state.Rpm, master * math.sqrt(self.Load), now)
-	updateLayer(self.OffLoad, state.Rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
+	local tone = self.Tone
+	local master = self.Recording.Volume * tone.Volume
+	local rpm = state.Rpm * tone.PitchScale
+	updateLayer(self.OnLoad, rpm, master * math.sqrt(self.Load), now)
+	updateLayer(self.OffLoad, rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
 
 	-- Crissement, roue par roue
 	for i, tire in ipairs(self.Screeches) do

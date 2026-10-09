@@ -124,7 +124,7 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	end
 
 	self.Dashboard = Dashboard.new(car, context.PlayerGui)
-	self.Audio = CarAudio.new(self.Chassis, wheelAttachments, true)
+	self.Audio = CarAudio.new(self.Chassis, wheelAttachments, true, model)
 	self.Effects = CarEffects.new(self.Chassis, car.Wheels :: any)
 	self.Smoke = TireSmoke.new(model, self.Chassis, wheelAttachments)
 	self.ChaseCamera = ChaseCamera.new(car, context.Camera)

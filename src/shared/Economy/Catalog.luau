@@ -44,6 +44,7 @@ Catalog.KIND_NAMES = {
 -- Les objets de chaque sorte, chacun dans son module (Items/).
 local LISTS: { { Item } } = {
 	require(script.Parent.Items.Cars),
+	require(script.Parent.Items.Engines),
 	require(script.Parent.Items.Smokes),
 	require(script.Parent.Items.Horns),
 	require(script.Parent.Items.Celebrations),
