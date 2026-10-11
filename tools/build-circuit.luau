@@ -353,6 +353,8 @@ local function buildCircuit(circuit)
 	-- Portique de départ, face à la grille, et ses cinq feux.
 	local gantry = Instance.new("Model")
 	gantry.Name = "Gantry"
+	-- Toujours chargé chez tous (streaming) : RaceHud allume ses feux au départ.
+	gantry.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	gantry.Parent = folder
 	local postHeight = 16
 	local halfSpan = roadHalf + 4
@@ -444,6 +446,7 @@ local function buildCircuit(circuit)
 						true
 					)
 					tire.Shape = Enum.PartType.Cylinder
+					tire.CastShadow = false -- un millier par circuit : les ombres coûtent cher
 				end
 			end
 			if index % 120 == 1 then

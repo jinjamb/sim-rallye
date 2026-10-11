@@ -110,6 +110,11 @@ end
 	Rojo). Un dossier par sorte (Pine, Leafy, Bush, Rock, Logs, Fence,
 	Mushroom), des modèles déjà nettoyés : ancrés, sans collision ni script,
 	pivot au sol au centre, attribut Size (taille d'origine, longueur sur X).
+	Réglés pour les performances (des milliers de copies) : CollisionFidelity
+	Box (aucune géométrie de collision détaillée à calculer), ombres seulement
+	pour les arbres (pas pour buissons, rochers, rondins, barrières,
+	champignons). Ces réglages ne se font que dans Studio : les copies les
+	héritent.
 	Sans bibliothèque (côté client, ou place sans assets), chaque fonction
 	retombe sur les formes simples plus bas.
 ]]

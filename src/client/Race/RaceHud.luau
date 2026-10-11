@@ -447,8 +447,11 @@ end
 --------------------------------------------------------------------------------
 
 function RaceHud:_gantryLights(trackId: string): { BasePart }
-	if self.GantryTrack == trackId then
-		return self.GantryLights
+	-- Avec le streaming, le portique peut ne pas être encore chargé (ou avoir été
+	-- déchargé) : on ne garde la liste que si les cinq feux sont bien là.
+	local cached = self.GantryLights
+	if self.GantryTrack == trackId and #cached == 5 and cached[1].Parent ~= nil then
+		return cached
 	end
 	self.GantryTrack = trackId
 	self.GantryLights = {}

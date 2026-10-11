@@ -36,7 +36,8 @@
     "Workspace": {
       "$properties": {
         "FilteringEnabled": true,
-        "Gravity": 35.036
+        "Gravity": 35.036,
+        "StreamingEnabled": true
       },
       "Baseplate": {
         "$className": "Part",

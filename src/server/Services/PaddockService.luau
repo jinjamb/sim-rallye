@@ -479,12 +479,23 @@ function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 		table.insert(names, row.Name)
 	end
 	for _, player in ipairs(players) do
-		Remotes.RaceEvent:FireClient(player, "Podium", {
-			Names = names,
-			Duration = PODIUM_DURATION,
-			Eye = PaddockLayout.PODIUM_CAMERA_EYE,
-			Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
-		})
+		-- Avec le streaming, le paddock n'est pas chargé chez un pilote resté sur
+		-- le circuit : on le fait charger avant de montrer la cérémonie.
+		task.spawn(function()
+			if workspace.StreamingEnabled then
+				pcall(function()
+					player:RequestStreamAroundAsync(PaddockLayout.PODIUM_CENTER, 4)
+				end)
+			end
+			if player.Parent then
+				Remotes.RaceEvent:FireClient(player, "Podium", {
+					Names = names,
+					Duration = PODIUM_DURATION,
+					Eye = PaddockLayout.PODIUM_CAMERA_EYE,
+					Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
+				})
+			end
+		end)
 	end
 	task.delay(PODIUM_DURATION, function()
 		if podiumToken == token then

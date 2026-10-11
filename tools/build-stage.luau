@@ -328,6 +328,7 @@ local function ghostPart(name: string, size: Vector3, cframe: CFrame, color: Col
 	part.CanCollide = false
 	part.CanQuery = false -- invisible pour les raycasts de suspension
 	part.CanTouch = false
+	part.CastShadow = false -- balises et portiques : des centaines, sans ombre
 	part.Size = size
 	part.CFrame = cframe
 	part.Color = color
