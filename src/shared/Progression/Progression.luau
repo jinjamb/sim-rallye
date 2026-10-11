@@ -265,9 +265,21 @@ function Progression.Meets(requirement: Requirement, snapshot: Snapshot?, owned:
 end
 
 -- Un cosmétique est-il à ce joueur ? (libre, ou condition remplie)
+-- Clé d'un déblocage acheté en Robux, rangée dans les objets possédés.
+function Progression.UnlockKey(kind: string, index: number): string
+	return "unlock:" .. kind .. ":" .. tostring(index)
+end
+
 function Progression.IsUnlocked(kind: Kind, index: number, snapshot: Snapshot?, owned: Owned?): boolean
 	local item = Progression.ItemFor(kind, index)
-	return item == nil or Progression.Meets(item.Requirement, snapshot, owned)
+	if item == nil then
+		return true
+	end
+	-- Débloqué d'avance en Robux (MonetizationService).
+	if owned ~= nil and owned[Progression.UnlockKey(kind, index)] == true then
+		return true
+	end
+	return Progression.Meets(item.Requirement, snapshot, owned)
 end
 
 local TIER_NAMES = { "Bronze", "Argent", "Or", "Platine" }

@@ -62,7 +62,8 @@ local function keyboardEntries(racing: boolean): { { Entry } }
 		{ Keys = { key(K.M) }, Text = "Boîte auto" },
 	}
 	local actions: { Entry } = {
-		{ Keys = { key(K.T) }, Text = "Remise en piste" },
+		{ Keys = { key(K.T) }, Text = if racing then "Remise en piste (à l'arrêt)" else "Remise en piste" },
+		{ Keys = { key(K.B) }, Text = "Regarder derrière" },
 		{ Keys = { key(K.K) }, Text = "Klaxon" },
 		{ Keys = { key(K.C) }, Text = if racing then "Menu · abandon" else "Menu" },
 	}
@@ -85,7 +86,8 @@ local function gamepadEntries(racing: boolean): { { Entry } }
 		{ Keys = { "Y" }, Text = "Boîte auto" },
 	}
 	local actions: { Entry } = {
-		{ Keys = { "◀ CROIX" }, Text = "Remise en piste" },
+		{ Keys = { "◀ CROIX" }, Text = if racing then "Remise en piste (à l'arrêt)" else "Remise en piste" },
+		{ Keys = { "STICK D ▼" }, Text = "Regarder derrière" },
 		{ Keys = { "▶ CROIX" }, Text = if racing then "Menu · abandon" else "Menu" },
 	}
 	if not racing then

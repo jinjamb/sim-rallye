@@ -337,25 +337,26 @@ function Garage:_refresh()
 		label.TextColor3 = if unlocked then Widgets.COLOR_TEXT else COLOR_LOCKED
 	end
 
-	self.ColorLabel.Text = valueText(Livery.NameOf(livery), Progression.IsUnlocked("Color", livery.Color, progress))
+	-- Objets possédés : pièces de tirage et déblocages achetés en Robux.
+	local owned = self.Callbacks.GetOwned()
+	self.ColorLabel.Text = valueText(Livery.NameOf(livery), Progression.IsUnlocked("Color", livery.Color, progress, owned))
 	swatch(self.ColorLabel, Livery.ColorOf(livery))
 	self.NumberLabel.Text = "#" .. tostring(livery.Number)
 	plain(self.NumberLabel, true)
 	local stripes = Livery.STRIPES[livery.Stripes] or Livery.STRIPES[1]
-	local stripesUnlocked = Progression.IsUnlocked("Stripes", livery.Stripes, progress)
+	local stripesUnlocked = Progression.IsUnlocked("Stripes", livery.Stripes, progress, owned)
 	self.StripesLabel.Text = valueText(stripes.Name, stripesUnlocked)
 	plain(self.StripesLabel, stripesUnlocked)
 	local stripeColor = Livery.COLORS[livery.StripeColor] or Livery.COLORS[3]
-	self.StripeColorLabel.Text = valueText(stripeColor.Name, Progression.IsUnlocked("Color", livery.StripeColor, progress))
+	self.StripeColorLabel.Text = valueText(stripeColor.Name, Progression.IsUnlocked("Color", livery.StripeColor, progress, owned))
 	swatch(self.StripeColorLabel, stripeColor.Color)
 	local plate = Livery.PLATES[livery.Plate] or Livery.PLATES[1]
-	local plateUnlocked = Progression.IsUnlocked("Plate", livery.Plate, progress)
+	local plateUnlocked = Progression.IsUnlocked("Plate", livery.Plate, progress, owned)
 	self.PlateLabel.Text = valueText(plate.Name, plateUnlocked)
 	plain(self.PlateLabel, plateUnlocked)
 
 	-- Carrosserie : le modèle, et chaque pièce (« — » si le modèle ne la prend pas).
 	local body = CarBodies.Get(livery.Body)
-	local owned = self.Callbacks.GetOwned()
 	local bodyUnlocked = Progression.IsUnlocked("Body", livery.Body, progress, owned)
 	self.BodyLabel.Text = valueText(body.Name, bodyUnlocked)
 	plain(self.BodyLabel, bodyUnlocked)

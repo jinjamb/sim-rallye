@@ -85,6 +85,10 @@ export type Remotes = {
 	BuyItem: RemoteEvent,
 	-- Client -> Serveur : (kind, itemId) porter un objet possédé
 	EquipItem: RemoteEvent,
+	-- Client -> Serveur : ("Item", itemId) | ("Unlock", kind, index) | ("Product", key)
+	-- acheter en Robux : le serveur vérifie, retient la demande et ouvre l'achat
+	-- (MonetizationService)
+	RequestRobuxPurchase: RemoteEvent,
 
 	-- COSMÉTIQUES VISIBLES PAR TOUS
 	-- Client -> Serveur : () coup de klaxon (au volant)
@@ -142,6 +146,7 @@ local RELIABLE = {
 	"Wallet",
 	"BuyItem",
 	"EquipItem",
+	"RequestRobuxPurchase",
 	"Horn",
 	"HornPlayed",
 	"RequestRoll",

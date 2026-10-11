@@ -82,6 +82,7 @@ end
 local padStickX = 0
 local padThrottle = 0
 local padBrake = 0
+local padLookY = 0 -- stick droit, vertical : vers le bas = regarder derrière
 
 local function onGamepadInput(input: InputObject)
 	if input.UserInputType ~= GAMEPAD then
@@ -89,6 +90,8 @@ local function onGamepadInput(input: InputObject)
 	end
 	if input.KeyCode == Enum.KeyCode.Thumbstick1 then
 		padStickX = input.Position.X
+	elseif input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		padLookY = input.Position.Y
 	elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
 		padThrottle = input.Position.Z
 	elseif input.KeyCode == Enum.KeyCode.ButtonL2 then
@@ -105,6 +108,8 @@ UserInputService.InputEnded:Connect(function(input: InputObject)
 	-- La dernière valeur reçue n'est pas toujours exactement 0 au relâchement.
 	if input.KeyCode == Enum.KeyCode.Thumbstick1 then
 		padStickX = 0
+	elseif input.KeyCode == Enum.KeyCode.Thumbstick2 then
+		padLookY = 0
 	elseif input.KeyCode == Enum.KeyCode.ButtonR2 then
 		padThrottle = 0
 	elseif input.KeyCode == Enum.KeyCode.ButtonL2 then
@@ -113,7 +118,7 @@ UserInputService.InputEnded:Connect(function(input: InputObject)
 end)
 UserInputService.GamepadDisconnected:Connect(function(gamepad: Enum.UserInputType)
 	if gamepad == GAMEPAD then
-		padStickX, padThrottle, padBrake = 0, 0, 0
+		padStickX, padThrottle, padBrake, padLookY = 0, 0, 0, 0
 	end
 end)
 
@@ -166,6 +171,24 @@ local touchThrottle = 0
 local touchBrake = 0
 local touchSteer = 0
 local touchHandbrake = false
+
+--[[
+	Regarder derrière (la caméra se retourne tant qu'on le demande) : B au
+	clavier, stick droit poussé vers le bas à la manette, bouton ARRIÈRE
+	maintenu sur écran tactile (TouchControls).
+]]
+local LOOK_BACK_STICK = -0.7
+local touchLookBack = false
+
+function InputManager:SetTouchLookBack(active: boolean)
+	touchLookBack = active
+end
+
+function InputManager:IsLookingBack(): boolean
+	-- Pas pendant la saisie d'un message (le B tapé dans le chat).
+	local typing = UserInputService:GetFocusedTextBox() ~= nil
+	return (not typing and UserInputService:IsKeyDown(Enum.KeyCode.B)) or padLookY < LOOK_BACK_STICK or touchLookBack
+end
 
 function InputManager:SetTouch(throttle: number, brake: number, steer: number, handbrake: boolean)
 	touchThrottle = math.clamp(throttle, 0, 1)

@@ -128,7 +128,7 @@ function CareerPage.Livery(ctx: Context, b: Builder)
 		local color = current.Color
 		for _ = 1, count do
 			color = ((color - 1 + direction) % count) + 1
-			if Progression.IsUnlocked("Color", color, ctx.Data.Progress) then
+			if Progression.IsUnlocked("Color", color, ctx.Data.Progress, MenuKit.OwnedSet(ctx)) then
 				break
 			end
 		end

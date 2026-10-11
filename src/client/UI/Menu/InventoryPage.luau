@@ -9,8 +9,13 @@
 		             un clic dessus dit comment le débloquer (niveau, médaille,
 		             tirage...). Un clic sur une pastille libre l'équipe aussitôt
 		             (sauvegardé comme la livrée : Livery.luau).
+		LIVRÉE       couleurs, bandes et plaques, en pastilles, de même.
 		ÉQUIPEMENT   ses voitures, sons moteur, fumées, klaxons, célébrations :
 		             seulement ce qu'on possède, en cartes avec PORTER.
+
+	DÉBLOQUER EN ROBUX : sous le « comment le débloquer » d'une pastille
+	verrouillée, un bouton l'achète tout de suite (au palier de son prix,
+	MonetizationService) ; une pièce de tirage s'achète comme objet.
 
 	La boutique, elle, montre tout le catalogue (ShopPage.luau).
 ]]
@@ -19,6 +24,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -41,20 +47,18 @@ local CHIPS_PER_ROW = 3
 -- Équipement montré, dans l'ordre (les pièces sont choisies sur la voiture).
 local GEAR_KINDS: { Catalog.Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration" }
 
+-- La pastille verrouillée sur laquelle on a cliqué : sa condition, son achat.
+type Locked = { Kind: string, Index: number, Text: string }
+
 --[[
-	Une rangée de pastilles (CHIPS_PER_ROW par ligne). `selected` : l'indice
-	choisi ; `unlocked(i)` ; `pick(i)` au clic d'une pastille libre ;
-	`why(i)` : le texte affiché au clic d'une pastille verrouillée.
+	Une rangée de pastilles (CHIPS_PER_ROW par ligne) pour les choix d'une
+	sorte de déblocage (`kind` : Progression.Kind). `selected` : l'indice
+	choisi ; `pick(i)` au clic d'une pastille libre ; un clic sur une pastille
+	verrouillée affiche sa condition (et son achat).
 ]]
-local function chips(
-	ctx: Context,
-	b: Builder,
-	names: { string },
-	selected: number,
-	unlocked: (number) -> boolean,
-	pick: (number) -> (),
-	why: (number) -> string
-)
+local function chips(ctx: Context, b: Builder, kind: string, names: { string }, selected: number, pick: (number) -> ())
+	local progress = ctx.Data.Progress
+	local owned = MenuKit.OwnedSet(ctx)
 	local width = (MenuKit.CONTENT_WIDTH - CHIP_GAP * (CHIPS_PER_ROW - 1)) / CHIPS_PER_ROW
 	local row: Frame? = nil
 	for index, name in ipairs(names) do
@@ -62,16 +66,22 @@ local function chips(
 		if column == 0 then
 			row = b:Row(CHIP_HEIGHT + 4)
 		end
-		local free = unlocked(index)
+		local free = Progression.IsUnlocked(kind :: any, index, progress, owned)
 		local chosen = index == selected
 		local chip = ctx.Button(row :: Frame, (if free then "" else "🔒 ") .. name, column * (width + CHIP_GAP), width, function()
 			if chosen then
 				return
 			end
 			if free then
+				ctx.View.InventoryLocked = nil
 				pick(index)
 			else
-				ctx.View.InventoryHint = why(index)
+				local item = Progression.ItemFor(kind :: any, index)
+				ctx.View.InventoryLocked = {
+					Kind = kind,
+					Index = index,
+					Text = Livery.ItemName(kind, index) .. " : " .. (if item then Progression.Describe(item.Requirement) else "?"),
+				} :: Locked
 				ctx.Rebuild()
 			end
 		end)
@@ -83,12 +93,39 @@ local function chips(
 	end
 end
 
--- Équipe une nouvelle livrée (modèle ou pièce changés) : sauvegardée par le serveur.
+-- Équipe une nouvelle livrée (modèle, pièce, couleur...) : sauvegardée par le serveur.
 local function equip(ctx: Context, livery: Livery.Livery, field: string, value: number)
 	local changed: any = table.clone(livery)
 	changed[field] = value
-	ctx.View.InventoryHint = nil
 	ctx.Action("Livery", changed)
+end
+
+-- La condition de la pastille verrouillée choisie, et le bouton pour l'acheter.
+local function lockedPanel(ctx: Context, b: Builder)
+	local locked: Locked? = ctx.View.InventoryLocked
+	if not locked then
+		return
+	end
+	b:Text("🔒 " .. locked.Text, 13, Theme.ORANGE)
+	local entry = Progression.ItemFor(locked.Kind :: any, locked.Index)
+	if not entry then
+		return
+	end
+	local partId = entry.Requirement.Item
+	local product = if partId then Products.ForItem(partId) else Products.ForUnlock(entry.Requirement)
+	if not product then
+		return
+	end
+	local row = b:Row(36)
+	local label = Widgets.Label(row, "Ou tout de suite :", 13, Enum.Font.GothamBold, Widgets.COLOR_DIM)
+	label.Size = UDim2.new(1, -ShopPage.BUTTON_WIDTH - 8, 1, 0)
+	ShopPage.RobuxButton(ctx, row, product, nil, nil, function()
+		if partId then
+			ctx.Action("RobuxItem", partId)
+		else
+			ctx.Action("RobuxUnlock", { Kind = locked.Kind, Index = locked.Index })
+		end
+	end)
 end
 
 function InventoryPage.Car(ctx: Context, b: Builder)
@@ -98,18 +135,13 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 		b:Text("Chargement de ta voiture…", 13, Widgets.COLOR_DIM)
 		return
 	end
-	local progress = ctx.Data.Progress
-	local owned = MenuKit.OwnedSet(ctx)
 
 	-- Aperçu : la voiture telle qu'elle roulera.
 	local previewRow = b:Row(PREVIEW_HEIGHT)
 	local preview = ItemArt.Car(previewRow, MenuKit.ChosenClass(ctx), livery, MenuKit.CONTENT_WIDTH, PREVIEW_HEIGHT)
 	preview.Position = UDim2.fromOffset(0, 0)
 
-	local hint = ctx.View.InventoryHint
-	if hint then
-		b:Text("🔒 " .. hint, 13, Theme.ORANGE)
-	end
+	lockedPanel(ctx, b)
 
 	-- Le modèle.
 	local body = CarBodies.Get(livery.Body)
@@ -118,13 +150,8 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 	for _, model in ipairs(CarBodies.LIST) do
 		table.insert(names, model.Name)
 	end
-	chips(ctx, b, names, livery.Body, function(i)
-		return Progression.IsUnlocked("Body", i, progress, owned)
-	end, function(i)
+	chips(ctx, b, "Body", names, livery.Body, function(i)
 		equip(ctx, livery, "Body", i)
-	end, function(i)
-		local item = Progression.ItemFor("Body", i)
-		return Livery.ItemName("Body", i) .. " : " .. (if item then Progression.Describe(item.Requirement) else "?")
 	end)
 
 	-- Les pièces que ce modèle prend.
@@ -136,20 +163,43 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 			for _, option in ipairs(slot.Options) do
 				table.insert(optionNames, option.Name)
 			end
-			chips(ctx, b, optionNames, current, function(i)
-				return Progression.IsUnlocked(slot.Key :: any, i, progress, owned)
-			end, function(i)
+			chips(ctx, b, slot.Key, optionNames, current, function(i)
 				equip(ctx, livery, slot.Key, i)
-			end, function(i)
-				local item = Progression.ItemFor(slot.Key :: any, i)
-				return Livery.ItemName(slot.Key, i) .. " : " .. (if item then Progression.Describe(item.Requirement) else "?")
 			end)
 		end
 	end
 	if body.Custom == false then
 		b:Text("La carrosserie d'origine ne prend que les jantes : choisis un modèle du jeu pour les autres pièces.", 12, Widgets.COLOR_DIM)
 	end
-	b:Text("Couleurs, bandes et numéro : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
+end
+
+-- Couleurs, bandes et plaques : de même (le numéro se règle au garage).
+function InventoryPage.Livery(ctx: Context, b: Builder)
+	local livery = ctx.Data.Livery
+	if not livery then
+		return
+	end
+	b:Section("Livrée")
+	local function names(list: { any }): { string }
+		local result = {}
+		for _, entry in ipairs(list) do
+			table.insert(result, entry.Name)
+		end
+		return result
+	end
+	b:Text("COULEUR", 13, Theme.YELLOW)
+	chips(ctx, b, "Color", names(Livery.COLORS), livery.Color, function(i)
+		equip(ctx, livery, "Color", i)
+	end)
+	b:Text("BANDES", 13, Theme.YELLOW)
+	chips(ctx, b, "Stripes", names(Livery.STRIPES), livery.Stripes, function(i)
+		equip(ctx, livery, "Stripes", i)
+	end)
+	b:Text("PLAQUE DU NUMÉRO", 13, Theme.YELLOW)
+	chips(ctx, b, "Plate", names(Livery.PLATES), livery.Plate, function(i)
+		equip(ctx, livery, "Plate", i)
+	end)
+	b:Text("Numéro et couleur des bandes : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
 end
 
 -- Ce qu'on possède, par sorte : les cartes PORTER de la boutique.
@@ -158,8 +208,7 @@ function InventoryPage.Gear(ctx: Context, b: Builder)
 		b:Section(Catalog.KIND_NAMES[kind])
 		ShopPage.ItemRows(ctx, b, kind, true)
 	end
-	b:Text("Plus d'objets : BOUTIQUE (tirages, crédits) et RALLYE PASS.", 12, Widgets.COLOR_DIM)
+	b:Text("Plus d'objets : BOUTIQUE (tirages, crédits, Robux) et RALLYE PASS.", 12, Widgets.COLOR_DIM)
 end
-
 
 return InventoryPage

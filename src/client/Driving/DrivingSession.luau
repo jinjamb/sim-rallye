@@ -95,6 +95,9 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 
 local CAR_TAG = "RallyCar"
 local RACE_RECOVER_COOLDOWN = 3 -- secondes entre deux remises en piste en course
+-- En course, la remise en piste n'est permise qu'à l'arrêt (~3 km/h) : on ne
+-- s'en sert pas pour couper un virage raté à pleine vitesse.
+local RACE_RECOVER_MAX_SPEED = 3 -- studs/s
 
 function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local self = (setmetatable({}, DrivingSession) :: any) :: DrivingSession
@@ -328,15 +331,16 @@ function DrivingSession:_otherCarPositions(): { Vector3 }
 end
 
 -- Remise en piste : sur la spéciale au paddock, sur le circuit en course.
-function DrivingSession:Recover()
+-- Renvoie la raison d'un refus ("moving" : la voiture roule encore, en course).
+function DrivingSession:Recover(): string?
 	if not self.HasControl or self.Car.Held then
-		return
+		return nil
 	end
 	local school = self.School
 	if school then
 		self.Style:Reset()
 		school:Recover()
-		return
+		return nil
 	end
 	local timer = self.StageTimer
 	if timer then
@@ -344,18 +348,22 @@ function DrivingSession:Recover()
 		timer:Recover()
 		-- Le serveur note que ce passage n'est plus « sans remise en piste ».
 		Remotes.Recovered:FireServer()
-		return
+		return nil
 	end
 	local now = os.clock()
 	if now - self.LastRecoverAt < RACE_RECOVER_COOLDOWN then
-		return
+		return nil
 	end
 	local circuit = Tracks.FindAt(self.Chassis.Position)
 	if circuit then
+		if self.Chassis.AssemblyLinearVelocity.Magnitude > RACE_RECOVER_MAX_SPEED then
+			return "moving"
+		end
 		self.LastRecoverAt = now
 		self.Style:Reset()
 		self.Car:Teleport(circuit:RecoverFrame(self.Chassis.Position, self:_otherCarPositions()))
 	end
+	return nil
 end
 
 -- Retour au départ de la spéciale (au paddock seulement).

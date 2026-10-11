@@ -24,6 +24,7 @@
 
 local CollectionService = game:GetService("CollectionService")
 local PhysicsService = game:GetService("PhysicsService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
@@ -82,6 +83,12 @@ local function nameText(model: Model): string
 	local teamColor = Livery.COLORS[tonumber(model:GetAttribute("TeamColor")) or 0]
 	if type(tag) == "string" and teamColor then
 		name = string.format('<font color="%s">[%s]</font> %s', Medals.Hex(teamColor.Color), escape(tag), name)
+	end
+	-- Pass VIP (MonetizationService : attribut Vip du joueur) : badge doré.
+	local ownerId = model:GetAttribute("OwnerUserId")
+	local owner = if type(ownerId) == "number" then Players:GetPlayerByUserId(ownerId) else nil
+	if owner and owner:GetAttribute("Vip") == true then
+		name = '<font color="#ffcc00"><b>VIP</b></font> ' .. name
 	end
 	local number = model:GetAttribute("RaceNumber")
 	local text = if type(number) == "number" then string.format("#%d %s", number, name) else name

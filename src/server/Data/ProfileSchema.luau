@@ -78,6 +78,7 @@ export type Profile = {
 	UseTeamColors: boolean, -- porte les couleurs de son écurie
 	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
 	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
+	XpBoostUntil: number, -- boost d'XP ×2 acheté (Products.luau) : actif jusqu'à cette date (os.time)
 }
 
 export type PassState = {
@@ -123,6 +124,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		UseTeamColors = false,
 		Achievements = {},
 		Badges = {},
+		XpBoostUntil = 0,
 	}
 end
 
@@ -208,6 +210,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.RollPity = count(data.RollPity)
 	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
 	profile.UseTeamColors = data.UseTeamColors == true
+	profile.XpBoostUntil = count(data.XpBoostUntil)
 	-- Trophées : gardés même s'ils ont quitté la liste (un exploit ne se perd pas).
 	if type(data.Achievements) == "table" then
 		for id, at in pairs(data.Achievements) do

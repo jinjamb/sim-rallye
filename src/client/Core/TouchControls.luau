@@ -7,6 +7,7 @@
 		glisser vers la gauche ou la droite braque, d'autant plus qu'on glisse
 		loin. Pas besoin de viser un bouton précis, et le centre suit le pouce
 		d'un virage à l'autre.
+		AU-DESSUS DU VOLANT, ARRIÈRE : tenu, la caméra regarde derrière.
 		À DROITE, les PÉDALES, ANALOGIQUES : plus on appuie haut sur la pédale,
 		plus on accélère (ou freine). Un appui en bas donne déjà 35 % : le dosage
 		se fait en glissant le pouce. À côté : frein à main, rapports.
@@ -65,6 +66,7 @@ export type TouchControls = typeof(setmetatable({}, TouchControls)) & {
 	Throttle: Hold,
 	Brake: Hold,
 	Handbrake: Hold,
+	LookBack: Hold,
 	SteerKnob: Frame,
 	SteerOrigin: number?,
 	Holds: { Hold },
@@ -205,6 +207,9 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 	steerHint.TextColor3 = COLOR_TEXT
 	steerHint.TextTransparency = 0.3
 	steerHint.Parent = steerFrame
+
+	-- Regarder derrière, au-dessus du volant (tenu).
+	local lookBackFrame = holdFrame(driving, Vector2.new(0, 1), UDim2.new(0, MARGIN, 1, -(MARGIN + STEER_SIZE.Y + GAP)), Vector2.new(110, 40), "ARRIÈRE")
 
 	-- Pédales et frein à main, du bord droit vers le centre
 	local throttleFrame = holdFrame(driving, Vector2.new(1, 1), UDim2.new(1, -MARGIN, 1, -MARGIN), Vector2.new(PEDAL_WIDTH, 140), "GAZ")
@@ -354,7 +359,17 @@ function TouchControls.new(playerGui: Instance, actions: Actions): TouchControls
 			self.SteerKnob.Position = UDim2.new(0.5, -hold.Value * (STEER_SIZE.X / 2 - 30), 0.5, 0)
 		end,
 	}
-	self.Holds = { self.Steer, self.Throttle, self.Brake, self.Handbrake }
+	self.LookBack = {
+		Frame = lookBackFrame,
+		Touch = nil,
+		Value = 0,
+		Update = function(hold: Hold, _position: Vector3)
+			hold.Value = 1
+			hold.Frame.BackgroundColor3 = Theme.CYAN
+			hold.Frame.BackgroundTransparency = 0.3
+		end,
+	}
+	self.Holds = { self.Steer, self.Throttle, self.Brake, self.Handbrake, self.LookBack }
 
 	for _, hold in ipairs(self.Holds) do
 		hold.Frame.InputBegan:Connect(function(input: InputObject)
@@ -401,6 +416,7 @@ end
 
 function TouchControls:_push()
 	InputManager:SetTouch(self.Throttle.Value, self.Brake.Value, self.Steer.Value, self.Handbrake.Value > 0)
+	InputManager:SetTouchLookBack(self.LookBack.Value > 0)
 end
 
 -- Au volant : volant, pédales et actions. À pied : "Prendre le volant".

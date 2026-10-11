@@ -18,8 +18,8 @@ export type Item = {
 	-- Sources (une ou plusieurs) : voir Catalog.luau.
 	Free: boolean?,
 	Credits: number?,
-	Robux: { ProductId: number, Suggested: number }?,
 	Pass: boolean?,
+	Starter: boolean?, -- exclusif au pack de démarrage (Products.luau)
 	Roll: boolean?,
 	-- Données propres à la sorte.
 	Color: Color3?, -- fumée : couleur principale

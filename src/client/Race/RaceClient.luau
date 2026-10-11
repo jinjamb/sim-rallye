@@ -138,10 +138,31 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Roll" then
 			Remotes.RequestRoll:FireServer()
 		elseif action == "BuyRobux" then
+			-- Offre à prix fixe : le serveur vérifie (pack de démarrage déjà pris,
+			-- tirages interdits dans le pays...) puis ouvre l'achat.
 			local product = Products.Get(if type(payload) == "string" then payload else nil)
 			if product and Products.IsAvailable(product) then
-				MarketplaceService:PromptProductPurchase(Players.LocalPlayer, product.ProductId)
+				Remotes.RequestRobuxPurchase:FireServer("Product", product.Key)
 			end
+		elseif action == "RobuxItem" then
+			-- Un objet du catalogue, au palier de sa rareté (MonetizationService).
+			if type(payload) == "string" then
+				Remotes.RequestRobuxPurchase:FireServer("Item", payload)
+			end
+		elseif action == "RobuxUnlock" then
+			-- Un déblocage de progression (modèle, pièce, couleur...).
+			if type(payload) == "table" then
+				Remotes.RequestRobuxPurchase:FireServer("Unlock", payload.Kind, payload.Index)
+			end
+		elseif action == "BuyPass" then
+			local pass = Products.Pass(if type(payload) == "string" then payload else "")
+			if pass and Products.IsPassAvailable(pass) then
+				MarketplaceService:PromptGamePassPurchase(Players.LocalPlayer, pass.GamePassId)
+			end
+		elseif action == "Premium" then
+			pcall(function()
+				MarketplaceService:PromptPremiumPurchase(Players.LocalPlayer)
+			end)
 		elseif action == "Paddock" then
 			Remotes.ReturnToPaddock:FireServer()
 			self.Menu:SetOpen(false)
@@ -493,8 +514,20 @@ function RaceClient:SetWallet(wallet: any, news: any)
 	end
 	local product = Products.Get(news.Purchased)
 	if product then
-		local credits = product.Grant.Credits
-		Banner.Show("MERCI !", if credits then "+" .. Credits.Format(credits) else product.Name, Theme.GREEN, 3.5, true)
+		-- Ce qui a vraiment été donné (un palier donne l'objet demandé).
+		local granted = if type(news.Granted) == "table" then news.Granted else product.Grant
+		local bought = Catalog.Get(granted.Item)
+		local text = if bought then bought.Name
+			elseif granted.Unlock then "Déblocage obtenu : choisis-le dans l'INVENTAIRE ou au garage"
+			elseif granted.XpBoostMinutes then "XP ×2 pendant " .. tostring(granted.XpBoostMinutes) .. " min"
+			elseif granted.Rolls then "+" .. tostring(granted.Rolls) .. " tirage" .. (if granted.Rolls > 1 then "s" else "")
+			elseif granted.Credits then "+" .. Credits.Format(granted.Credits)
+			else product.Name
+		Banner.Show("MERCI !", text, Theme.GREEN, 3.5, true)
+	end
+	local pass = Products.Pass(if type(news.PassBought) == "string" then news.PassBought else "")
+	if pass then
+		Banner.Show("MERCI !", "Pass " .. pass.Name .. " activé · " .. pass.Description, Theme.YELLOW, 4.5, true)
 	end
 	if type(news.Error) == "string" then
 		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)

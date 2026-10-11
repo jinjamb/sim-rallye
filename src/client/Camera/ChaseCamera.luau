@@ -17,6 +17,11 @@
 		  Les secousses s'ajoutent APRÈS le lissage, sinon il les effacerait.
 		- En glisse, la caméra suit la trajectoire réelle plutôt que le nez de la
 		  voiture : la trajectoire reste dans le champ, sans fouetté.
+
+	REGARD ARRIÈRE (LookBack, tenu par DrivingSession) : la caméra passe
+	aussitôt devant la voiture et regarde derrière elle, par-dessus le capot --
+	on voit qui arrive. Au relâchement, elle reprend sa place derrière sans
+	glisser à travers la voiture.
 ]]
 
 local CarClass = require(script.Parent.Parent.Physics.Car)
@@ -35,6 +40,8 @@ export type ChaseCamera = typeof(setmetatable({}, ChaseCamera)) & {
 	BumpEnergy: number,
 	Time: number,
 	Active: boolean,
+	LookBack: boolean,
+	WasLookingBack: boolean,
 }
 
 local BASE_DISTANCE = 15
@@ -48,6 +55,11 @@ local LOOK_AHEAD_PER_SPEED = 0.06 -- studs de regard en avant par stud/s
 local SMOOTHING = 9 -- plus haut = caméra plus rigide
 local TELEPORT_DISTANCE = 200 -- au-delà, la caméra rejoint la voiture sans glisser
 local DRIFT_BLEND_SPEED = 15 -- studs/s à partir desquels la caméra suit la trajectoire
+-- Regard arrière : devant le nez, un peu haut, les yeux sur la route derrière.
+local LOOK_BACK_DISTANCE = 9
+local LOOK_BACK_HEIGHT = 4.5
+local LOOK_BACK_FOCUS = 30 -- studs derrière la voiture
+local LOOK_BACK_FOV = 75
 
 local BASE_FOV = 70
 local FOV_BOOST = 20
@@ -93,6 +105,8 @@ function ChaseCamera.new(car: CarClass.Car, camera: Camera): ChaseCamera
 	self.BumpEnergy = 0
 	self.Time = 0
 	self.Active = false
+	self.LookBack = false
+	self.WasLookingBack = false
 	return self
 end
 
@@ -154,6 +168,28 @@ function ChaseCamera:Update(dt: number)
 	local eye = carPosition - lookDirection * distance + Vector3.yAxis * HEIGHT
 	local focus = carPosition + Vector3.yAxis * LOOK_HEIGHT + lookDirection * (LOOK_AHEAD_BASE + LOOK_AHEAD_PER_SPEED * speed)
 	local target = CFrame.lookAt(eye, focus)
+
+	-- Regard arrière : caméra posée d'un coup devant la voiture, tournée vers
+	-- l'arrière (sans secousses ni lissage : on veut voir tout de suite).
+	if self.LookBack then
+		local nose = chassisCFrame.LookVector * Vector3.new(1, 0, 1)
+		if nose.Magnitude < 0.1 then
+			nose = lookDirection
+		end
+		nose = nose.Unit
+		local front = carPosition + nose * LOOK_BACK_DISTANCE + Vector3.yAxis * LOOK_BACK_HEIGHT
+		local behind = carPosition - nose * LOOK_BACK_FOCUS + Vector3.yAxis * 1.5
+		self.Camera.CFrame = CFrame.lookAt(front, behind)
+		self.Camera.FieldOfView = LOOK_BACK_FOV
+		self.WasLookingBack = true
+		return
+	end
+	-- Retour derrière la voiture : directement à sa place, sans traverser la
+	-- carrosserie en glissant depuis l'avant.
+	if self.WasLookingBack then
+		self.WasLookingBack = false
+		self.Base = target
+	end
 
 	-- Lissage indépendant du framerate.
 	local alpha = 1 - math.exp(-SMOOTHING * dt)

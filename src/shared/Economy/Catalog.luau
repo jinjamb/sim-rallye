@@ -8,9 +8,9 @@
 	D'OÙ VIENT UN OBJET (un ou plusieurs à la fois) :
 		Free     possédé d'office ;
 		Credits  acheté en crédits (Credits.luau) ;
-		Robux    acheté en Robux : un produit de développeur à créer sur
-		         Roblox, dont l'identifiant va dans Robux.ProductId (0 tant
-		         qu'il n'existe pas : « bientôt ») ;
+		Robux    TOUT objet non gratuit s'achète aussi en Robux, au palier
+		         de sa rareté (Products.ForItem, MonetizationService) ;
+		Starter  exclusif au pack de démarrage (rien d'autre ne le donne) ;
 		Pass     récompense d'un palier du Rallye Pass (Pass.luau) ;
 		Roll     peut sortir d'un tirage (Rolls.luau), selon sa rareté.
 
@@ -134,7 +134,9 @@ function Catalog.SourceText(item: Item): string
 	if item.Credits then
 		table.insert(parts, tostring(item.Credits) .. " CR")
 	end
-	if item.Robux then
+	if item.Starter then
+		table.insert(parts, "pack de démarrage")
+	elseif not item.Free then
 		table.insert(parts, "Robux")
 	end
 	if item.Pass then

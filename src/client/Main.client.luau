@@ -287,6 +287,8 @@ RunService:BindToRenderStep("RallyCamera", Enum.RenderPriority.Camera.Value, fun
 	end
 	local current = session
 	if current and current.HasControl then
+		-- Regarder derrière : B, stick droit vers le bas, bouton ARRIÈRE (tactile).
+		current.ChaseCamera.LookBack = InputManager:IsLookingBack()
 		current.ChaseCamera:Update(dt)
 	end
 end)
@@ -325,8 +327,8 @@ local actions: TouchControls.Actions = {
 	end,
 	Recover = function()
 		local current = drivingSession()
-		if current then
-			current:Recover()
+		if current and current:Recover() == "moving" then
+			Toast.Show("Arrête-toi d'abord : remise en piste à l'arrêt seulement.", Theme.ORANGE)
 		end
 	end,
 	Restart = function()
