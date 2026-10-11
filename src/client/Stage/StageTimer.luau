@@ -168,15 +168,16 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	panel.AnchorPoint = Vector2.new(0, 1)
 	panel.Position = UDim2.new(0, SCREEN_MARGIN, 1, -SCREEN_MARGIN)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
-	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.12
-	panel.BorderSizePixel = 0
-	-- Habillage du thème : angles vifs, liseré jaune, filet à damier en tête.
-	Theme.Corner(panel)
-	Theme.Shade(panel)
-	Theme.AccentBar(panel)
-	local checker = Theme.Checker(panel, PANEL_WIDTH, 3, 2)
-	checker.BackgroundTransparency = 0.4
+	-- Habillage du thème : contour net, ombre portée rose, bandes de vitesse
+	-- en coin, filigrane « タイム » (temps) derrière le chrono.
+	Theme.Card(panel, 0.12)
+	local stripes = Theme.Stripes(panel, Theme.ACCENT, 4)
+	stripes.AnchorPoint = Vector2.new(1, 0)
+	stripes.Position = UDim2.new(1, -12, 0, 98) -- à droite des inters, libre
+	stripes.Size = UDim2.fromOffset(64, 18)
+	local kana = Theme.Kana(panel, "タイム", 40, 0.9)
+	kana.Position = UDim2.fromOffset(-12, 36)
+	kana.Size = UDim2.new(1, 0, 0, 50)
 	panel.Parent = gui
 	self.Panel = panel
 
@@ -193,11 +194,11 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.StatusLabel.AutomaticSize = Enum.AutomaticSize.X
 	self.StatusLabel.BackgroundTransparency = 0
 	self.StatusLabel.TextColor3 = Theme.ON_ACCENT
-	Theme.Corner(self.StatusLabel, 2)
 	local statusPadding = Instance.new("UIPadding")
 	statusPadding.PaddingLeft = UDim.new(0, 7)
 	statusPadding.PaddingRight = UDim.new(0, 7)
 	statusPadding.Parent = self.StatusLabel
+	Theme.Slant(self.StatusLabel)
 	self.TimeLabel = makeLabel(panel, 30, 58, 56, Enum.Font.RobotoMono)
 	self.SplitLabels = {}
 	for i = 1, #StageTrack.SPLITS do
@@ -216,11 +217,11 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.DeltaLabel.AutomaticSize = Enum.AutomaticSize.X
 	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Center
 	self.DeltaLabel.TextColor3 = Theme.ON_ACCENT
-	Theme.Corner(self.DeltaLabel, 2)
 	local deltaPadding = Instance.new("UIPadding")
 	deltaPadding.PaddingLeft = UDim.new(0, 8)
 	deltaPadding.PaddingRight = UDim.new(0, 8)
 	deltaPadding.Parent = self.DeltaLabel
+	Theme.Slant(self.DeltaLabel)
 	self.VersusLabel = makeLabel(panel, 68, 16, 12, Enum.Font.GothamBold)
 	self.VersusLabel.Position = UDim2.new(1, -142, 0, 68)
 	self.VersusLabel.Size = UDim2.fromOffset(130, 16)
@@ -366,7 +367,7 @@ function StageTimer:SetOfficialResult(result: any)
 		self.OfficialText = text
 		self.OfficialColor = if result.PersonalBest then COLOR_FASTER else COLOR_DIM
 	else
-		self.OfficialText = "TEMPS REFUSÉ : " .. string.upper(tostring(result.Reason or "invalide"))
+		self.OfficialText = "TEMPS REFUSÉ : " .. Format.Upper(tostring(result.Reason or "invalide"))
 		self.OfficialColor = COLOR_INVALID
 	end
 end
@@ -471,7 +472,7 @@ function StageTimer:_refresh(now: number)
 	-- Couleur de l'étiquette de statut : jaune par défaut.
 	local tone = Theme.ACCENT
 	local weekly = self.Weekly
-	local title = if weekly then "DÉFI · " .. string.upper(weekly) else "SPÉCIALE"
+	local title = if weekly then "DÉFI · " .. Format.Upper(weekly) else "SPÉCIALE"
 	if state == "Running" then
 		self.StatusLabel.Text = title .. " · EN COURSE"
 		self.TimeLabel.Text = Format.Time(now - self.StartClock)
@@ -490,7 +491,7 @@ function StageTimer:_refresh(now: number)
 		self.TimeLabel.Text = Format.Time(self.FinalTime)
 		self.TimeLabel.TextColor3 = if isBest then COLOR_FASTER else COLOR_TEXT
 	elseif state == "Invalid" then
-		self.StatusLabel.Text = "TEMPS ANNULÉ : " .. string.upper(self.InvalidReason)
+		self.StatusLabel.Text = "TEMPS ANNULÉ : " .. Format.Upper(self.InvalidReason)
 		tone = COLOR_INVALID
 		self.TimeLabel.Text = Format.Time(self.FinalTime)
 		self.TimeLabel.TextColor3 = COLOR_INVALID
@@ -500,7 +501,8 @@ function StageTimer:_refresh(now: number)
 		self.TimeLabel.TextColor3 = COLOR_DIM
 	end
 	self.StatusLabel.BackgroundColor3 = tone
-	self.StatusLabel.TextColor3 = if tone == COLOR_INVALID then Theme.TEXT else Theme.ON_ACCENT
+	-- Texte blanc sur rose ou rouge, encre sur les couleurs claires (vert, or).
+	self.StatusLabel.TextColor3 = if tone == Theme.ACCENT or tone == COLOR_INVALID then Theme.TEXT else Theme.INK
 
 	for i, label in ipairs(self.SplitLabels) do
 		local splitTime = self.SplitTimes[i]
@@ -526,6 +528,7 @@ function StageTimer:_refresh(now: number)
 		self.DeltaLabel.Text = formatDelta(delta)
 		self.DeltaLabel.BackgroundTransparency = 0
 		self.DeltaLabel.BackgroundColor3 = if delta <= 0 then COLOR_FASTER else COLOR_SLOWER
+		self.DeltaLabel.TextColor3 = if delta <= 0 then Theme.INK else Theme.TEXT
 		self.VersusLabel.Text = if ghost and self:_hasGhost() then "VS " .. ghost:Describe() else "VS MEILLEURS INTERS"
 	else
 		self.DeltaLabel.Text = ""

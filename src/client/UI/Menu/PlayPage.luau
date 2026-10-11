@@ -106,7 +106,7 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 		ctx.Action("Replay", { Which = "Own" } :: any)
 	end)
 	if opponent then
-		local other = ctx.Button(replayRow, "RALENTI : " .. string.upper(opponent), half + 8, half, function()
+		local other = ctx.Button(replayRow, "RALENTI : " .. Format.Upper(opponent), half + 8, half, function()
 			ctx.Action("Replay", { Which = "Opponent" } :: any)
 		end)
 		other.TextTruncate = Enum.TextTruncate.AtEnd

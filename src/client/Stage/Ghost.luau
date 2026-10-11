@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
 local Theme = require(script.Parent.Parent.UI.Theme)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 local Ghost = {}
 Ghost.__index = Ghost
@@ -150,7 +151,7 @@ end
 -- Qui est le fantôme, pour l'affichage : "TON RECORD" ou le nom de l'adversaire.
 function Ghost:Describe(): string
 	local opponent = self.Opponent
-	return if opponent then string.upper(opponent.Name) else "TON RECORD"
+	return if opponent then Format.Upper(opponent.Name) else "TON RECORD"
 end
 
 function Ghost:_refreshTag()

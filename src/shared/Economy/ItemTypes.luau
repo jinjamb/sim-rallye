@@ -7,7 +7,7 @@
 
 local Rarity = require(script.Parent.Rarity)
 
-export type Kind = "Car" | "Smoke" | "Horn" | "Celebration" | "Engine"
+export type Kind = "Car" | "Smoke" | "Horn" | "Celebration" | "Engine" | "Part"
 
 export type Item = {
 	Id: string,
@@ -29,6 +29,8 @@ export type Item = {
 	Effect: string?, -- célébration : effet joué au podium
 	Engine: string?, -- son moteur : profil (SoundBank.luau)
 	CarClass: string?, -- voiture : catégorie (CarClasses.luau)
+	Slot: string?, -- pièce : emplacement (CarBodies.SLOTS)
+	Option: number?, -- pièce : variante débloquée
 }
 
 return {}

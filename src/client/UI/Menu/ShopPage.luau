@@ -6,6 +6,11 @@
 	objets du catalogue qui s'achètent (crédits ou Robux), par sorte. Un
 	objet possédé se porte d'ici aussi.
 
+	LES OBJETS sont des CARTES, trois par rangée : la vignette de l'objet
+	(ItemArt.luau : la voiture en 3D, la fumée de sa couleur...), son nom à
+	la couleur de sa rareté, et le bouton d'action. Une rangée de pastilles
+	choisit la sorte montrée (voitures, moteurs, fumées...).
+
 	PRIX EN ROBUX : lus chez Roblox (GetProductInfo), une fois par produit,
 	en tâche de fond : le menu se reconstruit quand ils arrivent. Un produit
 	pas encore créé sur Roblox (ProductId à 0) s'affiche « BIENTÔT ».
@@ -23,6 +28,7 @@ local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
 local Theme = require(script.Parent.Parent.Theme)
+local ItemArt = require(script.Parent.Parent.ItemArt)
 
 type Context = MenuKit.Context
 type Builder = MenuKit.Builder
@@ -30,6 +36,22 @@ type Builder = MenuKit.Builder
 local ShopPage = {}
 
 local BUTTON_WIDTH = 150
+local CARD_GAP = 14
+local CARD_COLUMNS = 3
+local CARD_WIDTH = math.floor((MenuKit.CONTENT_WIDTH - CARD_GAP * (CARD_COLUMNS - 1)) / CARD_COLUMNS)
+local ART_HEIGHT = 108
+local CARD_HEIGHT = ART_HEIGHT + 86
+local CARD_BUTTON_HEIGHT = 32
+
+-- Pastilles des sortes : icône et nom court.
+local KIND_CHIPS: { [string]: string } = {
+	Car = "🏎️ VOITURES",
+	Engine = "⚙️ MOTEURS",
+	Smoke = "💨 FUMÉES",
+	Horn = "📯 KLAXONS",
+	Celebration = "🎉 FÊTES",
+	Part = "🔧 PIÈCES",
+}
 
 -- Prix lus chez Roblox : nombre, ou false si la lecture a échoué.
 local prices: { [number]: number | false } = {}
@@ -59,9 +81,11 @@ local function priceText(ctx: Context, product: Products.Product): string?
 end
 
 -- Bouton d'achat Robux d'un produit (ou « BIENTÔT » s'il n'existe pas encore).
-local function robuxButton(ctx: Context, row: Frame, product: Products.Product): TextButton
+-- Par défaut au bout de la ligne ; `x`, `width` pour le placer ailleurs (carte).
+local function robuxButton(ctx: Context, row: Frame, product: Products.Product, x: number?, width: number?): TextButton
 	local price = priceText(ctx, product)
-	local button = ctx.Button(row, if price then price else "BIENTÔT", MenuKit.CONTENT_WIDTH - BUTTON_WIDTH, BUTTON_WIDTH, function()
+	local w = width or BUTTON_WIDTH
+	local button = ctx.Button(row, if price then price else "BIENTÔT", x or (MenuKit.CONTENT_WIDTH - w), w, function()
 		if price then
 			ctx.Action("BuyRobux", product.Key)
 		end
@@ -136,7 +160,7 @@ function ShopPage.Rolls(ctx: Context, b: Builder)
 			local text = b:Text(string.format(
 				'<font color="%s"><b>%s %s</b></font> · %s par objet · %s',
 				Theme.Hex(info.Color),
-				string.upper(info.Name),
+				Format.Upper(info.Name),
 				Rolls.FormatChance(entry.Chance),
 				Rolls.FormatChance(entry.Chance / #entry.Items),
 				table.concat(names, ", ")
@@ -151,7 +175,7 @@ function ShopPage.CreditPacks(ctx: Context, b: Builder)
 	b:Section("Crédits")
 	for _, product in ipairs(Products.CreditPacks()) do
 		local row = b:Row(40)
-		local name = Widgets.Label(row, string.upper(product.Name), 16, Enum.Font.GothamBlack)
+		local name = Widgets.Label(row, Format.Upper(product.Name), 16, Enum.Font.GothamBlack)
 		name.Size = UDim2.new(1, -BUTTON_WIDTH - 8, 0, 20)
 		local amount = Widgets.Label(row, "+" .. Credits.Format(product.Grant.Credits or 0), 13, Enum.Font.GothamBold, Theme.ACCENT)
 		amount.Position = UDim2.fromOffset(0, 21)
@@ -161,29 +185,20 @@ function ShopPage.CreditPacks(ctx: Context, b: Builder)
 	b:Text("Achats accordés par le serveur et sauvegardés aussitôt. Les crédits servent aux voitures et à certains objets.", 12, Widgets.COLOR_DIM)
 end
 
--- Une ligne d'objet : nom (couleur de sa rareté), sorte et source, action.
-local function itemRow(ctx: Context, b: Builder, item: Catalog.Item, owned: { [string]: boolean })
+-- Le bouton d'une carte : porter, acheter (crédits ou Robux), ou d'où il vient.
+local function cardAction(ctx: Context, holder: Frame, item: Catalog.Item, owned: { [string]: boolean })
 	local wallet = ctx.Data.Wallet
-	local rarity = Rarity.Get(item.Rarity)
-	local row = b:Row(44)
-	local name = Widgets.Label(row, item.Name, 15, Enum.Font.GothamBold, rarity.Color)
-	name.Size = UDim2.new(1, -BUTTON_WIDTH - 8, 0, 20)
-	local details = Widgets.Label(
-		row,
-		string.format("%s · %s · %s", rarity.Name, item.Description, Catalog.SourceText(item)),
-		12,
-		Enum.Font.GothamMedium,
-		Widgets.COLOR_DIM
-	)
-	details.Position = UDim2.fromOffset(0, 22)
-	details.Size = UDim2.new(1, -BUTTON_WIDTH - 8, 0, 16)
-	details.TextTruncate = Enum.TextTruncate.AtEnd
-
 	local isOwned = item.Free == true or owned[item.Id] == true
 	local equipped = wallet ~= nil and (wallet.Equipped[item.Kind] == item.Id or (wallet.Equipped[item.Kind] == nil and item.Free == true))
-	local x = MenuKit.CONTENT_WIDTH - BUTTON_WIDTH
+	if item.Kind == "Part" then
+		-- Une pièce ne se porte pas : elle se choisit sur sa voiture (INVENTAIRE, garage).
+		local state = Widgets.Label(holder, if isOwned then "OBTENUE ✓ · INVENTAIRE" else "🎁 TIRAGE", 11, Enum.Font.GothamBlack, if isOwned then Widgets.COLOR_GREEN else Widgets.COLOR_DIM)
+		state.Size = UDim2.fromScale(1, 1)
+		state.TextXAlignment = Enum.TextXAlignment.Center
+		return
+	end
 	if isOwned then
-		local button = ctx.Button(row, if equipped then "PORTÉ ✓" else "PORTER", x, BUTTON_WIDTH, function()
+		local button = ctx.Button(holder, if equipped then "PORTÉ ✓" else "PORTER", 0, CARD_WIDTH, function()
 			if not equipped then
 				ctx.Action("Equip", { Kind = item.Kind, Id = item.Id })
 			end
@@ -194,7 +209,7 @@ local function itemRow(ctx: Context, b: Builder, item: Catalog.Item, owned: { [s
 	elseif item.Credits then
 		local price = item.Credits :: number
 		local affordable = wallet ~= nil and wallet.Credits >= price
-		local button = ctx.Button(row, Credits.Format(price), x, BUTTON_WIDTH, function()
+		local button = ctx.Button(holder, Credits.Format(price), 0, CARD_WIDTH, function()
 			ctx.Action("Buy", item.Id)
 		end)
 		if affordable then
@@ -205,35 +220,82 @@ local function itemRow(ctx: Context, b: Builder, item: Catalog.Item, owned: { [s
 	elseif item.Robux then
 		local product = Products.ForItem(item.Id)
 		if product then
-			robuxButton(ctx, row, product)
+			robuxButton(ctx, holder, product, 0, CARD_WIDTH)
 		end
 	else
-		local how = Widgets.Label(row, if item.Pass then "RALLYE PASS" else "TIRAGE", 13, Enum.Font.GothamBold, Widgets.COLOR_DIM)
-		how.Position = UDim2.fromOffset(x, 0)
-		how.Size = UDim2.new(0, BUTTON_WIDTH, 1, 0)
+		local how = Widgets.Label(holder, if item.Pass then "🎫 RALLYE PASS" else "🎁 TIRAGE", 12, Enum.Font.GothamBlack, Widgets.COLOR_DIM)
+		how.Size = UDim2.fromScale(1, 1)
 		how.TextXAlignment = Enum.TextXAlignment.Center
 	end
 end
 
--- Les objets d'une sorte qu'on peut voir ici : ceux qui s'achètent, et
--- ceux qu'on possède déjà.
-local function shownItems(ctx: Context, kind: Catalog.Kind): ({ Catalog.Item }, { [string]: boolean })
+--[[
+	Une carte d'objet : sa vignette (ce qu'on achète), son nom à la couleur
+	de sa rareté, sa rareté et sa description, le bouton d'action.
+]]
+local function itemCard(ctx: Context, row: Frame, column: number, item: Catalog.Item, owned: { [string]: boolean })
+	local rarity = Rarity.Get(item.Rarity)
+	local card = Instance.new("Frame")
+	card.Name = item.Id
+	card.BackgroundColor3 = Theme.PANEL_2
+	card.BackgroundTransparency = 0.55
+	card.BorderSizePixel = 0
+	card.Position = UDim2.fromOffset((column - 1) * (CARD_WIDTH + CARD_GAP), 0)
+	card.Size = UDim2.fromOffset(CARD_WIDTH, CARD_HEIGHT)
+	Theme.Corner(card)
+	card.Parent = row
+	ItemArt.New(card, { Item = item.Id }, CARD_WIDTH, ctx.Data.Livery, ART_HEIGHT)
+	-- Rareté en étiquette penchée, sur la vignette.
+	local tag = Theme.Tag(card, Format.Upper(rarity.Name), rarity.Color, Theme.INK, 10)
+	tag.Position = UDim2.fromOffset(10, 6)
+	tag.ZIndex = 3
+	local name = Widgets.Label(card, item.Name, 14, Enum.Font.GothamBlack, rarity.Color)
+	name.Position = UDim2.fromOffset(6, ART_HEIGHT + 4)
+	name.Size = UDim2.new(1, -12, 0, 20)
+	name.TextTruncate = Enum.TextTruncate.AtEnd
+	local details = Widgets.Label(card, item.Description, 11, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+	details.Position = UDim2.fromOffset(6, ART_HEIGHT + 24)
+	details.Size = UDim2.new(1, -12, 0, 26)
+	details.TextWrapped = true
+	details.TextTruncate = Enum.TextTruncate.AtEnd
+	details.TextYAlignment = Enum.TextYAlignment.Top
+	local holder = Instance.new("Frame")
+	holder.BackgroundTransparency = 1
+	holder.AnchorPoint = Vector2.new(0, 1)
+	holder.Position = UDim2.fromScale(0, 1)
+	holder.Size = UDim2.new(1, 0, 0, CARD_BUTTON_HEIGHT)
+	holder.Parent = card
+	cardAction(ctx, holder, item, owned)
+end
+
+--[[
+	Les objets d'une sorte montrés ici : TOUT le catalogue disponible (ce qui
+	ne s'achète pas dit d'où il vient : tirage, Rallye Pass), pour savoir ce
+	qui existe ; `ownedOnly` : seulement ce qu'on possède (INVENTAIRE).
+]]
+local function shownItems(ctx: Context, kind: Catalog.Kind, ownedOnly: boolean?): ({ Catalog.Item }, { [string]: boolean })
 	local owned = MenuKit.OwnedSet(ctx)
 	local items = {}
 	for _, item in ipairs(Catalog.OfKind(kind)) do
-		local listed = item.Credits or item.Robux or item.Free or owned[item.Id]
-		if listed and Catalog.IsAvailable(item) then
+		local mine = item.Free == true or owned[item.Id] == true
+		if Catalog.IsAvailable(item) and (mine or not ownedOnly) then
 			table.insert(items, item)
 		end
 	end
 	return items, owned
 end
 
--- Les lignes des objets d'une sorte, sans titre (pour d'autres rubriques).
-function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind)
-	local items, owned = shownItems(ctx, kind)
-	for _, item in ipairs(items) do
-		itemRow(ctx, b, item, owned)
+-- Les cartes des objets d'une sorte, trois par rangée, sans titre.
+-- `ownedOnly` : seulement ce qu'on possède (INVENTAIRE).
+function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOnly: boolean?)
+	local items, owned = shownItems(ctx, kind, ownedOnly)
+	local row: Frame? = nil
+	for index, item in ipairs(items) do
+		local column = (index - 1) % CARD_COLUMNS + 1
+		if column == 1 then
+			row = b:Row(CARD_HEIGHT + CARD_GAP)
+		end
+		itemCard(ctx, row :: Frame, column, item, owned)
 	end
 end
 
@@ -245,6 +307,43 @@ function ShopPage.Items(ctx: Context, b: Builder, kind: Catalog.Kind)
 	end
 	b:Section(Catalog.KIND_NAMES[kind])
 	ShopPage.ItemRows(ctx, b, kind)
+end
+
+--[[
+	Le catalogue : une rangée de pastilles (une par sorte qui a des objets à
+	montrer), puis les cartes de la sorte choisie (gardée d'une ouverture à
+	l'autre : ctx.View.ShopKind).
+]]
+function ShopPage.Catalog(ctx: Context, b: Builder)
+	local kinds = {}
+	for _, kind in ipairs(Catalog.KINDS) do
+		if #(shownItems(ctx, kind :: Catalog.Kind)) > 0 then
+			table.insert(kinds, kind)
+		end
+	end
+	if #kinds == 0 then
+		return
+	end
+	local chosen = ctx.View.ShopKind
+	if not table.find(kinds, chosen) then
+		chosen = kinds[1]
+	end
+	b:Section("Objets")
+	local chips = b:Row(34)
+	local gap = 6
+	local width = (MenuKit.CONTENT_WIDTH - gap * (#kinds - 1)) / #kinds
+	for index, kind in ipairs(kinds) do
+		local selected = kind == chosen
+		local chip = ctx.Button(chips, KIND_CHIPS[kind] or Format.Upper(Catalog.KIND_NAMES[kind]), (index - 1) * (width + gap), width, function()
+			ctx.View.ShopKind = kind
+			ctx.Rebuild()
+		end)
+		chip.TextSize = 11
+		chip.BackgroundColor3 = if selected then Theme.ACCENT else Theme.PANEL_2
+		chip.TextColor3 = if selected then Theme.ON_ACCENT else Widgets.COLOR_DIM
+	end
+	b:Row(4)
+	ShopPage.ItemRows(ctx, b, chosen :: Catalog.Kind)
 end
 
 return ShopPage

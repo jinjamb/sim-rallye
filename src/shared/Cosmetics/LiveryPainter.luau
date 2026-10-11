@@ -26,11 +26,16 @@
 	par une fine plaque (capot, toit, coffre). Pare-brise et lunette, exclus
 	des rayons, coupent la bande comme sur une vraie voiture. Les tracés sont
 	calculés une fois par bande, comme les numéros, puis réutilisés.
+
+	MODÈLES (CarBodies.luau) : Apply pose d'abord le modèle et les pièces
+	choisis dans la livrée. Numéros et bandes dépendent de la forme : leurs
+	emplacements sont gardés PAR FORME (CarBodies.ShapeKey).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
 
 local LiveryPainter = {}
 
@@ -59,8 +64,14 @@ type Anchor = { Offset: CFrame, Size: number }
 type StripePoint = { Hit: boolean, Point: Vector3, Normal: Vector3 }
 local MISS: StripePoint = { Hit = false, Point = Vector3.zero, Normal = Vector3.yAxis }
 
-local anchors: { Anchor }? = nil
-local stripePaths: { [number]: { StripePoint } } = {} -- par décalage latéral
+-- Par forme de carrosserie (CarBodies.ShapeKey, attribut « DesignKey » de la voiture).
+local anchorsByShape: { [string]: { Anchor } } = {}
+local stripesByShape: { [string]: { [number]: { StripePoint } } } = {} -- puis par décalage latéral
+
+local function shapeOf(car: Model): string
+	local key = car:GetAttribute("DesignKey")
+	return if type(key) == "string" then key else "origine"
+end
 
 local function nameWords(name: string): { [string]: boolean }
 	local spaced = string.gsub(name, "(%l)(%u)", "%1 %2")
@@ -184,9 +195,17 @@ local function computeAnchors(car: Model, chassis: BasePart): { Anchor }
 			table.insert(found, { Offset = chassis.CFrame:ToObjectSpace(world), Size = panelSize })
 		end
 	end
+	-- Modèle construit par le jeu (CarBodies) : le numéro se pose sur la
+	-- porte, à la hauteur et à la taille qu'il indique ; sinon à mi-hauteur.
+	local flankY = car:GetAttribute("FlankY")
+	local flankSize = car:GetAttribute("FlankPanel")
+	local flankCenter = if type(flankY) == "number"
+		then chassis.CFrame:PointToWorldSpace(Vector3.new(0, flankY, 0))
+		else frame.Position
+	local sideSize = if type(flankSize) == "number" then flankSize else SIDE_PANEL
 	for _, side in ipairs({ -1, 1 }) do
 		local outward = frame.RightVector * side
-		cast(frame.Position + outward * reach, -outward * reach, SIDE_PANEL)
+		cast(flankCenter + outward * reach, -outward * reach, sideSize)
 	end
 	cast(frame.Position + frame.UpVector * reach, -frame.UpVector * reach, ROOF_PANEL)
 	return found
@@ -229,6 +248,12 @@ local function computeStripe(car: Model, chassis: BasePart, x: number): { Stripe
 end
 
 local function stripeOf(car: Model, chassis: BasePart, x: number): { StripePoint }?
+	local shape = shapeOf(car)
+	local stripePaths = stripesByShape[shape]
+	if not stripePaths then
+		stripePaths = {}
+		stripesByShape[shape] = stripePaths
+	end
 	local cached = stripePaths[x]
 	if cached then
 		return cached
@@ -336,10 +361,11 @@ function LiveryPainter.Prepare(car: Model)
 	if not chassis or not chassis:IsA("BasePart") or not car:IsDescendantOf(workspace) then
 		return
 	end
-	if anchors == nil then
+	local shape = shapeOf(car)
+	if anchorsByShape[shape] == nil then
 		local computed = computeAnchors(car, chassis)
 		if #computed > 0 then
-			anchors = computed
+			anchorsByShape[shape] = computed
 		end
 	end
 	for _, style in ipairs(Livery.STRIPES) do
@@ -356,6 +382,8 @@ function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 		return
 	end
 	local color = Livery.ColorOf(livery)
+	-- Le modèle et ses pièces d'abord : la peinture et les numéros se posent dessus.
+	CarBodies.Apply(car, livery, color)
 	for _, item in ipairs(car:GetDescendants()) do
 		if item:IsA("BasePart") and item:GetAttribute(PAINT_ATTRIBUTE) == true then
 			item.Color = color
@@ -366,10 +394,11 @@ function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 	car:SetAttribute("RaceNumber", livery.Number)
 	car:SetAttribute("LiveryColor", color)
 
-	if anchors == nil and car:IsDescendantOf(workspace) then
+	local shape = shapeOf(car)
+	if anchorsByShape[shape] == nil and car:IsDescendantOf(workspace) then
 		local computed = computeAnchors(car, chassis)
 		if #computed > 0 then
-			anchors = computed
+			anchorsByShape[shape] = computed
 		end
 	end
 	-- Bandes, puis numéros par-dessus (les rayons des uns ignorent les autres).
@@ -384,7 +413,7 @@ function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 		end
 	end
 	local plate = Livery.PLATES[livery.Plate] or Livery.PLATES[1]
-	for _, anchor in ipairs(anchors or {}) do
+	for _, anchor in ipairs(anchorsByShape[shape] or {}) do
 		makePanel(car, chassis, anchor, livery.Number, color, plate)
 	end
 end

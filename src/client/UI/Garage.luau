@@ -23,6 +23,7 @@
 local CollectionService = game:GetService("CollectionService")
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
 
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
@@ -30,6 +31,7 @@ local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
 local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Widgets = require(script.Parent.Widgets)
@@ -45,6 +47,8 @@ export type Callbacks = {
 	OpenSetup: () -> (),
 	-- Catégorie de la voiture choisie : sa carrosserie sur l'aperçu.
 	GetCarClass: () -> string,
+	-- Objets possédés (pièces gagnées aux tirages).
+	GetOwned: () -> { [string]: boolean },
 }
 
 export type Garage = typeof(setmetatable({}, Garage)) & {
@@ -59,6 +63,9 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	StripesLabel: TextLabel,
 	StripeColorLabel: TextLabel,
 	PlateLabel: TextLabel,
+	-- Carrosserie (CarBodies.luau) : le modèle, puis une ligne par emplacement de pièce.
+	BodyLabel: TextLabel,
+	SlotLabels: { [string]: TextLabel },
 	Hint: TextLabel,
 	FirstButton: GuiButton?,
 	TouchLayout: boolean,
@@ -73,7 +80,8 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 }
 
 local PANEL_WIDTH = 380
-local PANEL_HEIGHT = 470
+local PANEL_HEIGHT = 690
+local BODY_ROW = 34 -- lignes de la carrosserie, un peu plus serrées
 local SPIN_SPEED = 0.35 -- rad/s
 local COLOR_LOCKED = Theme.ORANGE
 local HINT_TEXT = "Ta livrée se voit sur ta voiture, en course comme aux essais. Les cosmétiques verrouillés se gagnent en jouant : niveaux, médailles, victoires, points de style."
@@ -107,15 +115,19 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	self.Panel = panel
 	self.Scale = scale
 
-	local title = Widgets.Label(panel, "GARAGE", 18, Enum.Font.GothamBlack, PaddockLayout.GARAGE_PAD.Color)
+	-- Filigrane « ガレージ » (garage) derrière l'en-tête.
+	local kana = Theme.Kana(panel, "ガレージ", 40, 0.9)
+	kana.Position = UDim2.fromOffset(-60, -4)
+	kana.Size = UDim2.new(1, 0, 0, 48)
+	local title = Widgets.Label(panel, "GARAGE", 22, Enum.Font.GothamBlack, PaddockLayout.GARAGE_PAD.Color)
 	title.Position = UDim2.fromOffset(16, 10)
 	title.Size = UDim2.new(1, -70, 0, 24)
-	local close = Widgets.Button(panel, "×", function()
+	local close = Widgets.Button(panel, "X", function()
 		self:SetOpen(false)
 	end)
 	close.Position = UDim2.new(1, -44, 0, 8)
 	close.Size = UDim2.fromOffset(32, 28)
-	close.TextSize = 18
+	close.TextSize = 16
 
 	-- Progression : niveau, licence, barre jusqu'au niveau suivant.
 	local level = Widgets.Label(panel, "", 14, Enum.Font.GothamBold)
@@ -201,15 +213,32 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 		change("Plate", #Livery.PLATES, direction)
 	end)
 
+	-- Carrosserie : le modèle et ses pièces. Une pièce que le modèle ne prend
+	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « — ».
+	local bodyTitle = Widgets.Label(panel, "CARROSSERIE", 14, Enum.Font.GothamBlack, Theme.ACCENT)
+	bodyTitle.Position = UDim2.fromOffset(16, y + 190)
+	bodyTitle.Size = UDim2.new(1, -32, 0, 18)
+	local bodyY = y + 212
+	self.BodyLabel = stepper(bodyY, "Modèle", function(direction)
+		change("Body", #CarBodies.LIST, direction)
+	end)
+	self.SlotLabels = {}
+	for index, slot in ipairs(CarBodies.SLOTS) do
+		self.SlotLabels[slot.Key] = stepper(bodyY + index * BODY_ROW, slot.Name, function(direction)
+			change(slot.Key, #slot.Options, direction)
+		end)
+	end
+	local setupY = bodyY + (#CarBodies.SLOTS + 1) * BODY_ROW + 10
+
 	local setup = Widgets.Button(panel, "RÉGLAGES DE LA VOITURE (P)", function()
 		callbacks.OpenSetup()
 	end)
-	setup.Position = UDim2.fromOffset(16, y + 198)
+	setup.Position = UDim2.fromOffset(16, setupY)
 	setup.Size = UDim2.new(1, -32, 0, 36)
 
 	local hint = Widgets.Label(panel, HINT_TEXT, 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
-	hint.Position = UDim2.fromOffset(16, y + 244)
-	hint.Size = UDim2.new(1, -32, 0, 100)
+	hint.Position = UDim2.fromOffset(16, setupY + 44)
+	hint.Size = UDim2.new(1, -32, 0, 90)
 	hint.TextWrapped = true
 	hint.TextYAlignment = Enum.TextYAlignment.Top
 	self.Hint = hint
@@ -234,18 +263,26 @@ end
 -- Ce qui est verrouillé dans cette livrée, et comment le débloquer (nil : rien).
 function Garage:_lockedText(livery: Livery.Livery): string?
 	local progress = self.Callbacks.GetProgress()
+	local owned = self.Callbacks.GetOwned()
 	local lines = {}
 	local checks: { { Kind: Progression.Kind, Index: number } } = {
 		{ Kind = "Color", Index = livery.Color },
 		{ Kind = "Stripes", Index = livery.Stripes },
 		{ Kind = "Color", Index = livery.StripeColor },
 		{ Kind = "Plate", Index = livery.Plate },
+		{ Kind = "Body", Index = livery.Body },
 	}
+	local body = CarBodies.Get(livery.Body)
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		if CarBodies.HasSlot(body, slot.Key) then
+			table.insert(checks, { Kind = slot.Key :: any, Index = (livery :: any)[slot.Key] })
+		end
+	end
 	local seen: { [string]: boolean } = {}
 	for _, check in ipairs(checks) do
 		local item = Progression.ItemFor(check.Kind, check.Index)
 		local key = check.Kind .. check.Index
-		if item and not seen[key] and not Progression.Meets(item.Requirement, progress) then
+		if item and not seen[key] and not Progression.Meets(item.Requirement, progress, owned) then
 			seen[key] = true
 			table.insert(lines, Livery.ItemName(check.Kind, check.Index) .. " : " .. Progression.Describe(item.Requirement))
 		end
@@ -282,7 +319,10 @@ function Garage:_refresh()
 
 	local livery = self:_shown()
 	if not livery then
-		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel }) do
+		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel, self.BodyLabel }) do
+			label.Text = "…"
+		end
+		for _, label in pairs(self.SlotLabels) do
 			label.Text = "…"
 		end
 		return
@@ -313,6 +353,27 @@ function Garage:_refresh()
 	self.PlateLabel.Text = valueText(plate.Name, plateUnlocked)
 	plain(self.PlateLabel, plateUnlocked)
 
+	-- Carrosserie : le modèle, et chaque pièce (« — » si le modèle ne la prend pas).
+	local body = CarBodies.Get(livery.Body)
+	local owned = self.Callbacks.GetOwned()
+	local bodyUnlocked = Progression.IsUnlocked("Body", livery.Body, progress, owned)
+	self.BodyLabel.Text = valueText(body.Name, bodyUnlocked)
+	plain(self.BodyLabel, bodyUnlocked)
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		local label = self.SlotLabels[slot.Key]
+		if CarBodies.HasSlot(body, slot.Key) then
+			local index = (livery :: any)[slot.Key] or 1
+			local option = slot.Options[index] or slot.Options[1]
+			local unlocked = Progression.IsUnlocked(slot.Key :: any, index, progress, owned)
+			label.Text = valueText(option.Name, unlocked)
+			plain(label, unlocked)
+		else
+			label.Text = "—"
+			label.BackgroundTransparency = 1
+			label.TextColor3 = Widgets.COLOR_DIM
+		end
+	end
+
 	local locked = self:_lockedText(livery)
 	self.Hint.Text = locked or HINT_TEXT
 	self.Hint.TextColor3 = if locked then COLOR_LOCKED else Widgets.COLOR_DIM
@@ -324,7 +385,9 @@ function Garage:SetOpen(open: boolean)
 		self:_refresh()
 		local viewport = workspace.CurrentCamera.ViewportSize
 		self.Scale.Scale = if self.TouchLayout then math.clamp(viewport.Y / 560, 0.6, 1) else math.clamp(viewport.Y / 1080, 0.6, 1.2)
-		if not self.TouchLayout then
+		-- Sélection seulement à la manette : à la souris, le cadre gênerait.
+		local last = UserInputService:GetLastInputType()
+		if not self.TouchLayout and last.Name:sub(1, 7) == "Gamepad" then
 			GuiService.SelectedObject = self.FirstButton
 		end
 	else

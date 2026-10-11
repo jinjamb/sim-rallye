@@ -125,6 +125,11 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Equip" then
 			if type(payload) == "table" then
 				Remotes.EquipItem:FireServer(payload.Kind, payload.Id)
+				-- Retour immédiat : une fumée ou un son ne se voit qu'en roulant.
+				local item = Catalog.Get(payload.Id)
+				if item then
+					Toast.Show("<b>Équipé</b> · " .. item.Name .. " (" .. string.lower(Catalog.KIND_NAMES[item.Kind]) .. ")", Theme.GREEN)
+				end
 			end
 		elseif action == "Team" then
 			if type(payload) == "table" then
@@ -282,6 +287,8 @@ function RaceClient:_onEvent(kind: string, data: any)
 		hud:ShowMessage(message, Widgets.COLOR_RED)
 	elseif kind == "Go" then
 		hud:ShowMessage("GO !", Widgets.COLOR_GREEN, 1.2)
+		-- Le joker est obligatoire : on le rappelle dès le départ.
+		Banner.Show("JOKER OBLIGATOIRE", "Une fois par course, par la branche orange de la mini-carte · sinon +5 s", Widgets.COLOR_ORANGE, 3.5)
 	elseif kind == "Lap" then
 		local lap = tonumber(data.Lap) or 0
 		local text = string.format("TOUR %d — %s", lap, Format.Time(tonumber(data.Time)))
@@ -298,6 +305,9 @@ function RaceClient:_onEvent(kind: string, data: any)
 			local jokerDue = myRow ~= nil and myRow.J == 0
 			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
 			color = if jokerDue then Widgets.COLOR_ORANGE else Widgets.COLOR_TEXT
+			if jokerDue then
+				Banner.Show("JOKER PAS FAIT !", "Dernier tour : prends la branche orange, sinon +5 s à l'arrivée", Widgets.COLOR_ORANGE, 4, true)
+			end
 		end
 		hud:ShowMessage(text, color, 3)
 		-- Nouvelle médaille sur ce circuit (meilleur tour, Medals.luau).
@@ -335,7 +345,7 @@ function RaceClient:_onEvent(kind: string, data: any)
 			hud:ShowMessage("JOKER EN TROP : un seul suffit", Widgets.COLOR_ORANGE)
 		end
 	elseif kind == "Penalty" then
-		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), string.upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
+		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
 	elseif kind == "Chequered" then
 		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
 	elseif kind == "Finished" then
@@ -575,6 +585,11 @@ end
 -- Menu principal ouvert (arrivée dans le jeu).
 function RaceClient:OpenMenu()
 	self.Menu:SetOpen(true)
+end
+
+-- Barre de boutons à gauche (à pied, hors course, hors ralenti).
+function RaceClient:SetHubVisible(visible: boolean)
+	self.Menu:SetHubVisible(visible)
 end
 
 -- Châssis de sa propre voiture (pour la mini-carte), nil sans voiture.

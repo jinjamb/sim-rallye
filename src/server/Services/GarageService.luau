@@ -52,7 +52,7 @@ function GarageService.Start()
 	ProfileStore.OnLoaded(function(player, profile)
 		-- Livrée sauvegardée avec un cosmétique qui n'est plus débloqué.
 		local default = Livery.Default(player.UserId)
-		profile.Livery = Progression.Enforce(profile.Livery, default, default, ProgressService.SnapshotOf(profile))
+		profile.Livery = Progression.Enforce(profile.Livery, default, default, ProgressService.SnapshotOf(profile), profile.Owned)
 		GarageService.LiveryChanged(player)
 	end)
 
@@ -90,7 +90,8 @@ function GarageService.Start()
 			Livery.Sanitize(input, player.UserId),
 			profile.Livery,
 			Livery.Default(player.UserId),
-			ProgressService.Get(player)
+			ProgressService.Get(player),
+			profile.Owned -- pièces gagnées aux tirages
 		)
 		deferSave(player)
 		GarageService.LiveryChanged(player)

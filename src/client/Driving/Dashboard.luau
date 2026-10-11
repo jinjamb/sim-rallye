@@ -66,35 +66,28 @@ local COLOR_PANEL = Theme.PANEL
 local COLOR_TEXT = Theme.TEXT
 local COLOR_TEXT_DIM = Theme.DIM
 local COLOR_GREEN = Theme.GREEN
-local COLOR_YELLOW = Theme.ACCENT
+local COLOR_YELLOW = Theme.YELLOW
 local COLOR_RED = Theme.RED
 local COLOR_BLUE = Theme.BLUE
 local COLOR_ORANGE = Theme.ORANGE
-local COLOR_GREY = Color3.fromRGB(70, 72, 80)
+local COLOR_GREY = Color3.fromRGB(78, 72, 120)
 
 --------------------------------------------------------------------------------
 -- Construction
 --------------------------------------------------------------------------------
 
-local function corner(parent: GuiObject, radius: number)
-	local c = Instance.new("UICorner")
-	c.CornerRadius = UDim.new(0, radius)
-	c.Parent = parent
+-- Angles vifs du thème ; les petits rayons demandés ici sont ignorés.
+local function corner(parent: GuiObject, _radius: number)
+	Theme.Corner(parent)
 end
 
+-- Panneau du thème : nuit indigo, contour net, ombre portée rose.
 local function makePanel(name: string, size: Vector2, parent: Instance): Frame
 	local frame = Instance.new("Frame")
 	frame.Name = name
 	frame.AnchorPoint = Vector2.new(1, 1)
 	frame.Size = UDim2.fromOffset(size.X, size.Y)
-	frame.BackgroundColor3 = COLOR_PANEL
-	frame.BackgroundTransparency = 0.2
-	frame.BorderSizePixel = 0
-	corner(frame, 10)
-	local stroke = Instance.new("UIStroke")
-	stroke.Color = Color3.fromRGB(255, 255, 255)
-	stroke.Transparency = 0.9
-	stroke.Parent = frame
+	Theme.Card(frame, 0.15)
 	frame.Parent = parent
 	return frame
 end
@@ -166,21 +159,36 @@ function Dashboard.new(car: CarClass.Car, playerGui: Instance): Dashboard
 		local segment = Instance.new("Frame")
 		segment.BorderSizePixel = 0
 		segment.Position = UDim2.new((i - 1) / REV_SEGMENTS, 0, 0, 0)
-		segment.Size = UDim2.new(1 / REV_SEGMENTS, -3, 1, 0)
-		corner(segment, 3)
+		-- LED penchées, comme des traits de vitesse.
+		segment.Size = UDim2.new(1 / REV_SEGMENTS, -10, 1, 0) -- le biais (7 px) + un vide
 		segment.Parent = revBar
+		Theme.Slant(segment, 24)
 		self.RevSegments[i] = segment
 	end
 
-	-- Rapport + mode
-	self.GearLabel = makeLabel(cluster, UDim2.fromOffset(12, 34), UDim2.fromOffset(80, 80), "1", 84, Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
-	self.ModeLabel = makeLabel(cluster, UDim2.fromOffset(12, 112), UDim2.fromOffset(80, 18), "AUTO", 13, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
+	-- Rapport : un gros chiffre blanc encré dans un badge rose ; le mode dessous.
+	local gearBadge = Instance.new("Frame")
+	gearBadge.Name = "GearBadge"
+	gearBadge.BorderSizePixel = 0
+	gearBadge.BackgroundColor3 = Theme.ACCENT
+	gearBadge.Position = UDim2.fromOffset(14, 38)
+	gearBadge.Size = UDim2.fromOffset(76, 72)
+	Theme.Corner(gearBadge)
+	Theme.CelShadow(gearBadge, Theme.INK, 4)
+	gearBadge.Parent = cluster
+	self.GearLabel = makeLabel(gearBadge, UDim2.fromOffset(0, -4), UDim2.fromScale(1, 1), "1", 76, Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
+	self.GearLabel.FontFace = Theme.HEADLINE
+	Theme.TextInk(self.GearLabel, 3)
+	self.ModeLabel = makeLabel(cluster, UDim2.fromOffset(12, 115), UDim2.fromOffset(80, 18), "AUTO", 13, Enum.Font.GothamBlack, Enum.TextXAlignment.Center)
 	self.ModeLabel.TextColor3 = COLOR_TEXT_DIM
 
-	-- Vitesse + régime
-	self.SpeedLabel = makeLabel(cluster, UDim2.fromOffset(96, 36), UDim2.fromOffset(170, 62), "0", 64, Enum.Font.GothamBold, Enum.TextXAlignment.Right)
-	local unit = makeLabel(cluster, UDim2.fromOffset(96, 96), UDim2.fromOffset(170, 16), "km/h", 14, Enum.Font.GothamMedium, Enum.TextXAlignment.Right)
-	unit.TextColor3 = COLOR_TEXT_DIM
+	-- Vitesse + régime : filigrane « スピード » (vitesse) derrière les chiffres.
+	local kana = Theme.Kana(cluster, "スピード", 34, 0.9)
+	kana.Position = UDim2.fromOffset(96, 34)
+	kana.Size = UDim2.fromOffset(170, 40)
+	self.SpeedLabel = makeLabel(cluster, UDim2.fromOffset(96, 36), UDim2.fromOffset(170, 62), "0", 64, Enum.Font.RobotoMono, Enum.TextXAlignment.Right)
+	local unit = makeLabel(cluster, UDim2.fromOffset(96, 96), UDim2.fromOffset(170, 16), "km/h", 14, Enum.Font.GothamBlack, Enum.TextXAlignment.Right)
+	unit.TextColor3 = Theme.CYAN
 	self.RpmLabel = makeLabel(cluster, UDim2.fromOffset(96, 113), UDim2.fromOffset(170, 18), "1000 tr/min", 14, Enum.Font.GothamMedium, Enum.TextXAlignment.Right)
 	self.RpmLabel.TextColor3 = COLOR_TEXT_DIM
 
@@ -227,14 +235,14 @@ function Dashboard.new(car: CarClass.Car, playerGui: Instance): Dashboard
 		{ key = "handbrake", text = "FREIN À MAIN", color = COLOR_ORANGE },
 	}
 	self.Chips = {}
-	local chipWidth = (CLUSTER_WIDTH - 24 - 3 * 6) / #chipDefs
+	local chipWidth = (CLUSTER_WIDTH - 30 - 3 * 12) / #chipDefs -- vide de 12 px : 6 pour le biais
 	for i, def in ipairs(chipDefs) do
 		local frame = Instance.new("Frame")
 		frame.BorderSizePixel = 0
-		frame.Position = UDim2.fromOffset(12 + (i - 1) * (chipWidth + 6), 138)
+		frame.Position = UDim2.fromOffset(18 + (i - 1) * (chipWidth + 12), 138)
 		frame.Size = UDim2.fromOffset(chipWidth, 20)
-		corner(frame, 4)
 		frame.Parent = cluster
+		Theme.Slant(frame) -- témoins en étiquettes penchées
 		local label = makeLabel(frame, UDim2.fromScale(0, 0), UDim2.fromScale(1, 1), def.text, 11, Enum.Font.GothamBold, Enum.TextXAlignment.Center)
 		self.Chips[def.key] = { frame = frame, label = label, color = def.color }
 	end

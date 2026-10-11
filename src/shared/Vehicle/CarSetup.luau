@@ -45,7 +45,7 @@ CarSetup.FIELDS = {
 	},
 	{
 		Key = "HighSpeedSteer", Label = "Braquage à haute vitesse", Group = "Direction",
-		Min = 0.30, Max = 1, Step = 0.05, Default = 0.55, Format = "%.0f %%", Scale = 100,
+		Min = 0.30, Max = 1, Step = 0.05, Default = 0.8, Format = "%.0f %%", Scale = 100,
 		Hint = "Clavier et tactile : part du braquage gardée à 120 km/h (la manette n'est jamais limitée).",
 	},
 	{

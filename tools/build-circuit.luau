@@ -22,6 +22,13 @@
 	voxel de surface : pas de marches.
 	PROFIL EN TRAVERS : piste (surface du tracé) ; dégagement plat en herbe ;
 	talus jusqu'au sol du circuit, là où la piste est surélevée (sauts, buttes).
+	Au-delà, des COLLINES (Scenery.Hills) qui montent en douceur loin de la
+	piste : le circuit est dans un creux, pas sur une plaine.
+
+	DÉCOR (Shared/World/Scenery.luau) : forêts de feuillus, de pins et de
+	cerisiers ; le long de la ligne droite de départ, côté extérieur, une
+	tribune puis le PADDOCK des équipes (tentes, camions, stands, oriflammes),
+	sur une zone gardée à plat.
 ]]
 
 local ONLY: string? = nil
@@ -35,6 +42,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 ]]
 local tracksFolder = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Tracks"):Clone()
 local Tracks = require(tracksFolder:WaitForChild("Tracks"))
+local Scenery = require(ReplicatedStorage.Shared:WaitForChild("World"):WaitForChild("Scenery"):Clone())
 
 local terrain = workspace.Terrain
 local VOXEL = 4
@@ -43,7 +51,10 @@ local RUNOFF = 26 -- dégagement en herbe de part et d'autre de la piste
 local SHOULDER_DROP = 3
 local EMBANK_SLOPE = 0.5
 local EMBANK_REACH = 40
-local FLOOR_MARGIN = 140 -- sol plat autour du circuit
+local FLOOR_MARGIN = 240 -- sol autour du circuit (les collines y montent)
+local HILL_AMPLITUDE = 34 -- hauteur maximale des collines
+local HILL_FADE = 110 -- distance sur laquelle elles montent depuis la piste
+local HILL_MATERIAL = Enum.Material.LeafyGrass
 local SURFACE_LAYER = 8
 local RUNOFF_MATERIAL = Enum.Material.Grass
 local FLOOR_MATERIAL = Enum.Material.Grass
@@ -55,8 +66,12 @@ local TIRE_SPACING = 8
 -- Pas de pneus à moins de ça du bord d'une AUTRE portion de piste (épingles,
 -- joker) : le dégagement de l'une ne doit pas fermer l'autre.
 local TIRE_CLEARANCE = RUNOFF - 6
-local TREE_COUNT = 160
+local TREE_COUNT = 460
 local TREE_CLEARANCE = 70
+-- Paddock des équipes, côté extérieur de la ligne droite de départ (écart à l'axe).
+local STAND_LATERAL = 68 -- la tribune, juste derrière les pneus
+local PADDOCK_NEAR, PADDOCK_FAR = 52, 200 -- zone gardée à plat
+local PADDOCK_HALF_LENGTH = 110
 
 local startClock = os.clock()
 
@@ -131,7 +146,7 @@ local function buildCircuit(circuit)
 
 	local floorY = minSY
 	local yMin = math.floor((floorY - 3 * VOXEL) / VOXEL) * VOXEL
-	local yMax = math.ceil((maxSY + 3 * VOXEL) / VOXEL) * VOXEL
+	local yMax = math.ceil((math.max(maxSY, floorY + HILL_AMPLITUDE) + 3 * VOXEL) / VOXEL) * VOXEL
 	local ny = (yMax - yMin) / VOXEL
 
 	local function columnIndex(ix: number, iz: number): number
@@ -142,6 +157,8 @@ local function buildCircuit(circuit)
 	local roadHeight: { [number]: number } = {}
 	local roadMaterial: { [number]: Enum.Material } = {}
 	local roadDistanceSq: { [number]: number } = {}
+	-- Colonnes à l'abri des collines : la piste et ses talus, le paddock.
+	local reserved: { [number]: boolean } = {}
 
 	------------------------------------------------------------------------
 	-- 2. Hauteur de chaque colonne
@@ -173,6 +190,7 @@ local function buildCircuit(circuit)
 					local sliceHalf = (step / 2) * (1 + lateral * curvature) + 1
 					if math.abs(along) <= sliceHalf then
 						local index = columnIndex(ix, iz)
+						reserved[index] = true
 						local h = p.Y + along * slope
 						if lateral <= roadHalf + 1 then
 							local distanceSq = along * along + lateral * lateral
@@ -204,6 +222,47 @@ local function buildCircuit(circuit)
 	end
 
 	------------------------------------------------------------------------
+	-- 2 bis. Paddock à plat, puis les collines tout autour
+	------------------------------------------------------------------------
+	local start = circuit.Samples[1]
+	local centroid = Vector3.zero
+	for _, sample in ipairs(circuit.Samples) do
+		centroid += sample.Position
+	end
+	centroid /= #circuit.Samples
+	-- Côté extérieur de la ligne droite : à l'opposé du centre de la boucle.
+	local outward = start.Left * (if (start.Position - centroid):Dot(start.Left) >= 0 then 1 else -1)
+	local function paddockCoords(x: number, z: number): (number, number)
+		local dx, dz = x - start.Position.X, z - start.Position.Z
+		return dx * start.ForwardFlat.X + dz * start.ForwardFlat.Z, dx * outward.X + dz * outward.Z
+	end
+	local function inPaddock(x: number, z: number): boolean
+		local along, out = paddockCoords(x, z)
+		return math.abs(along) <= PADDOCK_HALF_LENGTH and out >= PADDOCK_NEAR and out <= PADDOCK_FAR
+	end
+	for ix = 1, nx do
+		local x = minX + (ix - 0.5) * VOXEL
+		for iz = 1, nz do
+			if inPaddock(x, minZ + (iz - 0.5) * VOXEL) then
+				reserved[columnIndex(ix, iz)] = true
+			end
+		end
+	end
+	Scenery.Hills({
+		Heights = heights,
+		Reserved = reserved,
+		NX = nx,
+		NZ = nz,
+		MinX = minX,
+		MinZ = minZ,
+		Voxel = VOXEL,
+		FloorY = floorY,
+		Amplitude = HILL_AMPLITUDE,
+		Fade = HILL_FADE,
+		Seed = #circuit.Id * 13,
+	})
+
+	------------------------------------------------------------------------
 	-- 3. Écriture des voxels (toute la zone, air compris)
 	------------------------------------------------------------------------
 	for cx = 1, nx, CHUNK do
@@ -225,7 +284,10 @@ local function buildCircuit(circuit)
 					local index = columnIndex(cx + i - 1, cz + k - 1)
 					local roadH = roadHeight[index]
 					local h = roadH or heights[index]
-					local surface = if roadH then roadMaterial[index] elseif h > floorY + 0.5 then RUNOFF_MATERIAL else FLOOR_MATERIAL
+					local surface = if roadH then roadMaterial[index]
+						elseif not reserved[index] and h > floorY + 8 then HILL_MATERIAL
+						elseif h > floorY + 0.5 then RUNOFF_MATERIAL
+						else FLOOR_MATERIAL
 					for j = 1, ny do
 						local bottom = yMin + (j - 1) * VOXEL
 						local occupancy = math.clamp((h - bottom) / VOXEL, 0, 1)
@@ -287,7 +349,6 @@ local function buildCircuit(circuit)
 	folder.Name = circuit.Id
 
 	local roadHalf = circuit.RoadWidth / 2
-	local start = circuit.Samples[1]
 
 	-- Portique de départ, face à la grille, et ses cinq feux.
 	local gantry = Instance.new("Model")
@@ -391,44 +452,83 @@ local function buildCircuit(circuit)
 		end
 	end
 
-	-- Arbres au-delà des dégagements : ils donnent la profondeur et la vitesse.
+	-- Forêts au-delà des dégagements : elles donnent la profondeur et la vitesse.
+	-- Le bruit de Perlin les groupe en bosquets, avec des clairières entre eux.
 	local decor = Instance.new("Folder")
 	decor.Name = "Decor"
 	decor.Parent = folder
 	local rng = Random.new(#circuit.Id * 7919)
 	local treeCount = 0
-	for _ = 1, TREE_COUNT * 4 do
+	for attempt = 1, TREE_COUNT * 6 do
 		if treeCount >= TREE_COUNT then
 			break
 		end
 		local x = rng:NextNumber(minX + 20, maxX - 20)
 		local z = rng:NextNumber(minZ + 20, maxZ - 20)
-		local spot = Vector3.new(x, 0, z)
-		if roadClearance(spot) >= TREE_CLEARANCE then
-			local ground = groundHeightAt(x, z)
-			local trunkHeight = rng:NextNumber(10, 18)
-			local trunk = anchoredPart(
-				decor,
-				"Trunk",
-				Vector3.new(trunkHeight, 1.6, 1.6),
-				CFrame.new(x, ground + trunkHeight / 2 - 0.5, z) * CFrame.Angles(0, 0, math.pi / 2),
-				Color3.fromRGB(95, 70, 50),
-				true
-			)
-			trunk.Shape = Enum.PartType.Cylinder
-			trunk.Material = Enum.Material.Wood
-			local crown = rng:NextNumber(8, 12)
-			local leaves = anchoredPart(
-				decor,
-				"Leaves",
-				Vector3.new(crown, crown, crown),
-				CFrame.new(x, ground + trunkHeight, z),
-				Color3.fromRGB(rng:NextInteger(45, 70), rng:NextInteger(85, 115), rng:NextInteger(40, 60)),
-				false
-			)
-			leaves.Shape = Enum.PartType.Ball
-			leaves.Material = Enum.Material.Grass
+		local grove = math.noise(x / 180, z / 180, #circuit.Id + 0.5)
+		if (grove > -0.05 or rng:NextNumber() < 0.15) and not inPaddock(x, z) and roadClearance(Vector3.new(x, 0, z)) >= TREE_CLEARANCE then
+			Scenery.Tree(decor, Vector3.new(x, groundHeightAt(x, z), z), rng, Scenery.PickKind(rng, 0.07), rng:NextNumber(1, 1.4))
 			treeCount += 1
+		end
+		if attempt % 100 == 0 then
+			task.wait()
+		end
+	end
+
+	-- Tribune et paddock des équipes, côté extérieur de la ligne droite de départ.
+	local paddock = Instance.new("Folder")
+	paddock.Name = "Paddock"
+	paddock.Parent = folder
+	local forward = start.ForwardFlat
+	local function spotAt(along: number, out: number): Vector3
+		local p = start.Position + forward * along + outward * out
+		return Vector3.new(p.X, groundHeightAt(p.X, p.Z), p.Z)
+	end
+	-- Libre : loin de toute AUTRE portion de piste.
+	local function free(spot: Vector3, margin: number): boolean
+		return roadClearance(spot) >= margin
+	end
+	local stand = spotAt(0, STAND_LATERAL)
+	if free(stand, STAND_LATERAL - roadHalf - 10) then
+		Scenery.Grandstand(paddock, CFrame.lookAt(stand, stand - outward), 96, 7, rng, "RALLYCROSS · " .. string.upper(circuit.Name))
+	end
+	local teams = { "TEAM KAZE", "YAMA WORKS", "RAIJIN GP", "HAYATE RT", "HOSHI SPORT", "SAKURA RACING", "TORA MOTORS" }
+	for i, name in ipairs(teams) do
+		local along = (i - 4) * 27
+		local color = Scenery.TEAM_COLORS[((i - 1) % #Scenery.TEAM_COLORS) + 1]
+		local tent = spotAt(along, 112)
+		if free(tent, 60) then
+			Scenery.Tent(paddock, CFrame.lookAt(tent, tent - outward), 14, 10, color, name)
+			Scenery.Flag(paddock, spotAt(along + 9, 104), color, -outward)
+		end
+		if i % 2 == 1 then
+			local truck = spotAt(along, 140)
+			if free(truck, 80) then
+				Scenery.Truck(paddock, CFrame.lookAt(truck, truck + forward), color, name)
+			end
+		end
+	end
+	local pits = spotAt(0, 180)
+	if free(pits, 120) then
+		Scenery.PitBuilding(paddock, CFrame.lookAt(pits, pits - outward), 170, "PADDOCK · " .. string.upper(circuit.Name))
+	end
+	for _, along in ipairs({ -PADDOCK_HALF_LENGTH + 6, PADDOCK_HALF_LENGTH - 6 }) do
+		local corner = spotAt(along, 96)
+		if free(corner, 40) then
+			local toward = (stand - corner) * Vector3.new(1, 0, 1)
+			Scenery.LightTower(paddock, corner, (toward.Unit + Vector3.new(0, -0.5, 0)).Unit)
+		end
+		for out = 100, 190, 18 do
+			local edge = spotAt(along + (if along > 0 then 8 else -8), out)
+			if free(edge, 40) then
+				Scenery.Tree(paddock, edge, rng, if out % 36 == 28 then "Sakura" else Scenery.PickKind(rng, 0.3), 1.1)
+			end
+		end
+	end
+	for _ = 1, 8 do
+		local pile = spotAt(rng:NextNumber(-90, 90), rng:NextNumber(122, 130))
+		if free(pile, 60) then
+			Scenery.TireStack(paddock, pile, rng)
 		end
 	end
 
@@ -445,7 +545,7 @@ local function buildCircuit(circuit)
 	end
 	table.sort(summary)
 	print(string.format(
-		"[build-circuit] %s : boucle %.0f studs (%.2f km), joker %.0f studs ; %d x %d colonnes ; %d pneus, %d arbres. Route : %s",
+		"[build-circuit] %s : boucle %.0f studs (%.2f km), joker %.0f studs ; %d x %d colonnes ; %d pneus, %d arbres (+ paddock). Route : %s",
 		circuit.Name,
 		circuit.Length,
 		circuit.Length * 0.28 / 1000,

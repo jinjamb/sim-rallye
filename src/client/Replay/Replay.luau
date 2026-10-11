@@ -176,14 +176,11 @@ function Replay.new(playerGui: Instance, camera: Camera, onExit: () -> ()): Repl
 	bar.AnchorPoint = Vector2.new(0.5, 1)
 	bar.Position = UDim2.new(0.5, 0, 1, -20)
 	bar.Size = UDim2.fromOffset(BAR_WIDTH, 132)
-	bar.BackgroundColor3 = Theme.PANEL
-	bar.BackgroundTransparency = 0.1
-	bar.BorderSizePixel = 0
-	Theme.Corner(bar)
-	Theme.Shade(bar)
-	Theme.AccentBar(bar)
-	local checker = Theme.Checker(bar, BAR_WIDTH, 3, 2)
-	checker.BackgroundTransparency = 0.4
+	Theme.Card(bar, 0.1)
+	-- Filigrane « リプレイ » (ralenti), à droite derrière les commandes.
+	local kana = Theme.Kana(bar, "リプレイ", 44, 0.92)
+	kana.Position = UDim2.fromOffset(-14, 60)
+	kana.Size = UDim2.new(1, 0, 0, 60)
 	local scale = Instance.new("UIScale")
 	scale.Parent = bar
 	bar.Parent = gui
@@ -557,7 +554,7 @@ function Replay:_refreshButtons()
 		self.PhotoButton.BackgroundColor3 = Theme.PANEL_2
 		self.PhotoButton.TextColor3 = Theme.TEXT
 	end
-	self.FilterButton.Text = "FILTRE : " .. string.upper(FILTERS[self.FilterIndex].Name)
+	self.FilterButton.Text = "FILTRE : " .. Format.Upper(FILTERS[self.FilterIndex].Name)
 	self.HintLabel.Text = if self.Photo
 		then "Glisser : tourner autour · molette : distance · A/D, W/S, Q/E au clavier · F : filtre · U : masquer l'interface · capture : Impr. écran"
 		else "Espace : pause · ←/→ : 5 s · ↑/↓ : vitesse · 1 à 4 : caméras · P : photo · Retour arrière : quitter"

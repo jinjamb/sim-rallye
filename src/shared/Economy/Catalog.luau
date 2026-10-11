@@ -30,7 +30,7 @@ local Catalog = {}
 export type Kind = ItemTypes.Kind
 export type Item = ItemTypes.Item
 
-local KINDS: { Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration" }
+local KINDS: { Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration", "Part" }
 Catalog.KINDS = KINDS
 
 Catalog.KIND_NAMES = {
@@ -39,6 +39,7 @@ Catalog.KIND_NAMES = {
 	Horn = "Klaxon",
 	Celebration = "Célébration",
 	Engine = "Son moteur",
+	Part = "Pièce",
 } :: { [Kind]: string }
 
 -- Les objets de chaque sorte, chacun dans son module (Items/).
@@ -48,6 +49,7 @@ local LISTS: { { Item } } = {
 	require(script.Parent.Items.Smokes),
 	require(script.Parent.Items.Horns),
 	require(script.Parent.Items.Celebrations),
+	require(script.Parent.Items.Parts),
 }
 
 Catalog.ITEMS = {} :: { Item }
@@ -92,6 +94,16 @@ function Catalog.IsAvailable(item: Item): boolean
 		return item.Sound ~= nil and item.Sound ~= ""
 	end
 	return true
+end
+
+-- La pièce du catalogue qui débloque cette variante d'emplacement, s'il y en a une.
+function Catalog.PartItem(slot: string, option: number): Item?
+	for _, item in ipairs(Catalog.ITEMS) do
+		if item.Kind == "Part" and item.Slot == slot and item.Option == option then
+			return item
+		end
+	end
+	return nil
 end
 
 -- La voiture du catalogue d'une catégorie (CarClasses.luau).

@@ -41,6 +41,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 ]]
 local stageTrackModule = ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Stage"):WaitForChild("StageTrack")
 local StageTrack = require(stageTrackModule:Clone())
+local Scenery = require(ReplicatedStorage.Shared:WaitForChild("World"):WaitForChild("Scenery"):Clone())
 
 local terrain = workspace.Terrain
 local samples = StageTrack.GetSamples()
@@ -74,7 +75,7 @@ local MARKER_SPACING = 20
 local DECOR_SEED = 1973
 local ROCK_SPACING, ROCK_DENSITY = 10, 0.35
 local ROCK_LATERAL_MIN, ROCK_LATERAL_MAX = 18, 46
-local TREE_SPACING, TREE_DENSITY = 14, 0.55
+local TREE_SPACING, TREE_DENSITY = 14, 0.7
 local TREE_LATERAL_MIN, TREE_LATERAL_MAX = 62, 105
 -- Un objet de décor ne doit jamais tomber sur une AUTRE portion de route
 -- (épingles) : distance minimale à l'axe du tracé le plus proche.
@@ -85,7 +86,19 @@ local TREE_CLEARANCE = 58
 local END_PLATEAU = 120
 -- Le fond de vallée s'étend bien au-delà des talus : une grosse sortie de route
 -- doit finir dans l'herbe, pas au bord du monde.
-local FLOOR_MARGIN = 200
+local FLOOR_MARGIN = 280
+-- Collines (Scenery.Hills) : elles montent loin de la route et de la Baseplate
+-- (paddock, piste d'essai), qu'elles laissent à plat.
+local HILL_AMPLITUDE = 46
+local HILL_FADE = 130
+local HILL_MATERIAL = Enum.Material.LeafyGrass
+local BASEPLATE_KEEP = 300 -- demi-côté de la zone gardée telle quelle autour de la Baseplate
+-- Forêts sur les collines, au-delà des arbres du bord de route.
+local FOREST_COUNT = 700
+local FOREST_CLEARANCE = 110
+-- Spectateurs : une petite tribune et une tente tous les SPECTATOR_SPACING studs.
+local SPECTATOR_SPACING = 520
+local SPECTATOR_LATERAL = 34
 
 local startClock = os.clock()
 
@@ -118,7 +131,7 @@ local nz = (maxZ - minZ) / VOXEL
 
 local floorY = minSY - FLOOR_DEPTH
 local yMin = math.floor((floorY - VOXEL) / VOXEL) * VOXEL
-local yMax = math.ceil((maxSY + 2 * VOXEL) / VOXEL) * VOXEL
+local yMax = math.ceil((math.max(maxSY, floorY + HILL_AMPLITUDE) + 2 * VOXEL) / VOXEL) * VOXEL
 local ny = (yMax - yMin) / VOXEL
 
 local function columnIndex(ix: number, iz: number): number
@@ -129,6 +142,7 @@ local heights = table.create(nx * nz, floorY) -- hauteur proposée (max des prop
 local roadHeight: { [number]: number } = {}
 local roadMaterial: { [number]: Enum.Material } = {}
 local roadDistanceSq: { [number]: number } = {}
+local reserved: { [number]: boolean } = {} -- colonnes à l'abri des collines
 
 --------------------------------------------------------------------------------
 -- 2. Hauteur de chaque colonne
@@ -169,6 +183,7 @@ for sampleIndex, sample in ipairs(samples) do
 				end
 				if inSlice then
 					local index = columnIndex(ix, iz)
+					reserved[index] = true
 					local h = if beyondEnd then p.Y else p.Y + along * slope
 					local endDrop = 0
 					if beyondEnd and along > END_PLATEAU then
@@ -209,6 +224,35 @@ for sampleIndex, sample in ipairs(samples) do
 end
 
 --------------------------------------------------------------------------------
+-- 2 bis. Collines, loin de la route et de la Baseplate
+--------------------------------------------------------------------------------
+
+for ix = 1, nx do
+	local x = minX + (ix - 0.5) * VOXEL
+	if math.abs(x) <= BASEPLATE_KEEP then
+		for iz = 1, nz do
+			if math.abs(minZ + (iz - 0.5) * VOXEL) <= BASEPLATE_KEEP then
+				reserved[columnIndex(ix, iz)] = true
+			end
+		end
+	end
+end
+Scenery.Hills({
+	Heights = heights,
+	Reserved = reserved,
+	NX = nx,
+	NZ = nz,
+	MinX = minX,
+	MinZ = minZ,
+	Voxel = VOXEL,
+	FloorY = floorY,
+	Amplitude = HILL_AMPLITUDE,
+	Fade = HILL_FADE,
+	Scale = 320,
+	Seed = DECOR_SEED,
+})
+
+--------------------------------------------------------------------------------
 -- 3. Écriture des voxels, par blocs (elle remplace aussi l'ancien terrain :
 --    toute la zone est réécrite, air compris)
 --------------------------------------------------------------------------------
@@ -234,7 +278,9 @@ for cx = 1, nx, CHUNK do
 				local index = columnIndex(cx + i - 1, cz + k - 1)
 				local roadH = roadHeight[index]
 				local h = roadH or heights[index]
-				local surfaceMaterial = if roadH then roadMaterial[index] else SHOULDER_MATERIAL
+				local surfaceMaterial = if roadH then roadMaterial[index]
+					elseif not reserved[index] and h > floorY + 10 then HILL_MATERIAL
+					else SHOULDER_MATERIAL
 
 				for j = 1, ny do
 					local bottom = yMin + (j - 1) * VOXEL
@@ -429,26 +475,7 @@ for distance = 0, trackLength, TREE_SPACING do
 		if rng:NextNumber() < TREE_DENSITY then
 			local spot = decorSpot(sample, side * rng:NextNumber(TREE_LATERAL_MIN, TREE_LATERAL_MAX), TREE_CLEARANCE)
 			if spot then
-				local trunkHeight = rng:NextNumber(10, 18)
-				local trunkRadius = rng:NextNumber(0.6, 1.1)
-				-- Un cylindre Roblox a son axe sur X : on le redresse.
-				decorPart(
-					"Trunk",
-					Enum.PartType.Cylinder,
-					Vector3.new(trunkHeight, trunkRadius * 2, trunkRadius * 2),
-					CFrame.new(spot + Vector3.new(0, trunkHeight / 2 - 0.5, 0)) * CFrame.Angles(0, 0, math.pi / 2),
-					Color3.fromRGB(rng:NextInteger(85, 105), rng:NextInteger(62, 75), rng:NextInteger(45, 55)),
-					Enum.Material.Wood,
-					true
-				)
-				-- Feuillage : deux boules décalées, plus naturel qu'une sphère parfaite.
-				local green = Color3.fromRGB(rng:NextInteger(45, 70), rng:NextInteger(85, 115), rng:NextInteger(40, 60))
-				local crown = rng:NextNumber(7, 11)
-				local top = spot + Vector3.new(0, trunkHeight, 0)
-				decorPart("Leaves", Enum.PartType.Ball, Vector3.new(crown, crown, crown), CFrame.new(top), green, Enum.Material.Grass, false)
-				local second = crown * rng:NextNumber(0.6, 0.8)
-				local shift = Vector3.new(rng:NextNumber(-2, 2), rng:NextNumber(1, 3), rng:NextNumber(-2, 2))
-				decorPart("Leaves", Enum.PartType.Ball, Vector3.new(second, second, second), CFrame.new(top + shift), green, Enum.Material.Grass, false)
+				Scenery.Tree(decor, spot, rng, Scenery.PickKind(rng, 0.06))
 				treeCount += 1
 			end
 		end
@@ -458,9 +485,64 @@ for distance = 0, trackLength, TREE_SPACING do
 	end
 end
 
+-- Forêts sur les collines : groupées en bosquets (bruit de Perlin), loin de la route.
+local forestCount = 0
+for attempt = 1, FOREST_COUNT * 6 do
+	if forestCount >= FOREST_COUNT then
+		break
+	end
+	local x = rng:NextNumber(minX + 20, maxX - 20)
+	local z = rng:NextNumber(minZ + 20, maxZ - 20)
+	local outsideBase = math.abs(x) > BASEPLATE_KEEP or math.abs(z) > BASEPLATE_KEEP
+	if outsideBase and math.noise(x / 240, z / 240, 2.7) > -0.02 then
+		local _, _, lateral = StageTrack.Locate(Vector3.new(x, 0, z))
+		local ground = groundHeightAt(x, z)
+		if ground and math.abs(lateral) >= FOREST_CLEARANCE then
+			Scenery.Tree(decor, Vector3.new(x, ground, z), rng, Scenery.PickKind(rng, 0.05), rng:NextNumber(1.1, 1.6))
+			forestCount += 1
+		end
+	end
+	if attempt % 150 == 0 then
+		task.wait()
+	end
+end
+
+-- Spectateurs au bord de la route : petite tribune, tente, oriflammes, en
+-- alternant les côtés. Sur l'accotement plat, loin de toute autre portion.
+local spectators = Instance.new("Folder")
+spectators.Name = "Spectators"
+spectators.Parent = folder
+local spectatorCount = 0
+local fanSide = 1
+for distance = StageTrack.START_DISTANCE + 260, StageTrack.GetFinishDistance() - 100, SPECTATOR_SPACING do
+	local sample = StageTrack.SampleAt(distance)
+	fanSide = -fanSide
+	local spot = decorSpot(sample, fanSide * SPECTATOR_LATERAL, SPECTATOR_LATERAL - 4)
+	if spot then
+		local toward = -sample.Left * fanSide
+		Scenery.Grandstand(spectators, CFrame.lookAt(spot, spot + toward), 22, 3, rng, nil, 0.85)
+		local tentSpot = decorSpot(sample, fanSide * (SPECTATOR_LATERAL + 2), SPECTATOR_LATERAL - 4)
+		if tentSpot then
+			tentSpot += sample.ForwardFlat * 20
+			local ground = groundHeightAt(tentSpot.X, tentSpot.Z)
+			if ground then
+				Scenery.Tent(spectators, CFrame.lookAt(Vector3.new(tentSpot.X, ground, tentSpot.Z), Vector3.new(tentSpot.X, ground, tentSpot.Z) + toward), 10, 8, Scenery.TEAM_COLORS[(spectatorCount % 4) + 1], nil)
+			end
+		end
+		for _, along in ipairs({ -16, 16 }) do
+			local flag = spot + sample.ForwardFlat * along - toward * 4
+			local ground = groundHeightAt(flag.X, flag.Z)
+			if ground then
+				Scenery.Flag(spectators, Vector3.new(flag.X, ground, flag.Z), Scenery.TEAM_COLORS[rng:NextInteger(1, 5)], toward)
+			end
+		end
+		spectatorCount += 1
+	end
+end
+
 folder.Parent = workspace
 
-print(string.format("[build-stage] décor : %d rochers, %d arbres.", rockCount, treeCount))
+print(string.format("[build-stage] décor : %d rochers, %d arbres, %d en forêt, %d groupes de spectateurs.", rockCount, treeCount, forestCount, spectatorCount))
 print(string.format(
 	"[build-stage] %d échantillons, %.0f studs (%.2f km), dont %.0f chronométrés ; %d x %d colonnes. Terminé en %.1f s.",
 	#samples,

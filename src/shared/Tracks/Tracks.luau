@@ -12,6 +12,10 @@
 	X = -3600 à +400 et de Z = -1600 à +600, accotements compris. Un circuit
 	occupe environ 1700 x 1000 studs avec ses dégagements.
 
+	Relief : la ligne droite de départ reste à plat (grille) ; ailleurs, le
+	tracé monte et descend jusqu'à 18 studs (5 m), et les collines du décor
+	(tools/build-circuit.luau) l'entourent.
+
 	Échelle : 1 stud = 0.28 m. Piste de 44 studs (12 m), comme en championnat ;
 	joker de 34 studs (9.5 m).
 ]]
@@ -35,14 +39,14 @@ local DEFINITIONS: { Circuit.Definition } = {
 		Points = {
 			{ X = -600, Z = -300, Radius = 80, Material = ASPHALT },
 			{ X = 350, Z = -300, Radius = 90 },
-			{ X = 650, Z = -50, Radius = 70 },
-			{ X = 520, Z = 250, Radius = 60, Material = GROUND },
-			{ X = 180, Z = 160, Radius = 40 },
-			{ X = 0, Z = -60, Radius = 40, Height = 6 },
-			{ X = -200, Z = 150, Radius = 50, Height = 6 },
-			{ X = -120, Z = 360, Radius = 50, Height = 0 },
-			{ X = -520, Z = 320, Radius = 90, Material = ASPHALT },
-			{ X = -760, Z = 20, Radius = 80 },
+			{ X = 650, Z = -50, Radius = 70, Height = 9 },
+			{ X = 520, Z = 250, Radius = 60, Material = GROUND, Height = 18 },
+			{ X = 180, Z = 160, Radius = 40, Height = 7 },
+			{ X = 0, Z = -60, Radius = 40, Height = 15 },
+			{ X = -200, Z = 150, Radius = 50, Height = 5 },
+			{ X = -120, Z = 360, Radius = 50, Height = 12 },
+			{ X = -520, Z = 320, Radius = 90, Material = ASPHALT, Height = 4 },
+			{ X = -760, Z = 20, Radius = 80, Height = 0 },
 		},
 		StartLine = { Edge = 1, T = 0.55 },
 		Joker = {
@@ -68,13 +72,13 @@ local DEFINITIONS: { Circuit.Definition } = {
 		Points = {
 			{ X = -500, Z = -250, Radius = 60, Material = ASPHALT },
 			{ X = 300, Z = -250, Radius = 50 },
-			{ X = 450, Z = 0, Radius = 40, Material = GROUND, Height = 5 },
-			{ X = 200, Z = 120, Radius = 40, Height = 5 },
-			{ X = 450, Z = 300, Radius = 70, Height = 0 },
-			{ X = 100, Z = 420, Radius = 60 },
-			{ X = -350, Z = 300, Radius = 50 },
-			{ X = -150, Z = 80, Radius = 45 },
-			{ X = -550, Z = 50, Radius = 60, Material = ASPHALT },
+			{ X = 450, Z = 0, Radius = 40, Material = GROUND, Height = 11 },
+			{ X = 200, Z = 120, Radius = 40, Height = 14 },
+			{ X = 450, Z = 300, Radius = 70, Height = 2 },
+			{ X = 100, Z = 420, Radius = 60, Height = 7 },
+			{ X = -350, Z = 300, Radius = 50, Height = 15 },
+			{ X = -150, Z = 80, Radius = 45, Height = 8 },
+			{ X = -550, Z = 50, Radius = 60, Material = ASPHALT, Height = 0 },
 		},
 		StartLine = { Edge = 1, T = 0.5 },
 		Joker = {
@@ -100,11 +104,11 @@ local DEFINITIONS: { Circuit.Definition } = {
 		Points = {
 			{ X = -900, Z = -200, Radius = 120, Material = ASPHALT },
 			{ X = 500, Z = -200, Radius = 70 },
-			{ X = 700, Z = 100, Radius = 100, Material = GROUND, Height = 8 },
-			{ X = 300, Z = 350, Radius = 50, Height = 4 },
-			{ X = 0, Z = 150, Radius = 60, Height = 0 },
-			{ X = -300, Z = 400, Radius = 80, Material = ASPHALT },
-			{ X = -800, Z = 250, Radius = 100 },
+			{ X = 700, Z = 100, Radius = 100, Material = GROUND, Height = 16 },
+			{ X = 300, Z = 350, Radius = 50, Height = 9 },
+			{ X = 0, Z = 150, Radius = 60, Height = 2 },
+			{ X = -300, Z = 400, Radius = 80, Material = ASPHALT, Height = 11 },
+			{ X = -800, Z = 250, Radius = 100, Height = 3 },
 		},
 		StartLine = { Edge = 1, T = 0.55 },
 		Joker = {

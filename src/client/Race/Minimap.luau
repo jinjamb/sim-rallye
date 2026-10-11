@@ -24,6 +24,8 @@ export type Minimap = typeof(setmetatable({}, Minimap)) & {
 	Scale: number,
 	Offset: Vector2,
 	Dots: { Frame },
+	JokerDots: { Frame }, -- la branche joker : orange tant qu'il est à faire, verte après
+	JokerDone: boolean?,
 }
 
 local SIZE = 190
@@ -32,11 +34,14 @@ local TRACK_EVERY = 3 -- un point tous les 3 échantillons (12 studs)
 local TRACK_DOT = 3
 local CAR_DOT = 9
 local MY_DOT = 13
+local JOKER_DOT = 5 -- la branche joker, plus épaisse que la boucle : on la repère
 
 function Minimap.new(parent: Instance, circuit: Circuit.Circuit): Minimap
 	local self = (setmetatable({}, Minimap) :: any) :: Minimap
 	self.Circuit = circuit
 	self.Dots = {}
+	self.JokerDots = {}
+	self.JokerDone = nil
 
 	local frame = Widgets.Panel(parent, 0.35)
 	frame.Name = "Minimap"
@@ -73,7 +78,7 @@ function Minimap.new(parent: Instance, circuit: Circuit.Circuit): Minimap
 	end
 	for index, sample in ipairs(circuit.JokerSamples) do
 		if index % TRACK_EVERY == 0 then
-			dot(sample.Position, TRACK_DOT, Widgets.COLOR_ORANGE, 2)
+			table.insert(self.JokerDots, dot(sample.Position, JOKER_DOT, Widgets.COLOR_ORANGE, 3))
 		end
 	end
 	-- Ligne de départ / arrivée.
@@ -122,6 +127,19 @@ function Minimap:Update(cars: { CarDot })
 	end
 	for index = #cars + 1, #self.Dots do
 		self.Dots[index].Visible = false
+	end
+end
+
+-- Son joker fait : la branche passe au vert pâle ; à faire : orange vif.
+function Minimap:SetJokerDone(done: boolean)
+	if self.JokerDone == done then
+		return
+	end
+	self.JokerDone = done
+	for _, d in ipairs(self.JokerDots) do
+		d.BackgroundColor3 = if done then Widgets.COLOR_GREEN else Widgets.COLOR_ORANGE
+		d.BackgroundTransparency = if done then 0.5 else 0
+		d.Size = UDim2.fromOffset(if done then TRACK_DOT else JOKER_DOT, if done then TRACK_DOT else JOKER_DOT)
 	end
 end
 

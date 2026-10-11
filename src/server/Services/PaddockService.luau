@@ -57,6 +57,7 @@ local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
 local EconomyService = require(script.Parent.EconomyService)
 local GarageService = require(script.Parent.GarageService)
+local PaddockScenery = require(script.Parent.Parent.World.PaddockScenery)
 
 local PaddockService = {}
 
@@ -280,6 +281,9 @@ local function buildPaddock()
 		emitter.Parent = anchor
 		table.insert(confetti, emitter)
 	end
+
+	-- Décor : stands, tribunes, arbres, tentes... et la vue fermée sur l'accueil.
+	PaddockScenery.Build(folder)
 
 	folder.Parent = workspace
 end

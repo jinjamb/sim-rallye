@@ -28,6 +28,7 @@
 local Tracks = require(script.Parent.Parent.Tracks.Tracks)
 local Lessons = require(script.Parent.Parent.School.Lessons)
 local Format = require(script.Parent.Parent.Util.Format)
+local Catalog = require(script.Parent.Parent.Economy.Catalog)
 
 local Progression = {}
 
@@ -168,9 +169,14 @@ export type Requirement = {
 	AnyMedal: number?,
 	Wins: number?,
 	Style: number?,
+	-- Posséder cet objet du catalogue (pièce gagnée à un tirage : Items/Parts.luau).
+	Item: string?,
 }
 
-export type Kind = "Color" | "Stripes" | "Plate"
+-- Objets possédés (identifiant -> true), pour les conditions Item.
+export type Owned = { [string]: boolean }
+
+export type Kind = "Color" | "Stripes" | "Plate" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -191,6 +197,27 @@ Progression.ITEMS = {
 	-- Style du numéro (Livery.PLATES)
 	{ Kind = "Plate", Index = 2, Requirement = { Level = 4 } }, -- Noir
 	{ Kind = "Plate", Index = 3, Requirement = { Level = 22 } }, -- Or (licence Élite)
+	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
+	{ Kind = "Body", Index = 3, Requirement = { Level = 6 } }, -- Yama
+	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
+	{ Kind = "Body", Index = 5, Requirement = { Level = 4 } }, -- Hayate
+	{ Kind = "Body", Index = 6, Requirement = { Level = 8 } }, -- Hoshi
+	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
+	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
+	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye
+	{ Kind = "Wing", Index = 4, Requirement = { Level = 9 } }, -- Grand aileron
+	{ Kind = "Wing", Index = 5, Requirement = { Item = "part_wing_double" } }, -- Double étage
+	{ Kind = "Bumper", Index = 2, Requirement = { Level = 4 } }, -- Rallye
+	{ Kind = "Bumper", Index = 3, Requirement = { Level = 9 } }, -- Course
+	{ Kind = "Hood", Index = 2, Requirement = { Level = 3 } }, -- Prises d'air
+	{ Kind = "Hood", Index = 3, Requirement = { Level = 7 } }, -- Écope
+	{ Kind = "Hood", Index = 4, Requirement = { Item = "part_hood_lamps" } }, -- Rampe de phares
+	{ Kind = "Flares", Index = 2, Requirement = { Item = "part_flares_wide" } }, -- Ailes élargies
+	{ Kind = "Rims", Index = 2, Requirement = { Level = 2 } }, -- Noires
+	{ Kind = "Rims", Index = 3, Requirement = { Level = 4 } }, -- Blanches
+	{ Kind = "Rims", Index = 4, Requirement = { Level = 8 } }, -- Chrome
+	{ Kind = "Rims", Index = 5, Requirement = { Item = "part_rims_sakura" } }, -- Sakura
+	{ Kind = "Rims", Index = 6, Requirement = { Item = "part_rims_neon" } }, -- Néon
 } :: { Item }
 
 function Progression.ItemFor(kind: Kind, index: number): Item?
@@ -202,7 +229,12 @@ function Progression.ItemFor(kind: Kind, index: number): Item?
 	return nil
 end
 
-function Progression.Meets(requirement: Requirement, snapshot: Snapshot?): boolean
+function Progression.Meets(requirement: Requirement, snapshot: Snapshot?, owned: Owned?): boolean
+	-- Une pièce de tirage : il suffit de la posséder.
+	local item = requirement.Item
+	if item then
+		return owned ~= nil and owned[item] == true
+	end
 	if not snapshot then
 		return false
 	end
@@ -233,9 +265,9 @@ function Progression.Meets(requirement: Requirement, snapshot: Snapshot?): boole
 end
 
 -- Un cosmétique est-il à ce joueur ? (libre, ou condition remplie)
-function Progression.IsUnlocked(kind: Kind, index: number, snapshot: Snapshot?): boolean
+function Progression.IsUnlocked(kind: Kind, index: number, snapshot: Snapshot?, owned: Owned?): boolean
 	local item = Progression.ItemFor(kind, index)
-	return item == nil or Progression.Meets(item.Requirement, snapshot)
+	return item == nil or Progression.Meets(item.Requirement, snapshot, owned)
 end
 
 local TIER_NAMES = { "Bronze", "Argent", "Or", "Platine" }
@@ -251,6 +283,10 @@ end
 -- "Niveau 3", "Or sur la spéciale", "3 victoires en rallycross"...
 function Progression.Describe(requirement: Requirement): string
 	local parts = {}
+	if requirement.Item then
+		local item = Catalog.Get(requirement.Item)
+		return "à gagner aux tirages" .. (if item then " (" .. item.Name .. ")" else "")
+	end
 	if requirement.Level then
 		local _, licence = Progression.LicenceOf(requirement.Level)
 		local text = "Niveau " .. requirement.Level
@@ -291,17 +327,23 @@ end
 	remplacé par celui de la livrée actuelle (ou, s'il est lui aussi
 	verrouillé, par celui de la livrée par défaut).
 ]]
-function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot: Snapshot?): any
+function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot: Snapshot?, owned: Owned?): any
 	local result = table.clone(wanted)
 	local function keep(field: string, kind: Kind)
-		if not Progression.IsUnlocked(kind, result[field], snapshot) then
-			result[field] = if Progression.IsUnlocked(kind, current[field], snapshot) then current[field] else fallback[field]
+		if not Progression.IsUnlocked(kind, result[field], snapshot, owned) then
+			result[field] = if Progression.IsUnlocked(kind, current[field], snapshot, owned) then current[field] else fallback[field]
 		end
 	end
 	keep("Color", "Color")
 	keep("StripeColor", "Color")
 	keep("Stripes", "Stripes")
 	keep("Plate", "Plate")
+	-- Modèle et pièces (CarBodies.luau) : le champ porte le nom de sa sorte.
+	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims" } :: { Kind }) do
+		if result[kind] ~= nil then
+			keep(kind, kind)
+		end
+	end
 	return result
 end
 

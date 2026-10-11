@@ -57,7 +57,7 @@ local THROTTLE_EXPONENT = 1.7
 local BRAKE_EXPONENT = 1.3
 
 -- Rampes clavier, en secondes de 0 à 1.
-local KEYBOARD_STEER_TIME = 0.22 -- vers la butée
+local KEYBOARD_STEER_TIME = 0.15 -- vers la butée (vif : on tourne quand on appuie)
 local KEYBOARD_CENTER_TIME = 0.12 -- retour au centre, plus rapide (le volant revient seul)
 local KEYBOARD_THROTTLE_TIME = 0.15
 local KEYBOARD_THROTTLE_RELEASE_TIME = 0.08
@@ -68,7 +68,7 @@ local KEYBOARD_THROTTLE_RELEASE_TIME = 0.08
 -- contre-braquer une glissade.
 local KEYBOARD_STEER_FULL_SPEED = 25
 local KEYBOARD_STEER_FADE_SPEED = 120
-local highSpeedSteer = 0.55
+local highSpeedSteer = 0.8
 
 function InputManager:SetHighSpeedSteer(value: number)
 	highSpeedSteer = math.clamp(value, 0.1, 1)

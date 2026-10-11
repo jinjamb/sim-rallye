@@ -135,13 +135,13 @@ function DrivingSchool.new(car: CarClass.Car, playerGui: Instance, lesson: Lesso
 			markers,
 			Vector3.new(StageTrack.ROAD_WIDTH, 0.1, zoneEnd - zoneStart),
 			CFrame.lookAt(middle.Position, middle.Position + middle.ForwardFlat) * CFrame.new(0, 0.06, 0),
-			Theme.ACCENT,
+			Theme.YELLOW, -- repères sur la route : jaunes, bien visibles
 			0.7
 		)
 		gate(markers, segment.StartDistance + (lesson.TargetOffset or 0), Color3.new(1, 1, 1), true)
 	else
-		gate(markers, self.GateDistance, Theme.ACCENT, true)
-		gate(markers, endDistance, Theme.ACCENT, true)
+		gate(markers, self.GateDistance, Theme.YELLOW, true)
+		gate(markers, endDistance, Theme.YELLOW, true)
 	end
 	markers.Parent = workspace
 
@@ -154,12 +154,11 @@ function DrivingSchool.new(car: CarClass.Car, playerGui: Instance, lesson: Lesso
 	local panel = Instance.new("Frame")
 	panel.Position = UDim2.fromOffset(24, 70)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, 196)
-	panel.BackgroundColor3 = Theme.PANEL
-	panel.BackgroundTransparency = 0.12
-	panel.BorderSizePixel = 0
-	Theme.Corner(panel)
-	Theme.Shade(panel)
-	Theme.AccentBar(panel)
+	Theme.Card(panel, 0.12)
+	-- Filigrane « レッスン » (leçon).
+	local kana = Theme.Kana(panel, "レッスン", 40, 0.92)
+	kana.Position = UDim2.fromOffset(-14, 104)
+	kana.Size = UDim2.new(1, 0, 0, 50)
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	panel.Parent = gui
@@ -182,7 +181,7 @@ function DrivingSchool.new(car: CarClass.Car, playerGui: Instance, lesson: Lesso
 		label.Parent = panel
 		return label
 	end
-	local tag = Theme.Tag(panel, "ÉCOLE DE PILOTAGE · " .. string.upper(lesson.Name), Theme.ACCENT, Theme.ON_ACCENT, 14)
+	local tag = Theme.Tag(panel, "ÉCOLE DE PILOTAGE · " .. Format.Upper(lesson.Name), Theme.ACCENT, Theme.ON_ACCENT, 14)
 	tag.Position = UDim2.fromOffset(16, 12)
 	self.Title = text(40, 34, 15, Theme.BODY_BOLD, Theme.TEXT, lesson.Goal)
 	text(76, 34, 13, Theme.BODY, Theme.DIM, lesson.Tips)

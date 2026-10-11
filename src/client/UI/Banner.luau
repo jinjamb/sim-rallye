@@ -1,10 +1,11 @@
 --!strict
 --[[
 	Banner.luau
-	Bandeau d'annonce, en haut au centre de l'écran : une médaille décrochée,
-	le fantôme qu'on affronte, un rival battu. Un titre en grand, une ligne en
-	dessous, un bloc de couleur, un filet à damier, comme à la télévision ; il
-	apparaît, reste, puis s'efface.
+	Bandeau d'annonce, façon « cut-in » d'anime : une médaille décrochée, le
+	fantôme qu'on affronte, un rival battu. Une bande de couleur traverse
+	l'écran d'un coup (de gauche à droite), cernée d'encre ; le titre en
+	lettrage de manga jaillit au milieu, une ligne en dessous, un filigrane
+	en katakana derrière ; puis la bande repart vers la droite.
 	Un seul bandeau à la fois. Un petit bandeau (info) remplace le précédent ;
 	un GRAND bandeau (médaille, niveau, déblocage) n'est jamais coupé : ce qui
 	arrive pendant qu'il est affiché attend son tour (file d'attente).
@@ -15,23 +16,35 @@
 
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Theme = require(script.Parent.Theme)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 local Banner = {}
 
-local COLOR_PANEL = Theme.PANEL
-local COLOR_TEXT = Theme.TEXT
 -- Hauteur (fraction de l'écran) : sous le bandeau du copilote, au-dessus des
 -- messages du rallycross (RaceHud, à 36 %).
 local TOP_POSITION = 0.22
+local SLIDE_TIME = 0.28
 local FADE_TIME = 0.25
+local INK_EDGE = 6 -- filet d'encre au-dessus et au-dessous de la bande
+
+-- Hauteurs et tailles de texte en pixels de référence (1080p).
+local BIG = { Height = 112, Title = 64, Subtitle = 19, Kana = 96 }
+local SMALL = { Height = 70, Title = 38, Subtitle = 15, Kana = 60 }
+-- Le filigrane : « すごい！ » (génial !) pour les grandes nouvelles, « ラリー » sinon.
+local KANA_BIG = "すごい！"
+local KANA_SMALL = "ラリー"
 
 type Parts = {
 	Gui: ScreenGui,
-	Panel: CanvasGroup,
-	Block: Frame,
-	Scale: UIScale,
+	Group: CanvasGroup,
+	Slide: Frame,
+	Band: Frame,
+	Stripes: Frame,
+	Kana: TextLabel,
+	Content: Frame,
 	Title: TextLabel,
 	Subtitle: TextLabel,
 }
@@ -45,87 +58,81 @@ local queue: { Pending } = {}
 local MAX_QUEUE = 4
 local display: (Pending) -> ()
 
-local BLOCK_WIDTH = 10 -- bloc de couleur à gauche (couleur de l'annonce)
-local CHECKER_CELL = 4
-
---[[
-	Bandeau façon télévision : fond noir, bloc de couleur à gauche, titre en
-	capitales condensées, ligne en dessous, filet à damier en pied. Un
-	CanvasGroup : le fondu de sortie emporte tout d'un coup.
-]]
 local function build(): Parts
 	local gui = Instance.new("ScreenGui")
 	gui.Name = "Banner"
 	gui.ResetOnSpawn = false
 	gui.DisplayOrder = 10 -- au-dessus du chrono et du tableau de bord
 
-	local panel = Instance.new("CanvasGroup")
-	panel.AnchorPoint = Vector2.new(0.5, 0)
-	panel.Position = UDim2.fromScale(0.5, TOP_POSITION)
-	panel.Size = UDim2.fromOffset(0, 82)
-	panel.AutomaticSize = Enum.AutomaticSize.X
-	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.08
-	panel.BorderSizePixel = 0
-	panel.Visible = false
-	Theme.Corner(panel)
-	Theme.Shade(panel)
-	local scale = Instance.new("UIScale")
-	scale.Parent = panel
-	panel.Parent = gui
+	-- Le groupe porte le fondu ; la bande glisse dedans.
+	local group = Instance.new("CanvasGroup")
+	group.BackgroundTransparency = 1
+	group.Position = UDim2.fromScale(0, TOP_POSITION)
+	group.Size = UDim2.new(1, 0, 0, BIG.Height)
+	group.Visible = false
+	group.Parent = gui
 
-	local block = Instance.new("Frame")
-	block.BorderSizePixel = 0
-	block.Size = UDim2.new(0, BLOCK_WIDTH, 1, 0)
-	block.Parent = panel
+	local slide = Instance.new("Frame")
+	slide.BackgroundColor3 = Theme.INK
+	slide.BorderSizePixel = 0
+	slide.Size = UDim2.fromScale(1, 1)
+	slide.Parent = group
 
-	-- Titre et ligne, centrés l'un sous l'autre ; le cadre suit le plus large.
+	local band = Instance.new("Frame")
+	band.BorderSizePixel = 0
+	band.Position = UDim2.fromOffset(0, INK_EDGE)
+	band.Size = UDim2.new(1, 0, 1, -INK_EDGE * 2)
+	band.Parent = slide
+
+	-- Bandes de vitesse en encre, côté gauche ; filigrane côté droit.
+	local stripes = Theme.Stripes(band, Theme.INK, 4, 0.55)
+	stripes.AnchorPoint = Vector2.new(0, 0.5)
+	stripes.Position = UDim2.new(0.06, 0, 0.5, 0)
+	stripes.Size = UDim2.new(0.12, 0, 0.7, 0)
+	local kana = Theme.Kana(band, KANA_SMALL, SMALL.Kana, 0.78)
+	kana.Position = UDim2.new(-0.04, 0, 0, 0)
+
+	-- Titre et ligne, centrés l'un sous l'autre.
 	local content = Instance.new("Frame")
 	content.BackgroundTransparency = 1
-	content.Position = UDim2.fromOffset(BLOCK_WIDTH, 0)
-	content.Size = UDim2.new(0, 0, 1, -CHECKER_CELL * 2)
-	content.AutomaticSize = Enum.AutomaticSize.X
-	content.Parent = panel
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 26)
-	padding.PaddingRight = UDim.new(0, 30)
-	padding.Parent = content
+	content.Size = UDim2.fromScale(1, 1)
+	content.Parent = band
 	local layout = Instance.new("UIListLayout")
 	layout.FillDirection = Enum.FillDirection.Vertical
-	layout.HorizontalAlignment = Enum.HorizontalAlignment.Left
+	layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
 	layout.VerticalAlignment = Enum.VerticalAlignment.Center
 	layout.SortOrder = Enum.SortOrder.LayoutOrder
+	layout.Padding = UDim.new(0, -4)
 	layout.Parent = content
 
-	local function line(order: number, height: number, size: number, face: Font): TextLabel
-		local label = Instance.new("TextLabel")
-		label.BackgroundTransparency = 1
-		label.Size = UDim2.fromOffset(0, height)
-		label.AutomaticSize = Enum.AutomaticSize.X
-		label.FontFace = face
-		label.TextSize = size
-		label.TextColor3 = COLOR_TEXT
-		label.TextXAlignment = Enum.TextXAlignment.Left
-		label.Text = ""
-		label.LayoutOrder = order
-		label.Parent = content
-		return label
-	end
-	local title = line(1, 36, 32, Theme.HEADLINE)
-	local subtitle = line(2, 20, 16, Theme.BODY)
+	local title = Instance.new("TextLabel")
+	title.BackgroundTransparency = 1
+	title.AutomaticSize = Enum.AutomaticSize.X
+	title.FontFace = Theme.SFX
+	title.TextColor3 = Theme.TEXT
+	title.Rotation = -2 -- penché, comme une onomatopée
+	title.LayoutOrder = 1
+	title.Parent = content
+	Theme.TextInk(title, 4)
 
-	-- Filet à damier, en pied, sur toute la largeur.
-	local checker = Theme.Checker(panel, 1600, CHECKER_CELL, 2)
-	checker.AnchorPoint = Vector2.new(0, 1)
-	checker.Position = UDim2.fromScale(0, 1)
-	checker.BackgroundTransparency = 0.3
+	local subtitle = Instance.new("TextLabel")
+	subtitle.BackgroundTransparency = 1
+	subtitle.AutomaticSize = Enum.AutomaticSize.X
+	subtitle.FontFace = Theme.BODY_BOLD
+	subtitle.TextColor3 = Theme.TEXT
+	subtitle.LayoutOrder = 2
+	subtitle.Parent = content
+	Theme.TextInk(subtitle, 2)
 
 	gui.Parent = Players.LocalPlayer:WaitForChild("PlayerGui")
 	return {
 		Gui = gui,
-		Panel = panel,
-		Block = block,
-		Scale = scale,
+		Group = group,
+		Slide = slide,
+		Band = band,
+		Stripes = stripes,
+		Kana = kana,
+		Content = content,
 		Title = title,
 		Subtitle = subtitle,
 	}
@@ -170,24 +177,28 @@ display = function(pending: Pending)
 
 	local viewport = workspace.CurrentCamera.ViewportSize
 	local base = math.clamp(viewport.Y / 1080, 0.6, 1.2)
-	p.Title.Text = string.upper(title)
-	p.Title.TextColor3 = color
-	p.Title.TextSize = if big then 34 else 24
-	p.Title.Size = UDim2.fromOffset(0, if big then 38 else 28)
+	local size = if big then BIG else SMALL
+	local height = math.floor(size.Height * base)
+	p.Group.Size = UDim2.new(1, 0, 0, height)
+	p.Band.BackgroundColor3 = color
+	p.Title.Text = Format.Upper(title)
+	p.Title.TextSize = math.floor(size.Title * base)
+	p.Title.Size = UDim2.fromOffset(0, math.floor(size.Title * base * 1.05))
 	p.Subtitle.Text = subtitle or ""
 	p.Subtitle.Visible = subtitle ~= nil
-	p.Panel.Size = UDim2.fromOffset(0, (if subtitle then (if big then 70 else 58) else 40) + CHECKER_CELL * 2)
-	p.Block.BackgroundColor3 = color
-	p.Panel.GroupTransparency = 0
-	p.Panel.Visible = true
+	p.Subtitle.TextSize = math.max(14, math.floor(size.Subtitle * base)) -- lisible même sur petit écran
+	p.Subtitle.Size = UDim2.fromOffset(0, math.floor(p.Subtitle.TextSize * 1.3))
+	p.Kana.Text = if big then KANA_BIG else KANA_SMALL
+	p.Kana.TextSize = math.floor(size.Kana * base)
+	p.Group.GroupTransparency = 0
+	p.Group.Visible = true
 
-	-- Entrée : un léger rebond pour les grandes annonces, un simple glissé sinon.
-	p.Scale.Scale = base * (if big then 0.6 else 0.9)
-	TweenService:Create(
-		p.Scale,
-		TweenInfo.new(if big then 0.35 else 0.15, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-		{ Scale = base }
-	):Play()
+	-- Entrée : la bande traverse l'écran depuis la gauche, le titre jaillit.
+	p.Slide.Position = UDim2.fromScale(-1, 0)
+	TweenService:Create(p.Slide, TweenInfo.new(SLIDE_TIME, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Position = UDim2.fromScale(0, 0),
+	}):Play()
+	Theme.Pop(p.Title, 1, if big then 0.4 else 0.75)
 
 	task.delay(duration, function()
 		if mine ~= token then
@@ -197,10 +208,13 @@ display = function(pending: Pending)
 			nextInQueue()
 			return
 		end
-		TweenService:Create(p.Panel, TweenInfo.new(FADE_TIME), { GroupTransparency = 1 }):Play()
+		-- Sortie : la bande file vers la droite en s'effaçant.
+		local info = TweenInfo.new(FADE_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		TweenService:Create(p.Slide, info, { Position = UDim2.fromScale(0.6, 0) }):Play()
+		TweenService:Create(p.Group, info, { GroupTransparency = 1 }):Play()
 		task.delay(FADE_TIME, function()
 			if mine == token then
-				p.Panel.Visible = false
+				p.Group.Visible = false
 			end
 		end)
 	end)

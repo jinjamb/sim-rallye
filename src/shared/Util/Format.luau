@@ -53,4 +53,19 @@ function Format.Decimal(text: string): string
 	return (string.gsub(text, "%.", ","))
 end
 
+-- Minuscules accentuées du français -> capitales (string.upper les ignore).
+local ACCENTS: { [string]: string } = {
+	["à"] = "À", ["â"] = "Â", ["ä"] = "Ä", ["ç"] = "Ç", ["é"] = "É", ["è"] = "È",
+	["ê"] = "Ê", ["ë"] = "Ë", ["î"] = "Î", ["ï"] = "Ï", ["ô"] = "Ô", ["ö"] = "Ö",
+	["ù"] = "Ù", ["û"] = "Û", ["ü"] = "Ü", ["ÿ"] = "Ÿ", ["œ"] = "Œ", ["æ"] = "Æ",
+}
+
+-- "Frein à main" -> "FREIN À MAIN" (titres en capitales, accents compris).
+function Format.Upper(text: string): string
+	local upper = string.upper(text)
+	return (string.gsub(upper, utf8.charpattern, function(char: string): string?
+		return ACCENTS[char]
+	end))
+end
+
 return Format

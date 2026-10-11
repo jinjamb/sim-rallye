@@ -192,7 +192,7 @@ function GhostChallenge:_onOpponent(payload: any)
 		self.Opponent = nil
 		local reason = if type(payload.Error) == "string" then payload.Error else "Fantôme indisponible."
 		if beaten then
-			Banner.Show("RIVAL BATTU : " .. string.upper(beaten), reason, COLOR_BEATEN, 4, true)
+			Banner.Show("RIVAL BATTU : " .. Format.Upper(beaten), reason, COLOR_BEATEN, 4, true)
 		else
 			Banner.Show(MODE_TITLES[self.Mode], reason .. "  ·  Ton record à la place", COLOR_ERROR, 3.5)
 		end
@@ -208,7 +208,7 @@ function GhostChallenge:_onOpponent(payload: any)
 	}
 	local line = string.format("%s — %s", payload.Name, Format.Ms(payload.Ms))
 	if beaten then
-		Banner.Show("RIVAL BATTU : " .. string.upper(beaten), "Prochain rival : " .. line, COLOR_BEATEN, 4, true)
+		Banner.Show("RIVAL BATTU : " .. Format.Upper(beaten), "Prochain rival : " .. line, COLOR_BEATEN, 4, true)
 	else
 		Banner.Show(MODE_TITLES[self.Mode], line, COLOR_OPPONENT, 3)
 	end
@@ -238,7 +238,7 @@ function GhostChallenge:OnRunValidated(result: any)
 	else
 		task.delay(BEATEN_DELAY, function()
 			if self.Opponent == opponent then
-				Banner.Show("FANTÔME BATTU : " .. string.upper(opponent.Name), Format.Ms(result.Ms) .. " contre " .. Format.Ms(opponent.Ms), COLOR_BEATEN, 4, true)
+				Banner.Show("FANTÔME BATTU : " .. Format.Upper(opponent.Name), Format.Ms(result.Ms) .. " contre " .. Format.Ms(opponent.Ms), COLOR_BEATEN, 4, true)
 			end
 		end)
 	end

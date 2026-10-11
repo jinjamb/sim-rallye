@@ -84,23 +84,24 @@ local GAP = 8
 local PEDAL_MIN = 0.35 -- un appui tout en bas de la pédale
 
 local COLOR_FILL = Theme.PANEL
-local COLOR_EDGE = Color3.fromRGB(255, 255, 255)
+local COLOR_EDGE = Theme.LINE
 local COLOR_TEXT = Theme.TEXT
 local COLOR_THROTTLE = Theme.GREEN
 local COLOR_BRAKE = Theme.RED
 local COLOR_HANDBRAKE = Theme.ORANGE
 
+-- Commandes au style du thème : angles vifs, contour net (un rond reste un rond).
 local function styled(frame: GuiObject, radius: number)
 	frame.BackgroundColor3 = COLOR_FILL
 	frame.BackgroundTransparency = 0.45
 	frame.BorderSizePixel = 0
 	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, radius)
+	corner.CornerRadius = UDim.new(0, if radius >= 20 then radius else Theme.CORNER)
 	corner.Parent = frame
 	local stroke = Instance.new("UIStroke")
 	stroke.Color = COLOR_EDGE
-	stroke.Transparency = 0.75
-	stroke.Thickness = 1.5
+	stroke.Transparency = 0.45
+	stroke.Thickness = 2
 	stroke.Parent = frame
 end
 
