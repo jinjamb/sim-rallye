@@ -102,6 +102,166 @@ local function sign(part: Part, text: string, background: Color3, face: Enum.Nor
 end
 
 --------------------------------------------------------------------------------
+-- Assets du Creator Store
+--------------------------------------------------------------------------------
+
+--[[
+	BIBLIOTHÈQUE : ServerStorage.SceneryAssets, rangée dans le place (pas dans
+	Rojo). Un dossier par sorte (Pine, Leafy, Bush, Rock, Logs, Fence,
+	Mushroom), des modèles déjà nettoyés : ancrés, sans collision ni script,
+	pivot au sol au centre, attribut Size (taille d'origine, longueur sur X).
+	Sans bibliothèque (côté client, ou place sans assets), chaque fonction
+	retombe sur les formes simples plus bas.
+]]
+local libraryCache: Folder | false | nil = nil
+
+local function library(): Folder?
+	if libraryCache == nil then
+		local ok, found = pcall(function()
+			return game:GetService("ServerStorage"):FindFirstChild("SceneryAssets")
+		end)
+		libraryCache = if ok and found and found:IsA("Folder") then found else false
+	end
+	return if libraryCache then libraryCache else nil
+end
+
+function Scenery.HasAssets(): boolean
+	return library() ~= nil
+end
+
+local function templateOf(kind: string, rng: Random): Model?
+	local lib = library()
+	local folder = lib and lib:FindFirstChild(kind)
+	if not folder then
+		return nil
+	end
+	local variants = folder:GetChildren()
+	if #variants == 0 then
+		return nil
+	end
+	local chosen = variants[rng:NextInteger(1, #variants)]
+	return if chosen:IsA("Model") then chosen else nil
+end
+
+--[[
+	Un asset de la sorte `kind` posé en `at` (un point au sol : tourné au
+	hasard ; ou un CFrame : orientation imposée). `height` : hauteur visée ;
+	sinon `scale` (1 par défaut). Rend le modèle, ou nil sans bibliothèque.
+]]
+function Scenery.Asset(parent: Instance, kind: string, at: Vector3 | CFrame, rng: Random, height: number?, scale: number?): Model?
+	local template = templateOf(kind, rng)
+	if not template then
+		return nil
+	end
+	local model = template:Clone()
+	local size = template:GetAttribute("Size")
+	local factor = scale or 1
+	if height and typeof(size) == "Vector3" and size.Y > 0 then
+		factor = height / size.Y
+	end
+	if math.abs(factor - 1) > 0.01 then
+		model:ScaleTo(factor)
+	end
+	local frame = if typeof(at) == "CFrame" then at else CFrame.new(at) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
+	model:PivotTo(frame)
+	model.Parent = parent
+	return model
+end
+
+-- Tronc invisible et solide sous un arbre en mesh (son feuillage ne l'est pas).
+local function trunkCollider(parent: Instance, ground: Vector3, diameter: number)
+	local collider = piece(parent, "TrunkCollider", Enum.PartType.Cylinder, Vector3.new(10, diameter, diameter), CFrame.new(ground + Vector3.new(0, 5, 0)) * UPRIGHT, DARK, Enum.Material.SmoothPlastic, true)
+	collider.Transparency = 1
+	collider.CastShadow = false
+end
+
+-- Les arbres en assets : pins hauts et sombres, feuillus plus ronds, buissons.
+local function assetTree(parent: Instance, ground: Vector3, rng: Random, kind: TreeKind, s: number): boolean
+	if kind == "Pine" then
+		local model = Scenery.Asset(parent, "Pine", ground - Vector3.new(0, 0.5, 0), rng, rng:NextNumber(26, 44) * s)
+		if model then
+			trunkCollider(model, ground, 1.8 * s)
+			return true
+		end
+	elseif kind == "Leafy" then
+		local model = Scenery.Asset(parent, "Leafy", ground - Vector3.new(0, 0.5, 0), rng, rng:NextNumber(24, 34) * s)
+		if model then
+			trunkCollider(model, ground, 2.2 * s)
+			return true
+		end
+	elseif kind == "Bush" then
+		return Scenery.Asset(parent, "Bush", ground - Vector3.new(0, 0.3, 0), rng, rng:NextNumber(3.5, 6) * s) ~= nil
+	end
+	return false
+end
+
+-- Un rocher, à moitié enfoncé. `height` : sa hauteur hors sol.
+function Scenery.Rock(parent: Instance, ground: Vector3, rng: Random, height: number)
+	if Scenery.Asset(parent, "Rock", ground - Vector3.new(0, height * 0.35, 0), rng, height * 1.35) then
+		return
+	end
+	local grey = rng:NextInteger(105, 135)
+	piece(parent, "Rock", Enum.PartType.Ball, Vector3.new(height * 1.6, height * 1.6, height * 1.6), CFrame.new(ground + Vector3.new(0, height * 0.3, 0)), Color3.fromRGB(grey, grey - 4, grey - 10), Enum.Material.Slate, false)
+end
+
+-- Une pile de rondins (la coupe du bois en bord de spéciale).
+function Scenery.Logs(parent: Instance, ground: Vector3, rng: Random)
+	if Scenery.Asset(parent, "Logs", ground, rng, nil, rng:NextNumber(1, 1.4)) then
+		return
+	end
+	local yaw = CFrame.Angles(0, rng:NextNumber(0, math.pi), 0)
+	for row = 0, 2 do
+		for i = 0, 2 - row do
+			local offset = Vector3.new(0, 0.9 + row * 1.5, (i - (2 - row) / 2) * 1.8)
+			piece(parent, "Log", Enum.PartType.Cylinder, Vector3.new(10, 1.8, 1.8), CFrame.new(ground) * yaw * CFrame.new(offset), Color3.fromRGB(140, 96, 62), Enum.Material.Wood, false)
+		end
+	end
+end
+
+-- Quelques champignons rouges au pied d'un arbre.
+function Scenery.Mushrooms(parent: Instance, ground: Vector3, rng: Random)
+	Scenery.Asset(parent, "Mushroom", ground - Vector3.new(0, 0.2, 0), rng, nil, rng:NextNumber(0.4, 0.8))
+end
+
+--[[
+	Une barrière en bois de `from` à `to` (points au sol), en segments
+	posés bout à bout. `groundAt(x, z)` : hauteur du sol (sinon celle de `from`).
+]]
+function Scenery.FenceLine(parent: Instance, from: Vector3, to: Vector3, rng: Random, groundAt: ((number, number) -> number?)?)
+	local flat = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+	local length = flat.Magnitude
+	if length < 1 then
+		return
+	end
+	local direction = flat.Unit
+	local template = templateOf("Fence", rng)
+	local size = template and template:GetAttribute("Size")
+	local segment = if typeof(size) == "Vector3" and size.X > 4 then size.X else 8
+	local count = math.max(1, math.floor(length / segment + 0.5))
+	local step = length / count
+	for i = 0, count - 1 do
+		local mid = from + direction * (step * (i + 0.5))
+		local y = (groundAt and groundAt(mid.X, mid.Z)) or from.Y
+		local base = Vector3.new(mid.X, y, mid.Z)
+		-- Le segment a sa longueur sur X : on aligne X sur la direction.
+		local frame = CFrame.lookAt(base, base + direction) * CFrame.Angles(0, math.pi / 2, 0)
+		if template then
+			local model = template:Clone()
+			if math.abs(step / segment - 1) > 0.02 then
+				model:ScaleTo(step / segment)
+			end
+			model:PivotTo(frame)
+			model.Parent = parent
+		else
+			block(parent, "FencePost", Vector3.new(0.5, 3.5, 0.5), frame * CFrame.new(-step / 2, 1.75, 0), Color3.fromRGB(110, 78, 52), false)
+			for _, h in ipairs({ 1.2, 2.6 }) do
+				block(parent, "FenceRail", Vector3.new(step, 0.4, 0.25), frame * CFrame.new(0, h, 0), Color3.fromRGB(130, 92, 60), false)
+			end
+		end
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Arbres
 --------------------------------------------------------------------------------
 
@@ -117,11 +277,12 @@ end
 function Scenery.PickKind(rng: Random, sakura: number?): TreeKind
 	local roll = rng:NextNumber()
 	local share = sakura or 0.08
+	-- Comme une forêt de montagne : surtout des pins, quelques feuillus et buissons.
 	if roll < share then
 		return "Sakura"
-	elseif roll < share + 0.34 then
+	elseif roll < share + 0.55 then
 		return "Pine"
-	elseif roll < share + 0.46 then
+	elseif roll < share + 0.7 then
 		return "Bush"
 	end
 	return "Leafy"
@@ -135,6 +296,9 @@ end
 function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: TreeKind?, scale: number?)
 	local k = kind or Scenery.PickKind(rng)
 	local s = (scale or 1) * rng:NextNumber(0.85, 1.2)
+	if assetTree(parent, ground, rng, k, s) then
+		return
+	end
 	if k == "Bush" then
 		local color = green(rng)
 		local size = rng:NextNumber(4, 6.5) * s

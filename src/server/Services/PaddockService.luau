@@ -216,7 +216,7 @@ local function buildPaddock()
 	padRing(folder, carPad)
 	local _, carFrame = board(folder, carPad.Position + Vector3.new(0, 4, -carPad.Radius - 4), Vector2.new(16, 7), carPad.Color)
 	label(carFrame, "TA VOITURE", 30, 90, Enum.Font.GothamBlack, carPad.Color)
-	label(carFrame, "Essais libres, piste d'essai, spéciale chronométrée", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
+	label(carFrame, "Essais libres sur la piste d'essai · spéciale : menu C", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
 	label(carFrame, "Entre à pied dans la zone · E : monter · Q : descendre", 230, 60, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 
 	-- Garage : zone, plaque tournante (la voiture y est posée par chaque client,

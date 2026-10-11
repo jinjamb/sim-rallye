@@ -170,6 +170,22 @@ function PaddockScenery.Build(paddock: Instance)
 	treeRow(folder, rng, -251, 20, -251, 240, 9, 0.2, 2)
 	treeRow(folder, rng, 14, 70, 14, 240, 10, 0.1, 4)
 
+	-- Barrières en bois au bord de la dalle (nord et ouest), rondins, rochers et
+	-- champignons sur la pelouse : la touche forêt de montagne.
+	Scenery.FenceLine(folder, Vector3.new(west, 0.2, north + 4), Vector3.new(east + 30, 0.2, north + 4), rng)
+	Scenery.FenceLine(folder, Vector3.new(west - 3, 0.2, south + 6), Vector3.new(west - 3, 0.2, north), rng)
+	for _, spot in ipairs({ Vector3.new(-236, 0.2, 92), Vector3.new(-236, 0.2, 196), Vector3.new(-60, 0.2, 241), Vector3.new(-180, 0.2, 241) }) do
+		Scenery.Logs(folder, spot, rng)
+	end
+	for _ = 1, 14 do
+		local spot = Vector3.new(rng:NextNumber(-250, 10), 0.2, rng:NextNumber(240, 252))
+		if rng:NextNumber() < 0.5 then
+			Scenery.Rock(folder, spot, rng, rng:NextNumber(1.5, 3.5))
+		else
+			Scenery.Mushrooms(folder, spot, rng)
+		end
+	end
+
 	-- Tentes d'équipe (au nord, face au spawn) et leurs camions derrière.
 	local teams = { "TEAM KAZE", "YAMA WORKS", "RAIJIN GP", "HAYATE RT", "HOSHI SPORT", "SAKURA RACING" }
 	for i, name in ipairs(teams) do
@@ -202,6 +218,26 @@ function PaddockScenery.Build(paddock: Instance)
 	for _, corner in ipairs({ Vector3.new(west + 4, 0.2, south + 4), Vector3.new(west + 4, 0.2, north - 4), Vector3.new(east - 4, 0.2, north - 4), Vector3.new(-66, 0.2, south + 7) }) do
 		local toward = (PaddockLayout.PLAZA_CENTER - corner) * Vector3.new(1, 0, 1)
 		Scenery.LightTower(folder, corner, (toward.Unit + Vector3.new(0, -0.6, 0)).Unit)
+	end
+
+	-- BARRIÈRE DE LA SPÉCIALE : la route de la spéciale rejoint la Baseplate au
+	-- bord sud (Z = -256). Un mur invisible, derrière la zone de départ (la
+	-- voiture y est posée 30 studs plus loin), empêche de remonter de la
+	-- spéciale vers le paddock et la piste d'essai ; une barrière en bois et
+	-- une rangée de pins le rendent visible. On entre en spéciale par le menu.
+	local stageEdge = -BASE_HALF + 4
+	local wall = Instance.new("Part")
+	wall.Name = "StageBarrier"
+	wall.Anchored = true
+	wall.CanTouch = false
+	wall.Transparency = 1
+	wall.Size = Vector3.new(180, 40, 4)
+	wall.Position = Vector3.new(0, 20, stageEdge)
+	wall.Parent = folder
+	Scenery.FenceLine(folder, Vector3.new(-90, 0.2, stageEdge - 3), Vector3.new(90, 0.2, stageEdge - 3), rng)
+	treeRow(folder, rng, -95, stageEdge + 8, 95, stageEdge + 8, 9, 0, 3)
+	for x = -92, 92, 5 do
+		Scenery.Tree(folder, Vector3.new(x, 0.2, stageEdge + 3), rng, "Bush", 1.6)
 	end
 
 	folder.Parent = paddock

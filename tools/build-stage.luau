@@ -1,7 +1,7 @@
 --[[
 	build-stage.luau
 	À COLLER DANS LA BARRE DE COMMANDES DE ROBLOX STUDIO (Ctrl+9, puis Ctrl+Entrée).
-	Ce fichier n'est PAS synchronisé par Rojo : c'est un outil d'édition.
+	Rojo le range dans ServerStorage.Tools (jamais exécuté en jeu) : c'est un outil d'édition.
 	Rojo doit tourner (rojo serve) : le tracé est lu dans
 	ReplicatedStorage.Shared.Stage.StageTrack, le même module que le chrono.
 
@@ -75,12 +75,16 @@ local MARKER_SPACING = 20
 local DECOR_SEED = 1973
 local ROCK_SPACING, ROCK_DENSITY = 10, 0.35
 local ROCK_LATERAL_MIN, ROCK_LATERAL_MAX = 18, 46
-local TREE_SPACING, TREE_DENSITY = 14, 0.7
-local TREE_LATERAL_MIN, TREE_LATERAL_MAX = 62, 105
+local TREE_SPACING, TREE_DENSITY = 12, 0.9
+local TREE_LATERAL_MIN, TREE_LATERAL_MAX = 50, 110
+-- Arbres au ras de l'accotement : la forêt borde la route, comme en spéciale.
+local EDGE_TREE_SPACING, EDGE_TREE_DENSITY = 16, 0.45
+local EDGE_TREE_LATERAL_MIN, EDGE_TREE_LATERAL_MAX = 26, 42
+local EDGE_TREE_CLEARANCE = 24
 -- Un objet de décor ne doit jamais tomber sur une AUTRE portion de route
 -- (épingles) : distance minimale à l'axe du tracé le plus proche.
 local ROCK_CLEARANCE = 16
-local TREE_CLEARANCE = 58
+local TREE_CLEARANCE = 46
 -- Au bout du tracé : plateau d'herbe dans le prolongement, puis talus. Sans
 -- lui, une voiture qui ne s'arrête pas après l'arrivée tombe dans le vide.
 local END_PLATEAU = 120
@@ -94,8 +98,8 @@ local HILL_FADE = 130
 local HILL_MATERIAL = Enum.Material.LeafyGrass
 local BASEPLATE_KEEP = 300 -- demi-côté de la zone gardée telle quelle autour de la Baseplate
 -- Forêts sur les collines, au-delà des arbres du bord de route.
-local FOREST_COUNT = 700
-local FOREST_CLEARANCE = 110
+local FOREST_COUNT = 1500
+local FOREST_CLEARANCE = 100
 -- Spectateurs : une petite tribune et une tente tous les SPECTATOR_SPACING studs.
 local SPECTATOR_SPACING = 520
 local SPECTATOR_LATERAL = 34
@@ -407,25 +411,6 @@ decor.Name = "Decor"
 decor.Parent = folder
 local rng = Random.new(DECOR_SEED)
 
-local function decorPart(name: string, shape: Enum.PartType, size: Vector3, cframe: CFrame, color: Color3, material: Enum.Material, solid: boolean): Part
-	local part = Instance.new("Part")
-	part.Name = name
-	part.Shape = shape
-	part.Anchored = true
-	part.CanCollide = solid
-	part.CanQuery = solid -- Roblox impose CanQuery = true sur une part solide
-	part.CanTouch = false
-	part.CastShadow = solid
-	part.Size = size
-	part.CFrame = cframe
-	part.Color = color
-	part.Material = material
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
-	part.Parent = decor
-	return part
-end
-
 -- Point de décor valide : sur le terrain généré, et loin de TOUTE portion de route.
 local function decorSpot(sample: StageTrack.Sample, lateral: number, clearance: number): Vector3?
 	local position = sample.Position + sample.Left * lateral + sample.ForwardFlat * rng:NextNumber(-4, 4)
@@ -449,17 +434,8 @@ for distance = 0, trackLength, ROCK_SPACING do
 		if rng:NextNumber() < ROCK_DENSITY then
 			local spot = decorSpot(sample, side * rng:NextNumber(ROCK_LATERAL_MIN, ROCK_LATERAL_MAX), ROCK_CLEARANCE)
 			if spot then
-				local size = rng:NextNumber(1.2, 3.5)
-				local grey = rng:NextInteger(95, 135)
-				decorPart(
-					"Rock",
-					Enum.PartType.Ball,
-					Vector3.new(size, size, size),
-					CFrame.new(spot + Vector3.new(0, size * 0.25, 0)), -- à moitié enfoncé
-					Color3.fromRGB(grey, grey - 5, grey - 12),
-					Enum.Material.Slate,
-					false
-				)
+				-- Rocher du Creator Store (ServerStorage.SceneryAssets), sinon une boule.
+				Scenery.Rock(decor, spot, rng, rng:NextNumber(1, 3))
 				rockCount += 1
 			end
 		end
@@ -477,10 +453,39 @@ for distance = 0, trackLength, TREE_SPACING do
 			if spot then
 				Scenery.Tree(decor, spot, rng, Scenery.PickKind(rng, 0.06))
 				treeCount += 1
+				-- Champignons rouges au pied de quelques arbres.
+				if rng:NextNumber() < 0.12 then
+					local nearby = spot + Vector3.new(rng:NextNumber(-5, 5), 0, rng:NextNumber(-5, 5))
+					local ground = groundHeightAt(nearby.X, nearby.Z)
+					if ground then
+						Scenery.Mushrooms(decor, Vector3.new(nearby.X, ground, nearby.Z), rng)
+					end
+				end
 			end
 		end
 	end
 	if distance % 280 == 0 then
+		task.wait()
+	end
+end
+
+-- Pas au droit des spectateurs ni des coupes de bois (tous les SPECTATOR_SPACING / 2).
+local function nearCrowd(distance: number): boolean
+	local phase = (distance - (StageTrack.START_DISTANCE + 260)) % (SPECTATOR_SPACING / 2)
+	return phase < 50 or phase > SPECTATOR_SPACING / 2 - 50
+end
+for distance = 0, trackLength, EDGE_TREE_SPACING do
+	local sample = StageTrack.SampleAt(distance)
+	for _, side in ipairs({ -1, 1 }) do
+		if rng:NextNumber() < EDGE_TREE_DENSITY and not nearCrowd(distance) then
+			local spot = decorSpot(sample, side * rng:NextNumber(EDGE_TREE_LATERAL_MIN, EDGE_TREE_LATERAL_MAX), EDGE_TREE_CLEARANCE)
+			if spot then
+				Scenery.Tree(decor, spot, rng, Scenery.PickKind(rng, 0.04))
+				treeCount += 1
+			end
+		end
+	end
+	if distance % 320 == 0 then
 		task.wait()
 	end
 end
@@ -536,7 +541,37 @@ for distance = StageTrack.START_DISTANCE + 260, StageTrack.GetFinishDistance() -
 				Scenery.Flag(spectators, Vector3.new(flag.X, ground, flag.Z), Scenery.TEAM_COLORS[rng:NextInteger(1, 5)], toward)
 			end
 		end
+			-- Barrière en bois entre la route et le public, rondins à côté.
+		local fenceLateral = fanSide * (roadHalf + 9)
+		local fenceFrom = sample.Position + sample.Left * fenceLateral - sample.ForwardFlat * 26
+		local fenceTo = sample.Position + sample.Left * fenceLateral + sample.ForwardFlat * 26
+		Scenery.FenceLine(spectators, fenceFrom, fenceTo, rng, groundHeightAt)
+		local pile = spot + sample.ForwardFlat * -24
+		local pileGround = groundHeightAt(pile.X, pile.Z)
+		if pileGround then
+			Scenery.Logs(spectators, Vector3.new(pile.X, pileGround, pile.Z), rng)
+		end
 		spectatorCount += 1
+	end
+end
+
+-- Coupes de bois le long de la route : piles de rondins et barrières, comme
+-- dans une forêt d'exploitation. Entre les groupes de spectateurs.
+local woodSide = 1
+for distance = StageTrack.START_DISTANCE + 520, StageTrack.GetFinishDistance() - 100, SPECTATOR_SPACING do
+	local sample = StageTrack.SampleAt(distance)
+	woodSide = -woodSide
+	local spot = decorSpot(sample, woodSide * 30, 26)
+	if spot then
+		for i = 0, rng:NextInteger(1, 3) do
+			local p = spot + sample.ForwardFlat * (i * 14) + sample.Left * woodSide * rng:NextNumber(0, 6)
+			local ground = groundHeightAt(p.X, p.Z)
+			if ground then
+				Scenery.Logs(spectators, Vector3.new(p.X, ground, p.Z), rng)
+			end
+		end
+		local fenceLateral = woodSide * (roadHalf + 8)
+		Scenery.FenceLine(spectators, sample.Position + sample.Left * fenceLateral - sample.ForwardFlat * 40, sample.Position + sample.Left * fenceLateral + sample.ForwardFlat * 40, rng, groundHeightAt)
 	end
 end
 

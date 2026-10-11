@@ -15,6 +15,12 @@
       }
     },
 
+    "ServerStorage": {
+      "Tools": {
+        "$path": "tools"
+      }
+    },
+
     "StarterPlayer": {
       "$properties": {
         "CharacterUseJumpPower": false,

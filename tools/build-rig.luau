@@ -1,7 +1,7 @@
 --[[
 	build-rig.luau
 	À COLLER DANS LA BARRE DE COMMANDES DE ROBLOX STUDIO (Ctrl+9, puis Ctrl+Entrée).
-	Ce fichier n'est PAS synchronisé par Rojo : c'est un outil d'édition.
+	Rojo le range dans ServerStorage.Tools (jamais exécuté en jeu) : c'est un outil d'édition.
 
 	À lancer UNE fois, pour créer la voiture de base (la sélection est ignorée).
 	Pour l'habiller d'un modèle importé : ensuite, tools/attach-body.luau.

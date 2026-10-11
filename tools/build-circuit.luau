@@ -1,7 +1,7 @@
 --[[
 	build-circuit.luau
 	À COLLER DANS LA BARRE DE COMMANDES DE ROBLOX STUDIO (Ctrl+9, puis Ctrl+Entrée).
-	Ce fichier n'est PAS synchronisé par Rojo : c'est un outil d'édition.
+	Rojo le range dans ServerStorage.Tools (jamais exécuté en jeu) : c'est un outil d'édition.
 	Rojo doit tourner (rojo serve) : les tracés sont lus dans
 	ReplicatedStorage.Shared.Tracks, les mêmes modules que le serveur de course.
 
@@ -66,7 +66,7 @@ local TIRE_SPACING = 8
 -- Pas de pneus à moins de ça du bord d'une AUTRE portion de piste (épingles,
 -- joker) : le dégagement de l'une ne doit pas fermer l'autre.
 local TIRE_CLEARANCE = RUNOFF - 6
-local TREE_COUNT = 460
+local TREE_COUNT = 850
 local TREE_CLEARANCE = 70
 -- Paddock des équipes, côté extérieur de la ligne droite de départ (écart à l'axe).
 local STAND_LATERAL = 68 -- la tribune, juste derrière les pneus
@@ -467,8 +467,17 @@ local function buildCircuit(circuit)
 		local z = rng:NextNumber(minZ + 20, maxZ - 20)
 		local grove = math.noise(x / 180, z / 180, #circuit.Id + 0.5)
 		if (grove > -0.05 or rng:NextNumber() < 0.15) and not inPaddock(x, z) and roadClearance(Vector3.new(x, 0, z)) >= TREE_CLEARANCE then
-			Scenery.Tree(decor, Vector3.new(x, groundHeightAt(x, z), z), rng, Scenery.PickKind(rng, 0.07), rng:NextNumber(1, 1.4))
+			local ground = groundHeightAt(x, z)
+			Scenery.Tree(decor, Vector3.new(x, ground, z), rng, Scenery.PickKind(rng, 0.07), rng:NextNumber(1, 1.4))
 			treeCount += 1
+			-- Rochers et champignons entre les arbres.
+			local roll = rng:NextNumber()
+			if roll < 0.18 then
+				local rx, rz = x + rng:NextNumber(-12, 12), z + rng:NextNumber(-12, 12)
+				Scenery.Rock(decor, Vector3.new(rx, groundHeightAt(rx, rz), rz), rng, rng:NextNumber(2, 6))
+			elseif roll < 0.28 then
+				Scenery.Mushrooms(decor, Vector3.new(x + 4, ground, z + 3), rng)
+			end
 		end
 		if attempt % 100 == 0 then
 			task.wait()
@@ -529,6 +538,14 @@ local function buildCircuit(circuit)
 		local pile = spotAt(rng:NextNumber(-90, 90), rng:NextNumber(122, 130))
 		if free(pile, 60) then
 			Scenery.TireStack(paddock, pile, rng)
+		end
+	end
+	-- Barrière en bois entre la tribune et les tentes, rondins près des stands.
+	Scenery.FenceLine(paddock, spotAt(-PADDOCK_HALF_LENGTH + 4, 92), spotAt(PADDOCK_HALF_LENGTH - 4, 92), rng, groundHeightAt)
+	for _ = 1, 5 do
+		local pile = spotAt(rng:NextNumber(-95, 95), rng:NextNumber(152, 166))
+		if free(pile, 80) then
+			Scenery.Logs(paddock, pile, rng)
 		end
 	end
 

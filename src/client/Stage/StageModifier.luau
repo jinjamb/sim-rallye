@@ -230,6 +230,15 @@ function StageModifier.Apply(car: CarClass.Car, id: string): () -> ()
 			atmosphere.Parent = Lighting
 		end)
 	end
+	-- Le ciel peint (nuages en plein soleil) resterait lumineux la nuit et sous
+	-- la pluie : sans lui, Roblox affiche son ciel dynamique (étoiles, gris).
+	local sky = Lighting:FindFirstChildOfClass("Sky")
+	if sky and (id == "Night" or id == "Fog" or id == "Rain") then
+		sky.Parent = nil
+		table.insert(cleanups, function()
+			sky.Parent = Lighting
+		end)
+	end
 
 	return function()
 		for i = #cleanups, 1, -1 do
