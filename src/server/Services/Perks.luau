@@ -18,7 +18,7 @@ local Perks = {}
 
 -- Bonus des abonnés Roblox Premium (crédits gagnés en jouant).
 Perks.PREMIUM_CREDIT_BONUS = 0.1
--- VIP : XP en plus.
+-- VIP : XP en plus (pass de jeu).
 Perks.VIP_XP_BONUS = 0.25
 
 type State = {

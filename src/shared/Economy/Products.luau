@@ -245,7 +245,7 @@ function Products.CreditPacks(): { Product }
 	return list
 end
 
--- Les offres de tirages, dans l'ordre de la boutique.
+-- Les offres de tirages, dans l'ordre affiché en boutique.
 function Products.RollPacks(): { Product }
 	local list = {}
 	for _, product in ipairs(Products.LIST) do

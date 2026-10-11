@@ -1,7 +1,8 @@
 --!strict
 --[[
 	Pacenotes.luau
-	Les notes du copilote, déduites du tracé (StageTrack.GetSegments) : rien
+	Les notes du copilote, déduites du tracé d'une spéciale (Stages.luau,
+	track.GetSegments) : rien
 	n'est saisi à la main. Modifier le tracé met les notes à jour.
 
 	SÉVÉRITÉ DES VIRAGES, convention des jeux de rallye : 1 = le plus serré,
@@ -31,6 +32,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Units = require(ReplicatedStorage.Shared.Util.Units)
 local StageTrack = require(script.Parent.StageTrack)
+local Stages = require(script.Parent.Stages)
 
 local Pacenotes = {}
 
@@ -143,8 +145,8 @@ local function hazardNote(distance: number, endDistance: number, main: string, k
 	return { Distance = distance, EndDistance = endDistance, Main = main, Spoken = { lower(main) }, Modifiers = {}, Kind = kind }
 end
 
-local function collectRaw(): { RawNote }
-	local segments = StageTrack.GetSegments()
+local function collectRaw(track: StageTrack.Track): { RawNote }
+	local segments = track.GetSegments()
 	local raw: { RawNote } = {}
 
 	for i, segment in ipairs(segments) do
@@ -196,13 +198,13 @@ local function collectRaw(): { RawNote }
 		end
 	end
 
-	local finish = StageTrack.GetFinishDistance()
+	local finish = track.GetFinishDistance()
 	table.insert(raw, hazardNote(finish, finish, "ARRIVÉE", "Finish"))
 
 	-- Rien avant la ligne de départ ni après l'arrivée.
 	local kept = {}
 	for _, note in ipairs(raw) do
-		if note.Distance >= StageTrack.START_DISTANCE and note.Distance <= finish then
+		if note.Distance >= track.START_DISTANCE and note.Distance <= finish then
 			table.insert(kept, note)
 		end
 	end
@@ -232,13 +234,16 @@ local function merge(raw: { RawNote }): { RawNote }
 	return merged
 end
 
-local cachedNotes: { Note }? = nil
+local cachedNotes: { [string]: { Note } } = {}
 
-function Pacenotes.Generate(): { Note }
-	if cachedNotes then
-		return cachedNotes
+-- Les notes d'une spéciale (`stageId` : Stages.luau ; la spéciale par défaut sans argument).
+function Pacenotes.Generate(stageId: string?): { Note }
+	local track = Stages.Get(stageId)
+	local cached = cachedNotes[track.Id]
+	if cached then
+		return cached
 	end
-	local raw = merge(collectRaw())
+	local raw = merge(collectRaw(track))
 
 	--[[
 		Liens et distances, pour chaque virage ou danger : mesurés de sa SORTIE à
@@ -285,7 +290,7 @@ function Pacenotes.Generate(): { Note }
 			IsCorner = note.Kind == "Corner",
 		})
 	end
-	cachedNotes = notes
+	cachedNotes[track.Id] = notes
 	return notes
 end
 

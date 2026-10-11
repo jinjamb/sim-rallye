@@ -40,10 +40,12 @@ Ghost.__index = Ghost
 
 export type GhostData = { Rate: number, Frames: { number } }
 -- Le passage d'un autre pilote, envoyé par le serveur (RecordService).
-export type Opponent = { UserId: number, Name: string, Ms: number, Data: GhostData }
+-- StageId : la spéciale de son passage (Stages.luau).
+export type Opponent = { UserId: number, Name: string, Ms: number, Data: GhostData, StageId: string? }
 
 export type Ghost = typeof(setmetatable({}, Ghost)) & {
 	Chassis: BasePart,
+	Track: StageTrack.Track, -- la spéciale courue
 	Best: GhostData?,
 	Opponent: Opponent?,
 	Hidden: boolean,
@@ -68,9 +70,10 @@ local TRACE_WINDOW = 25 -- échantillons du tracé (4 studs) examinés autour du
 local TAG_OWN = Color3.fromRGB(235, 236, 240)
 local TAG_OPPONENT = Color3.fromRGB(255, 140, 40)
 
-function Ghost.new(chassis: BasePart): Ghost
+function Ghost.new(chassis: BasePart, track: StageTrack.Track): Ghost
 	local self = (setmetatable({}, Ghost) :: any) :: Ghost
 	self.Chassis = chassis
+	self.Track = track
 	self.Best = nil
 	self.Opponent = nil
 	self.Hidden = false
@@ -180,7 +183,8 @@ function Ghost:_trace(): ({ number }, GhostData?)
 	end
 	local frames = data.Frames
 	local count = #frames // VALUES_PER_FRAME
-	local sampleCount = #StageTrack.GetSamples()
+	local track = self.Track
+	local sampleCount = #track.GetSamples()
 	local trace = table.create(count)
 	local hint: number? = nil
 	local highest = -math.huge
@@ -189,14 +193,14 @@ function Ghost:_trace(): ({ number }, GhostData?)
 		local position = Vector3.new(frames[base + 1], frames[base + 2], frames[base + 3])
 		local sample, progress
 		if hint then
-			sample, progress = StageTrack.LocateNear(position, hint, TRACE_WINDOW)
+			sample, progress = track.LocateNear(position, hint, TRACE_WINDOW)
 			local first = math.max(1, hint - TRACE_WINDOW)
 			local last = math.min(sampleCount, hint + TRACE_WINDOW)
 			if (sample.Index == first and first > 1) or (sample.Index == last and last < sampleCount) then
-				sample, progress = StageTrack.Locate(position) -- bond : hors de la fenêtre
+				sample, progress = track.Locate(position) -- bond : hors de la fenêtre
 			end
 		else
-			sample, progress = StageTrack.Locate(position)
+			sample, progress = track.Locate(position)
 		end
 		hint = sample.Index
 		highest = math.max(highest, progress)

@@ -22,7 +22,8 @@
 
 local Scenery = {}
 
-export type TreeKind = "Leafy" | "Pine" | "Sakura" | "Bush"
+-- PineSnow : pin enneigé (spéciale de montagne).
+export type TreeKind = "Leafy" | "Pine" | "PineSnow" | "Sakura" | "Bush"
 
 -- Palette : verts de prairie, rose sakura, et les couleurs vives de l'interface.
 Scenery.SAKURA = Color3.fromRGB(255, 176, 204)
@@ -107,8 +108,8 @@ end
 
 --[[
 	BIBLIOTHÈQUE : ServerStorage.SceneryAssets, rangée dans le place (pas dans
-	Rojo). Un dossier par sorte (Pine, Leafy, Bush, Rock, Logs, Fence,
-	Mushroom), des modèles déjà nettoyés : ancrés, sans collision ni script,
+	Rojo). Un dossier par sorte (Pine, PineSnow, Leafy, Bush, Rock, Logs,
+	Fence, Mushroom), des modèles déjà nettoyés : ancrés, sans collision ni script,
 	pivot au sol au centre, attribut Size (taille d'origine, longueur sur X).
 	Réglés pour les performances (des milliers de copies) : CollisionFidelity
 	Box (aucune géométrie de collision détaillée à calculer), ombres seulement
@@ -182,8 +183,8 @@ end
 
 -- Les arbres en assets : pins hauts et sombres, feuillus plus ronds, buissons.
 local function assetTree(parent: Instance, ground: Vector3, rng: Random, kind: TreeKind, s: number): boolean
-	if kind == "Pine" then
-		local model = Scenery.Asset(parent, "Pine", ground - Vector3.new(0, 0.5, 0), rng, rng:NextNumber(26, 44) * s)
+	if kind == "Pine" or kind == "PineSnow" then
+		local model = Scenery.Asset(parent, kind, ground - Vector3.new(0, 0.5, 0), rng, rng:NextNumber(26, 44) * s)
 		if model then
 			trunkCollider(model, ground, 1.8 * s)
 			return true
@@ -312,8 +313,10 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		ball(parent, "Bush", second, ground + Vector3.new(rng:NextNumber(-2, 2), second * 0.3, rng:NextNumber(-2, 2)), color, Enum.Material.Grass)
 		return
 	end
-	if k == "Pine" then
-		-- Pin : tronc court, étages de disques de plus en plus petits.
+	if k == "Pine" or k == "PineSnow" then
+		-- Pin : tronc court, étages de disques de plus en plus petits ; enneigé,
+		-- chaque étage porte sa couche de neige.
+		local snowy = k == "PineSnow"
 		local trunkHeight = 5 * s
 		column(parent, "Trunk", trunkHeight + 1, 1.4 * s, ground - Vector3.new(0, 1, 0), trunkColor(rng), Enum.Material.Wood, true)
 		local color = Color3.fromRGB(rng:NextInteger(30, 50), rng:NextInteger(88, 112), rng:NextInteger(55, 72))
@@ -323,6 +326,9 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 			local width = (11 - tier * 2.2) * s
 			local height = 4.2 * s
 			column(parent, "Leaves", height, width, ground + Vector3.new(0, y, 0), color, Enum.Material.Grass, false)
+			if snowy then
+				column(parent, "Snow", 0.8 * s, width * 0.92, ground + Vector3.new(0, y + height - 0.4 * s, 0), Color3.fromRGB(240, 244, 250), Enum.Material.Snow, false)
+			end
 			y += height * 0.72
 		end
 		ball(parent, "Leaves", 2.4 * s, ground + Vector3.new(0, y + 0.6 * s, 0), color, Enum.Material.Grass)

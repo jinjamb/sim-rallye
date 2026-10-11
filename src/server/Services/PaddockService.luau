@@ -45,7 +45,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
-local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -404,7 +404,12 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
 			return
 		end
-	elseif mode ~= "Stage" and mode ~= "Practice" and mode ~= "Weekly" then
+	elseif mode == "Stage" then
+		-- trackId : la spéciale choisie (Stages.luau) ; la spéciale par défaut sinon.
+		if trackId ~= nil and not Stages.Exists(trackId) then
+			return
+		end
+	elseif mode ~= "Practice" and mode ~= "Weekly" then
 		return
 	end
 	local ok, reason = RaceService.ReleaseForMode(player)
@@ -415,15 +420,17 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 	lastPlayAt[player] = now
 
 	if mode == "Stage" then
-		CarService.Spawn(player, StageTrack.StartFrame(), nil)
+		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
+		CarService.Spawn(player, track.StartFrame(), { Attributes = { Stage = track.Id } })
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
 		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
 		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id }, CarClass = "Rally2" })
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
-		CarService.Spawn(player, StageTrack.StartFrame(), {
-			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id },
+		local track = Stages.Get(Stages.DEFAULT)
+		CarService.Spawn(player, track.StartFrame(), {
+			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id },
 			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
 		})
 	elseif mode == "Practice" then

@@ -4,7 +4,7 @@
 	Chronométrage de la spéciale et remise en piste.
 
 	Aucun capteur physique : la position de la voiture est projetée sur le tracé
-	(StageTrack.Locate), ce qui donne son abscisse curviligne -- "où elle en
+	(track.Locate, la spéciale courue : Stages.luau), ce qui donne son abscisse curviligne -- "où elle en
 	est" le long de la spéciale. Tout en découle :
 		- départ   : l'abscisse franchit la ligne de départ, voiture sur la route ;
 		- inters   : l'abscisse franchit 33 % puis 66 % du parcours chronométré ;
@@ -39,6 +39,7 @@ type RunState = "Idle" | "Running" | "Finished" | "Invalid"
 
 export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	Car: CarClass.Car,
+	Track: StageTrack.Track,
 	Gui: ScreenGui,
 	Panel: Frame,
 	Scale: UIScale,
@@ -90,10 +91,8 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 -- que fait gagner la coupe d'une épingle.
 local MAX_PROGRESS_JUMP = 60
 -- Le départ ne se déclenche que si la voiture franchit la ligne sur la route
--- (pas en passant à côté du portique).
-local START_LATERAL_TOLERANCE = StageTrack.ROAD_WIDTH / 2 + 6
--- Remise en piste : un peu au-dessus de la chaussée, la suspension se pose.
-local DROP_HEIGHT = StageTrack.DROP_HEIGHT
+-- (pas en passant à côté du portique) : à moins de ça du bord de la route.
+local START_LATERAL_MARGIN = 6
 
 -- En haut à gauche, sans cadre, façon rallye illustré : la progression en très
 -- gros, le temps dans un bandeau d'encre penché, le reste en petit dessous.
@@ -135,9 +134,11 @@ local function pill(label: TextLabel, padding: number)
 	Theme.Slant(label)
 end
 
-function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
+-- `track` : la spéciale courue (Stages.luau).
+function StageTimer.new(car: CarClass.Car, playerGui: Instance, track: StageTrack.Track): StageTimer
 	local self = (setmetatable({}, StageTimer) :: any) :: StageTimer
 	self.Car = car
+	self.Track = track
 	self.State = "Idle"
 	self.StartClock = 0
 	self.FinalTime = 0
@@ -162,10 +163,10 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.OnRunFinished = nil
 	self.OnRunCancelled = nil
 
-	local start = StageTrack.START_DISTANCE
-	local timedLength = StageTrack.GetFinishDistance() - start
+	local start = track.START_DISTANCE
+	local timedLength = track.GetFinishDistance() - start
 	self.SplitDistances = {}
-	for i, fraction in ipairs(StageTrack.SPLITS) do
+	for i, fraction in ipairs(track.SPLITS) do
 		self.SplitDistances[i] = start + timedLength * fraction
 	end
 
@@ -244,11 +245,11 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	self.StatusLabel.Size = UDim2.fromOffset(0, 20)
 	pill(self.StatusLabel, 7)
 	self.SplitLabels = {}
-	for i = 1, #StageTrack.SPLITS do
+	for i = 1, #track.SPLITS do
 		self.SplitLabels[i] = makeLabel(panel, 176 + (i - 1) * 20, 18, 16, Theme.DIGITS)
 		Theme.TextInk(self.SplitLabels[i], 1.5)
 	end
-	self.BestLabel = makeLabel(panel, 176 + #StageTrack.SPLITS * 20 + 4, 16, 14, Theme.DIGITS)
+	self.BestLabel = makeLabel(panel, 176 + #track.SPLITS * 20 + 4, 16, 14, Theme.DIGITS)
 	self.BestLabel.RichText = true
 	Theme.TextInk(self.BestLabel, 1.5)
 
@@ -270,14 +271,14 @@ function StageTimer:SetTouchLayout(enabled: boolean)
 	self.Panel.Position = if enabled then UDim2.fromOffset(12, TOP_MARGIN - 8) else UDim2.fromOffset(SCREEN_MARGIN, TOP_MARGIN)
 end
 
-local function dropFrame(sample: StageTrack.Sample): CFrame
-	local position = sample.Position + Vector3.new(0, DROP_HEIGHT, 0)
+local function dropFrame(track: StageTrack.Track, sample: StageTrack.Sample): CFrame
+	local position = sample.Position + Vector3.new(0, track.DROP_HEIGHT, 0)
 	return CFrame.lookAt(position, position + sample.Forward)
 end
 
 -- Retour au départ, chrono remis à zéro.
 function StageTimer:Restart()
-	self.Car:Teleport(StageTrack.StartFrame())
+	self.Car:Teleport(self.Track.StartFrame())
 	self.State = "Idle"
 	self.SplitTimes = {}
 	self.Grace = true
@@ -329,8 +330,8 @@ end
 
 -- Nouvelle médaille : annonce en grand. Sinon, un record perso rappelle la
 -- prochaine à décrocher.
-local function announceRecord(ms: number, previousMs: number?, classId: string?)
-	local limits = Medals.ForStage(classId)
+local function announceRecord(ms: number, previousMs: number?, classId: string?, stageId: string)
+	local limits = Medals.ForStage(classId, stageId)
 	local before = Medals.TierOf(previousMs, limits)
 	local after = Medals.TierOf(ms, limits)
 	local nextTier, nextMs = Medals.Next(ms, limits)
@@ -378,7 +379,7 @@ function StageTimer:SetOfficialResult(result: any)
 			text ..= " — RECORD PERSO !"
 			self.BestTime = result.Ms / 1000
 			self.OfficialBestMs = result.Ms
-			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil, self.ClassId)
+			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil, self.ClassId, self.Track.Id)
 		end
 		self.OfficialText = text
 		self.OfficialColor = if result.PersonalBest then COLOR_FASTER else COLOR_DIM
@@ -393,8 +394,8 @@ end
 	voiture sur le toit). Le chrono continue : le temps perdu est la pénalité.
 ]]
 function StageTimer:Recover()
-	local sample = StageTrack.Locate(self.Car.Chassis.Position)
-	self.Car:Teleport(dropFrame(sample))
+	local sample = self.Track.Locate(self.Car.Chassis.Position)
+	self.Car:Teleport(dropFrame(self.Track, sample))
 	self.Grace = true
 end
 
@@ -415,7 +416,7 @@ end
 function StageTimer:_finish(now: number)
 	self.State = "Finished"
 	self.FinalTime = now - self.StartClock
-	local reference = self:_referenceAt(StageTrack.GetFinishDistance())
+	local reference = self:_referenceAt(self.Track.GetFinishDistance())
 	self.FinalDelta = if reference then self.FinalTime - reference else nil
 	local best = self.BestTime
 	if best == nil or self.FinalTime < best then
@@ -429,7 +430,8 @@ end
 
 function StageTimer:Update(_dt: number)
 	local now = os.clock()
-	local _, progress, lateral = StageTrack.Locate(self.Car.Chassis.Position)
+	local track = self.Track
+	local _, progress, lateral = track.Locate(self.Car.Chassis.Position)
 
 	-- Juste après une téléportation, l'abscisse saute légitimement : on la
 	-- reprend comme nouvelle référence sans rien conclure.
@@ -438,9 +440,9 @@ function StageTimer:Update(_dt: number)
 		self.LastProgress = progress
 	end
 
-	local crossedStart = self.LastProgress < StageTrack.START_DISTANCE and progress >= StageTrack.START_DISTANCE
+	local crossedStart = self.LastProgress < track.START_DISTANCE and progress >= track.START_DISTANCE
 	if self.State ~= "Running" then
-		if crossedStart and math.abs(lateral) <= START_LATERAL_TOLERANCE then
+		if crossedStart and math.abs(lateral) <= track.ROAD_WIDTH / 2 + START_LATERAL_MARGIN then
 			self:_start(now)
 		end
 	else
@@ -470,7 +472,7 @@ function StageTimer:Update(_dt: number)
 				local reference = self:_referenceAt(progress)
 				self.LiveDelta = if reference then (now - self.StartClock) - reference else nil
 			end
-			if progress >= StageTrack.GetFinishDistance() then
+			if progress >= track.GetFinishDistance() then
 				self:_finish(now)
 			end
 		end
@@ -486,8 +488,8 @@ function StageTimer:_refresh(now: number)
 
 	local state = self.State
 	-- Progression : part du parcours chronométré déjà couverte.
-	local start = StageTrack.START_DISTANCE
-	local timedLength = StageTrack.GetFinishDistance() - start
+	local start = self.Track.START_DISTANCE
+	local timedLength = self.Track.GetFinishDistance() - start
 	local done = if state == "Finished" then 1
 		elseif state == "Running" or state == "Invalid" then math.clamp((self.LastProgress - start) / timedLength, 0, 1)
 		else 0
@@ -495,7 +497,7 @@ function StageTimer:_refresh(now: number)
 	-- Couleur de l'étiquette de statut : jaune par défaut.
 	local tone = Theme.ACCENT
 	local weekly = self.Weekly
-	local title = if weekly then "DÉFI · " .. Format.Upper(weekly) else "SPÉCIALE"
+	local title = if weekly then "DÉFI · " .. Format.Upper(weekly) else Format.Upper(self.Track.Name)
 	if state == "Running" then
 		self.StatusLabel.Text = title .. " · EN COURSE"
 		self.TimeLabel.Text = Format.Time(now - self.StartClock)
@@ -567,7 +569,7 @@ function StageTimer:_refresh(now: number)
 	end
 
 	-- Meilleur temps officiel, sa médaille, la prochaine à décrocher.
-	local limits = Medals.ForStage(self.ClassId)
+	local limits = Medals.ForStage(self.ClassId, self.Track.Id)
 	local bestMs = self.OfficialBestMs
 	local tier = Medals.TierOf(bestMs, limits)
 	local nextTier, nextMs = Medals.Next(bestMs, limits)

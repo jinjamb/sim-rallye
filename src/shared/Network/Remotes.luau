@@ -21,7 +21,8 @@ export type Remotes = {
 	-- autres joueurs (son, roues, poussière). Voir CarService.
 	CarTelemetry: UnreliableRemoteEvent,
 
-	-- Serveur -> Client : (profile) records et fantômes par catégorie, réglages, livrée, statistiques
+	-- Serveur -> Client : (profile) records et fantômes par spéciale puis par catégorie
+	-- (Stage[stageId][classId]), réglages, livrée, statistiques
 	ProfileLoaded: RemoteEvent,
 	-- Serveur -> Client : (stats, laps) statistiques et records du tour mis à jour
 	ProfileUpdated: RemoteEvent,
@@ -29,12 +30,12 @@ export type Remotes = {
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
-	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?, classId) fantôme d'un
-	-- autre pilote de la même catégorie à affronter sur la spéciale
+	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?, classId, stageId) fantôme
+	-- d'un autre pilote de la même catégorie à affronter sur cette spéciale
 	RequestGhost: RemoteEvent,
 	-- Serveur -> Client : (opponent) le fantôme demandé (pilote, temps, trajectoire) ou l'erreur
 	GhostOpponent: RemoteEvent,
-	-- Serveur -> Client : (boards) classements de la spéciale, par catégorie de voiture
+	-- Serveur -> Client : (boards) classements des spéciales : boards[stageId][classId]
 	Leaderboard: RemoteEvent,
 	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
 	WeeklyBoard: RemoteEvent,

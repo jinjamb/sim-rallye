@@ -35,6 +35,7 @@ local Announcer = require(script.Parent.UI.Announcer)
 local XpEventNotice = require(script.Parent.UI.XpEventNotice)
 local CopilotVoice = require(script.Parent.Audio.CopilotVoice)
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local GhostChallenge = require(script.Parent.Stage.GhostChallenge)
 local Replay = require(script.Parent.Replay.Replay)
 local Banner = require(script.Parent.UI.Banner)
@@ -87,12 +88,15 @@ local sessionToken = 0
 local debugEnabled = false
 
 -- Profil (chargé par le serveur), gardé d'une voiture à l'autre : réglages
--- et records de la spéciale, par catégorie de voiture (CarClasses.luau).
+-- (par catégorie de voiture, CarClasses.luau) et records des spéciales (par
+-- spéciale et par catégorie : Stages.BoardKey).
 local setups: { [string]: CarSetup.Setup } = {}
 local stageBests: { [string]: DrivingSession.StageBest } = {}
 
--- Classements : la spéciale habituelle (par catégorie), et le défi de la semaine.
-local stageBoards: { [string]: { any } } = {}
+-- Classements : les spéciales (par spéciale, puis par catégorie), et le défi de la semaine.
+local stageBoards: { [string]: { [string]: { any } } } = {}
+-- La dernière spéciale courue : son classement (L) et son ralenti.
+local currentStage = Stages.DEFAULT
 local weeklyBoard: any = nil
 
 -- Défi du fantôme : contre qui on roule sur la spéciale. Le choix dure toute
@@ -235,7 +239,7 @@ startReplay = function(which: string)
 		-- Le fantôme de la voiture actuelle a pu être battu depuis le profil.
 		local current = session
 		local ghost = if current and current.ClassId == classId then current.Ghost else nil
-		local best = stageBests[classId]
+		local best = stageBests[Stages.BoardKey(currentStage, classId)]
 		data = (if ghost then ghost.Best else nil) or (if best then best.Ghost else nil)
 		title = "Ton meilleur passage" .. (if best and best.Ms then " · " .. Format.Ms(best.Ms) else "")
 		livery = raceClient:GetLivery()
@@ -245,7 +249,8 @@ startReplay = function(which: string)
 		return
 	end
 	CharacterControls.SetEnabled(false)
-	replay:Start(data, Format.Upper(title .. " · " .. CarClasses.Get(classId).Name), livery, classId)
+	local stageId = if which == "Opponent" then ghostChallenge.StageId else currentStage
+	replay:Start(data, Format.Upper(title .. " · " .. CarClasses.Get(classId).Name), livery, classId, stageId)
 end
 
 -- Garage du paddock (zone violette) : livrée et réglages, voiture en aperçu.
@@ -411,8 +416,10 @@ local function refreshLeaderboard()
 		leaderboard:SetEntries(weeklyBoard.Entries or {}, false)
 	else
 		local classId = drivenClass()
-		leaderboard:SetTitle("CLASSEMENT · " .. Format.Upper(CarClasses.Get(classId).Name))
-		leaderboard:SetEntries(stageBoards[classId] or {}, true, classId)
+		local stage = Stages.Get(currentStage)
+		leaderboard:SetTitle(Format.Upper(stage.Name) .. " · " .. Format.Upper(CarClasses.Get(classId).Name))
+		local boards = stageBoards[stage.Id] or {}
+		leaderboard:SetEntries(boards[classId] or {}, true, classId, stage.Id)
 	end
 end
 
@@ -474,14 +481,15 @@ local function endSession()
 	-- cette session (pas au défi de la semaine : il a son propre classement).
 	local timer, ghost = current.StageTimer, current.Ghost
 	if not current.Weekly then
-		local best: DrivingSession.StageBest = stageBests[current.ClassId] or { Ms = nil, Ghost = nil }
+		local key = Stages.BoardKey(current.StageId, current.ClassId)
+		local best: DrivingSession.StageBest = stageBests[key] or { Ms = nil, Ghost = nil }
 		if timer and timer.BestTime then
 			best.Ms = math.floor((timer.BestTime :: number) * 1000 + 0.5)
 		end
 		if ghost and ghost.Best then
 			best.Ghost = ghost.Best
 		end
-		stageBests[current.ClassId] = best
+		stageBests[key] = best
 	end
 	raceClient:StopSpectating()
 	local hadControl = current.HasControl
@@ -561,6 +569,10 @@ local function startSession(model: Model)
 	-- Réglages et adversaire fantôme de la catégorie de cette voiture.
 	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId))
 	ghostChallenge:SetClass(created.ClassId)
+	-- Sa spéciale : son classement (L), son ralenti, l'adversaire fantôme.
+	currentStage = created.StageId
+	ghostChallenge:SetStage(created.StageId)
+	refreshLeaderboard()
 	applyDrivingUi()
 	-- Le serveur donne le volant dès l'apparition, mais son message a pu
 	-- arriver avant la voiture : on le redemande (sans effet si déjà accordé).
@@ -622,14 +634,19 @@ Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
 	if type(profile) ~= "table" then
 		return
 	end
+	-- Records par spéciale, puis par catégorie.
 	stageBests = {}
 	if type(profile.Stage) == "table" then
-		for classId, record in pairs(profile.Stage) do
-			if CarClasses.Exists(classId) and type(record) == "table" then
-				stageBests[classId] = {
-					Ms = if type(record.Ms) == "number" then record.Ms else nil,
-					Ghost = if type(record.Ghost) == "table" then record.Ghost else nil,
-				}
+		for stageId, records in pairs(profile.Stage) do
+			if Stages.Exists(stageId) and type(records) == "table" then
+				for classId, record in pairs(records) do
+					if CarClasses.Exists(classId) and type(record) == "table" then
+						stageBests[Stages.BoardKey(stageId, classId)] = {
+							Ms = if type(record.Ms) == "number" then record.Ms else nil,
+							Ghost = if type(record.Ghost) == "table" then record.Ghost else nil,
+						}
+					end
+				end
 			end
 		end
 	end
@@ -679,7 +696,8 @@ Remotes.RunValidated.OnClientEvent:Connect(function(result: any)
 	ghostChallenge:OnRunValidated(result)
 end)
 
--- Classements de la spéciale, par catégorie : on affiche celui de sa voiture.
+-- Classements des spéciales, par spéciale et par catégorie : on affiche
+-- celui de sa spéciale et de sa voiture.
 Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 	if type(boards) == "table" then
 		stageBoards = boards

@@ -28,6 +28,7 @@ local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
@@ -43,15 +44,19 @@ local ProgressService = {}
 local lastProgress: { [Player]: Progression.Snapshot } = {}
 
 --[[
-	Palier de médaille par tracé : "stage" pour la spéciale, l'id du circuit
-	sinon. Le meilleur des catégories de voitures (chacune a ses seuils) :
-	changer de voiture ne fait pas regagner l'XP d'une médaille déjà acquise.
+	Palier de médaille par tracé : "stage" pour les spéciales (la meilleure
+	des spéciales : les déblocages demandent « une médaille en spéciale »),
+	l'id du circuit sinon. Le meilleur des catégories de voitures (chacune a
+	ses seuils) : changer de voiture ne fait pas regagner l'XP d'une médaille
+	déjà acquise.
 ]]
 local function medalsOf(profile: ProfileSchema.Profile): { [string]: number }
 	local medals: { [string]: number } = { stage = 0 }
 	for _, class in ipairs(CarClasses.LIST) do
-		local stage = profile.Records[ProfileSchema.StageKey(class.Id)]
-		medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id)))
+		for _, stageId in ipairs(Stages.List()) do
+			local stage = profile.Records[ProfileSchema.StageKey(class.Id, stageId)]
+			medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id, stageId)))
+		end
 		for _, id in ipairs(Tracks.List()) do
 			local circuit = Tracks.Get(id)
 			if circuit then

@@ -10,16 +10,17 @@
 	fait que les garder : profil (ProfileStore) et classements sauvegardés
 	(OrderedDataStore, un par tracé), complétés par la session (Boards.luau).
 
-	PAR CATÉGORIE DE VOITURE (CarClasses.luau) : chaque catégorie a ses
-	records et ses classements -- une Rally4 ne se mesure pas à un Groupe B.
-	La Rally2 garde les clés d'avant les catégories.
+	PAR SPÉCIALE ET PAR CATÉGORIE DE VOITURE (Stages.luau, CarClasses.luau) :
+	chaque spéciale a ses records et ses classements dans chaque catégorie --
+	une Rally4 ne se mesure pas à un Groupe B. La forêt en Rally2 garde les
+	clés d'avant les catégories et les spéciales.
 
 	Un temps qui prend la tête d'un classement s'annonce à tout le serveur
 	(AnnounceService), une fois ce classement lu au moins une fois.
 
 	C'est aussi ce service qui envoie au joueur son profil à l'arrivée
-	(ProfileLoaded : records et fantômes par catégorie, réglages, livrée,
-	statistiques).
+	(ProfileLoaded : records et fantômes par spéciale et par catégorie,
+	réglages, livrée, statistiques).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -27,6 +28,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
@@ -75,46 +77,57 @@ local function sessionOf(session: Session, key: string): { [number]: number }
 end
 
 --------------------------------------------------------------------------------
--- Classement de la spéciale (un par catégorie)
+-- Classements des spéciales (un par spéciale et par catégorie)
 --------------------------------------------------------------------------------
 
-local sessionBest: Session = {} -- par catégorie
-local leaderboards: { [string]: { Boards.Entry } } = {} -- par catégorie
+local sessionBest: Session = {} -- par Stages.BoardKey
+-- Par spéciale, puis par catégorie (ce que reçoit le client).
+local leaderboards: { [string]: { [string]: { Boards.Entry } } } = {}
 
-local function leaderboardStore(classId: string): OrderedDataStore?
-	return Stores.Ordered(LEADERBOARD_STORE_PREFIX .. ProfileSchema.StageKey(classId))
+local function leaderboardStore(classId: string, stageId: string): OrderedDataStore?
+	return Stores.Ordered(LEADERBOARD_STORE_PREFIX .. ProfileSchema.StageKey(classId, stageId))
 end
 
-local function refreshLeaderboard(classId: string)
-	leaderboards[classId] = Boards.Merge(leaderboardStore(classId), sessionOf(sessionBest, classId), LEADERBOARD_SIZE, "classement")
+local function boardsOf(stageId: string): { [string]: { Boards.Entry } }
+	local boards = leaderboards[stageId]
+	if not boards then
+		boards = {}
+		leaderboards[stageId] = boards
+	end
+	return boards
+end
+
+local function refreshLeaderboard(classId: string, stageId: string)
+	local session = sessionOf(sessionBest, Stages.BoardKey(stageId, classId))
+	boardsOf(stageId)[classId] = Boards.Merge(leaderboardStore(classId, stageId), session, LEADERBOARD_SIZE, "classement")
 	Remotes.Leaderboard:FireAllClients(leaderboards)
 end
 
--- Catégories où un record vient de tomber : relues ensemble, un peu après.
-local dirtyStage: { [string]: boolean } = {}
+-- Classements où un record vient de tomber : relus ensemble, un peu après.
+local dirtyStage: { [string]: { Stage: string, Class: string } } = {}
 local refreshDirtyStage = Boards.Debounced(2, function()
-	local classes = dirtyStage
+	local boards = dirtyStage
 	dirtyStage = {}
-	for classId in pairs(classes) do
-		refreshLeaderboard(classId)
+	for _, board in pairs(boards) do
+		refreshLeaderboard(board.Class, board.Stage)
 	end
 end)
 
--- Classement de la spéciale tel qu'affiché (top 10), dans une catégorie.
-function RecordService.GetLeaderboard(classId: string): { Boards.Entry }
-	return leaderboards[classId] or {}
+-- Classement d'une spéciale tel qu'affiché (top 10), dans une catégorie.
+function RecordService.GetLeaderboard(classId: string, stageId: string): { Boards.Entry }
+	return boardsOf(stageId)[classId] or {}
 end
 
--- Meilleurs temps de la spéciale connus dans la session (UserId -> ms).
-function RecordService.GetSessionBest(classId: string): { [number]: number }
-	return sessionOf(sessionBest, classId)
+-- Meilleurs temps d'une spéciale connus dans la session (UserId -> ms).
+function RecordService.GetSessionBest(classId: string, stageId: string): { [number]: number }
+	return sessionOf(sessionBest, Stages.BoardKey(stageId, classId))
 end
 
 -- Temps de la spéciale du classement sauvegardé, à partir de `belowMs` en
 -- descendant (les rivaux juste devant un pilote hors du top 10).
-function RecordService.GetTimesBelow(classId: string, belowMs: number, count: number): { { UserId: number, Ms: number } }
+function RecordService.GetTimesBelow(classId: string, belowMs: number, count: number, stageId: string): { { UserId: number, Ms: number } }
 	local list = {}
-	local store = leaderboardStore(classId)
+	local store = leaderboardStore(classId, stageId)
 	if not store then
 		return list
 	end
@@ -133,33 +146,34 @@ function RecordService.GetTimesBelow(classId: string, belowMs: number, count: nu
 	return list
 end
 
--- Record de la spéciale d'un joueur connecté, dans une catégorie.
-function RecordService.GetStageRecord(player: Player, classId: string): ProfileSchema.StageRecord?
+-- Record d'une spéciale d'un joueur connecté, dans une catégorie.
+function RecordService.GetStageRecord(player: Player, classId: string, stageId: string): ProfileSchema.StageRecord?
 	local profile = ProfileStore.Get(player)
-	return if profile then profile.Records[ProfileSchema.StageKey(classId)] else nil
+	return if profile then profile.Records[ProfileSchema.StageKey(classId, stageId)] else nil
 end
 
 export type StageResult = { IsBest: boolean, PreviousMs: number? }
 
--- Temps validé de la spéciale : record perso et classement de la catégorie.
-function RecordService.StageFinish(player: Player, ms: number, classId: string): StageResult?
+-- Temps validé d'une spéciale : record perso et classement de la catégorie.
+function RecordService.StageFinish(player: Player, ms: number, classId: string, stageId: string): StageResult?
 	local profile = ProfileStore.Get(player)
 	if not profile then
 		return nil
 	end
-	local key = ProfileSchema.StageKey(classId)
+	local key = ProfileSchema.StageKey(classId, stageId)
 	local previous = profile.Records[key]
 	local isBest = previous == nil or ms < previous.Ms
 	if isBest then
-		if beatsFirst(leaderboards[classId], ms) then
+		if beatsFirst(boardsOf(stageId)[classId], ms) then
 			AnnounceService.Send("Record", player.DisplayName, string.format(
-				"bat le record de la spéciale en %s : %s",
+				"bat le record de la spéciale %s en %s : %s",
+				Stages.Get(stageId).Name,
 				CarClasses.Get(classId).Name,
 				Format.Ms(ms)
 			))
 		end
 		profile.Records[key] = { Ms = ms, Ghost = nil } -- le fantôme suit (GhostService)
-		sessionOf(sessionBest, classId)[player.UserId] = ms
+		sessionOf(sessionBest, Stages.BoardKey(stageId, classId))[player.UserId] = ms
 		ProfileStore.Update(player.UserId, "record", function(stored)
 			local current = stored.Records[key]
 			if current and current.Ms <= ms then
@@ -168,8 +182,8 @@ function RecordService.StageFinish(player: Player, ms: number, classId: string):
 			stored.Records[key] = { Ms = ms, Ghost = nil }
 			return true
 		end)
-		Boards.Set(leaderboardStore(classId), player.UserId, ms, "classement")
-		dirtyStage[classId] = true
+		Boards.Set(leaderboardStore(classId, stageId), player.UserId, ms, "classement")
+		dirtyStage[Stages.BoardKey(stageId, classId)] = { Stage = stageId, Class = classId }
 		refreshDirtyStage()
 	end
 	return { IsBest = isBest, PreviousMs = if previous then previous.Ms else nil }
@@ -308,13 +322,18 @@ end
 function RecordService.Start()
 	ProfileStore.OnLoaded(function(player, profile)
 		Boards.RememberName(player)
+		-- Records par spéciale, puis par catégorie.
 		local stage = {}
-		for _, class in ipairs(CarClasses.LIST) do
-			local record = profile.Records[ProfileSchema.StageKey(class.Id)]
-			if record then
-				sessionOf(sessionBest, class.Id)[player.UserId] = record.Ms
-				stage[class.Id] = { Ms = record.Ms, Ghost = record.Ghost }
+		for _, stageId in ipairs(Stages.List()) do
+			local records = {}
+			for _, class in ipairs(CarClasses.LIST) do
+				local record = profile.Records[ProfileSchema.StageKey(class.Id, stageId)]
+				if record then
+					sessionOf(sessionBest, Stages.BoardKey(stageId, class.Id))[player.UserId] = record.Ms
+					records[class.Id] = { Ms = record.Ms, Ghost = record.Ghost }
+				end
 			end
+			stage[stageId] = records
 		end
 		for key, ms in pairs(profile.Laps) do
 			sessionOf(sessionLaps, key)[player.UserId] = ms
@@ -344,7 +363,23 @@ function RecordService.Start()
 			end
 		end)
 	end
-	rotate(refreshLeaderboard, 5, LEADERBOARD_ROTATE)
+	-- Classements des spéciales : chaque spéciale dans chaque catégorie, à tour de rôle.
+	task.spawn(function()
+		local boards = {}
+		for _, stageId in ipairs(Stages.List()) do
+			for _, class in ipairs(CarClasses.LIST) do
+				table.insert(boards, { Stage = stageId, Class = class.Id })
+			end
+		end
+		local index = 0
+		local firstPass = #boards
+		while true do
+			index = index % #boards + 1
+			refreshLeaderboard(boards[index].Class, boards[index].Stage)
+			firstPass -= 1
+			task.wait(if firstPass > 0 then 5 else LEADERBOARD_ROTATE)
+		end
+	end)
 	rotate(refreshLapBoards, 20, LAP_BOARD_ROTATE)
 end
 

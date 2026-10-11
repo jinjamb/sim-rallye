@@ -17,7 +17,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
@@ -25,11 +25,13 @@ local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 
 local ProfileSchema = {}
 
--- Clé de la spéciale dans les records du profil (Rally2 ; StageKey pour une catégorie).
-ProfileSchema.STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
+-- Clé de la spéciale par défaut dans les records du profil (défi de la semaine).
+ProfileSchema.STAGE_ID = Stages.Get(Stages.DEFAULT).RecordId
 
-function ProfileSchema.StageKey(classId: string): string
-	return CarClasses.RecordKey(ProfileSchema.STAGE_ID, classId)
+-- Clé d'un record : la spéciale (son RecordId, Stages.luau ; la spéciale par
+-- défaut sans argument) et la catégorie de voiture.
+function ProfileSchema.StageKey(classId: string, stageId: string?): string
+	return CarClasses.RecordKey(Stages.Get(stageId).RecordId, classId)
 end
 
 -- Clé d'un circuit dans les records du tour (Circuit.Key, par catégorie).

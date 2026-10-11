@@ -51,10 +51,11 @@ local MAIN_SIZES = { 40, 26, 21 }
 local DETAIL_SIZES = { 22, 17, 15 }
 local LINE_TRANSPARENCY = { 0, 0.35, 0.55 }
 
-function Copilot.new(car: CarClass.Car, playerGui: Instance): Copilot
+-- `stageId` : la spéciale courue (Stages.luau) ; ses notes.
+function Copilot.new(car: CarClass.Car, playerGui: Instance, stageId: string?): Copilot
 	local self = (setmetatable({}, Copilot) :: any) :: Copilot
 	self.Car = car
-	self.Notes = Pacenotes.Generate()
+	self.Notes = Pacenotes.Generate(stageId)
 	self.NextIndex = 1
 	self.Called = {}
 	self.LastProgress = nil

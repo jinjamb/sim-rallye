@@ -14,7 +14,9 @@
 	SEUILS EN VITESSE MOYENNE (km/h) plutôt qu'en temps : ils suivent la longueur
 	du tracé. Si le tracé change, ses temps repartent de zéro (RecordService) et
 	ses seuils se recalculent d'eux-mêmes.
-	Spéciale : sur le parcours chronométré (départ -> arrivée).
+	Spéciale : sur le parcours chronométré (départ -> arrivée), avec les
+	vitesses de chaque spéciale (Stages.luau, MedalSpeeds : la neige est plus
+	lente que la forêt).
 	Circuit : sur un tour SANS joker (Circuit.Length) ; le tour du joker, plus
 	long, rapporte donc rarement une médaille, comme il se doit.
 
@@ -28,7 +30,7 @@
 	platine pour les meilleurs pilotes du jeu.
 ]]
 
-local StageTrack = require(script.Parent.Parent.Stage.StageTrack)
+local Stages = require(script.Parent.Parent.Stage.Stages)
 local Units = require(script.Parent.Parent.Util.Units)
 local CarClasses = require(script.Parent.Parent.Vehicle.CarClasses)
 
@@ -50,8 +52,7 @@ Medals.TIERS = {
 	{ Name = "Platine", Short = "PLATINE", Title = "MÉDAILLE DE PLATINE", Color = Color3.fromRGB(130, 225, 235) },
 } :: { Tier }
 
--- Vitesses moyennes visées (km/h), un palier par case.
-local STAGE_SPEEDS = { 55, 70, 82, 92 }
+-- Vitesses moyennes visées (km/h), un palier par case. Spéciales : Stages.luau.
 local DEFAULT_CIRCUIT_SPEEDS = { 50, 62, 72, 80 }
 local CIRCUIT_SPEEDS: { [string]: { number } } = {
 	ajoncs = { 50, 62, 72, 80 },
@@ -76,18 +77,21 @@ end
 
 local stageCache: { [string]: { number } } = {}
 
--- Longueur du parcours chronométré de la spéciale (studs).
-function Medals.StageDistance(): number
-	return StageTrack.GetFinishDistance() - StageTrack.START_DISTANCE
+-- Longueur du parcours chronométré d'une spéciale (studs ; la spéciale par défaut sans argument).
+function Medals.StageDistance(stageId: string?): number
+	local track = Stages.Get(stageId)
+	return track.GetFinishDistance() - track.START_DISTANCE
 end
 
--- `classId` : CarClasses.luau (la Rally2 sans argument).
-function Medals.ForStage(classId: string?): { number }
+-- `classId` : CarClasses.luau (la Rally2 sans argument) ; `stageId` : Stages.luau.
+function Medals.ForStage(classId: string?, stageId: string?): { number }
 	local class = CarClasses.Get(classId)
-	local cached = stageCache[class.Id]
+	local track = Stages.Get(stageId)
+	local key = track.Id .. "|" .. class.Id
+	local cached = stageCache[key]
 	if not cached then
-		cached = thresholds(Medals.StageDistance(), STAGE_SPEEDS, class.MedalScale)
-		stageCache[class.Id] = cached
+		cached = thresholds(Medals.StageDistance(track.Id), track.MedalSpeeds, class.MedalScale)
+		stageCache[key] = cached
 	end
 	return cached
 end
