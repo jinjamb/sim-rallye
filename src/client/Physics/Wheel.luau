@@ -15,7 +15,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
-local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
+local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 
 local CAR_COLLISION_GROUP = "Cars" -- voir CarService.server.luau
 
@@ -27,6 +27,7 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	Chassis: BasePart,
 	IsFront: boolean,
 	IsLeft: boolean,
+	TireGrip: number, -- adhérence des pneus de la catégorie (CarClasses.luau)
 
 	-- Réglages
 	SuspensionLength: number,
@@ -151,6 +152,7 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.Chassis = chassis
 	self.IsFront = isFront
 	self.IsLeft = isLeft
+	self.TireGrip = 1
 
 	self.SuspensionLength = 1.6
 
@@ -323,7 +325,12 @@ end
 function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.SteerAngle = steerAngle
 
+	-- La fumée de glisse est faite par TireSmoke.luau (colorée, vue par tous) :
+	-- l'émetteur "Smoke" du gabarit reste éteint.
 	local smoke = self.Attachment:FindFirstChild("Smoke") :: ParticleEmitter?
+	if smoke and smoke.Enabled then
+		smoke.Enabled = false
+	end
 
 	if not self.IsGrounded then
 		self.NormalForce = 0
@@ -333,9 +340,6 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 		self.LongSlipNorm = 0
 		self.LatSlipNorm = 0
 		self:_applyResistiveTorque(dt, brakeForce * self.Radius)
-		if smoke then
-			smoke.Enabled = false
-		end
 		return
 	end
 
@@ -361,7 +365,7 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongitudinalVelocity = longitudinalVelocity
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
-	local mu = self.Surface.Grip * Surfaces.GripScale
+	local mu = self.Surface.Grip * Surfaces.GripScale * self.TireGrip
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 
@@ -437,19 +441,6 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	-- f) Frein et résistance au roulement, en dernier (voir _applyResistiveTorque).
 	local resistiveTorque = (brakeForce + normalForce * self.Surface.RollingResistance) * self.Radius
 	self:_applyResistiveTorque(dt, resistiveTorque)
-
-	-- Roue bloquée : le frein l'a arrêtée alors que la voiture avance encore.
-	local isLocked = brakeForce > 0
-		and math.abs(self.AngularVelocity) < 0.5
-		and math.abs(longitudinalVelocity) > 2
-
-	-- 5. EFFETS VISUELS (Patinage / Drift)
-	if smoke then
-		-- Le pneu sature : il glisse, peu importe dans quelle direction.
-		local isSliding = self.FrictionUsage >= 1 and math.abs(combinedSlip) > 1
-		smoke.Enabled = isSliding or isLocked
-		smoke.Color = ColorSequence.new(self.Surface.DustColor)
-	end
 end
 
 -- Phase 4 : la jante suit le débattement, le braquage et la rotation.

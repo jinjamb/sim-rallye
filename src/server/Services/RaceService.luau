@@ -50,7 +50,7 @@
 	dépassé d'un tour reste derrière : le prendre d'un tour n'est pas un
 	dépassement). Le nouvel ordre doit tenir OVERTAKE_CONFIRM secondes (pas de
 	points pour deux voitures qui se chamaillent sur la ligne). Ils rapportent
-	des points de style (RecordService.AddStyle, progression), au plus
+	des points de style (StyleService.Add, progression), au plus
 	MAX_PASSES_PER_PAIR fois par paire et par manche : deux amis qui
 	s'échangent la place ne font pas fortune.
 
@@ -71,9 +71,15 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
-local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local CarService = require(script.Parent.CarService)
 local RecordService = require(script.Parent.RecordService)
+local StyleService = require(script.Parent.StyleService)
+local ChallengeService = require(script.Parent.ChallengeService)
+local EconomyService = require(script.Parent.EconomyService)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 
 local RaceService = {}
 
@@ -193,6 +199,9 @@ type Race = {
 	Laps: number,
 	Format: Format,
 	Contacts: boolean,
+	-- Catégorie de voiture de la course (CarClasses.luau) : tout le monde la
+	-- conduit (prêtée à qui ne l'a pas), records du tour de cette catégorie.
+	CarClass: string,
 	HostUserId: number,
 	Members: { Member },
 	State: RaceState,
@@ -260,6 +269,7 @@ local function lobbyList()
 				Laps = race.Laps,
 				Format = race.Format,
 				Contacts = race.Contacts,
+				CarClass = race.CarClass,
 				Host = hostName,
 				Count = #race.Members,
 				Max = MAX_PLAYERS,
@@ -286,6 +296,7 @@ local function raceSnapshot(race: Race)
 		Laps = race.Laps,
 		Format = race.Format,
 		Contacts = race.Contacts,
+		CarClass = race.CarClass,
 		HostUserId = race.HostUserId,
 		State = race.State,
 		Round = race.Round,
@@ -457,6 +468,22 @@ end
 -- Cérémonie du podium : (pilotes de la course, trois premiers arrivés).
 RaceService.PodiumHandler = function(_players: { Player }, _podium: { ResultRow }) end
 
+-- Crédits d'une arrivée en finale (ou course simple) : seul, une petite somme.
+local function raceCredits(position: number, counts: boolean): number
+	local rewards = Credits.REWARDS
+	if not counts then
+		return rewards.SoloRace
+	end
+	local amount = rewards.RaceFinish
+	if position <= 3 then
+		amount += rewards.RacePodium
+	end
+	if position == 1 then
+		amount += rewards.RaceWin
+	end
+	return amount
+end
+
 local function endRound(race: Race)
 	if race.State ~= "Racing" then
 		return
@@ -486,6 +513,9 @@ local function endRound(race: Race)
 		table.insert(order, runner.UserId)
 		if final and counts and runner.Player.Parent then
 			RecordService.AddRaceResult(runner.Player, if runner.Finished then position else 0, points)
+		end
+		if final and runner.Finished and runner.Player.Parent then
+			EconomyService.Earn(runner.Player, raceCredits(position, counts), "Course terminée")
 		end
 	end
 	race.LastResults = rows
@@ -539,7 +569,7 @@ end
 local function finishRunner(race: Race, runner: Runner, crossing: number)
 	runner.Finished = true
 	if runner.Player.Parent then
-		RecordService.DailyEvent(runner.Player, "RaceFinished", 1)
+		ChallengeService.DailyEvent(runner.Player, "RaceFinished", 1)
 	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then
@@ -698,6 +728,7 @@ startRound = function(race: Race, round: number)
 				RaceId = race.Id,
 				Contacts = race.Contacts,
 				Held = true,
+				CarClass = race.CarClass,
 			})
 			pending -= 1
 			-- Parti de la course pendant le chargement : sa voiture n'a rien à faire sur la grille.
@@ -841,6 +872,12 @@ local function addMember(race: Race, player: Player, pinned: boolean)
 	raceOf[player] = race
 end
 
+-- La voiture choisie par l'hôte : celle de la course, au départ.
+local function hostClass(host: Player): string
+	local chosen = EconomyService.Equipped(host, "Car")
+	return CarClasses.Get(if chosen then chosen.CarClass else nil).Id
+end
+
 local function createRace(padId: string, circuit: Circuit.Circuit, host: Player): Race
 	local id = tostring(nextRaceId)
 	nextRaceId += 1
@@ -852,6 +889,7 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Laps = circuit.DefaultLaps,
 		Format = "Sprint",
 		Contacts = true,
+		CarClass = hostClass(host),
 		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
@@ -1144,6 +1182,13 @@ local function onSettings(player: Player, payload: any)
 	if type(payload.Contacts) == "boolean" then
 		race.Contacts = payload.Contacts
 	end
+	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
+	if CarClasses.Exists(payload.CarClass) then
+		local item = Catalog.CarItem(payload.CarClass)
+		if item and EconomyService.Owns(player, item.Id) then
+			race.CarClass = payload.CarClass
+		end
+	end
 	sendRaceState(race)
 	broadcastLobby()
 end
@@ -1285,15 +1330,15 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		local medal: number? = nil
 		if runner.Laps > 1 then
 			local lapMs = math.floor(lapTime * 1000 + 0.5)
-			local limits = Medals.ForCircuit(race.TrackId, length)
-			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key), limits)
-			record = RecordService.SubmitLap(player, circuit.Key, lapMs)
+			local limits = Medals.ForCircuit(race.TrackId, length, race.CarClass)
+			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key, race.CarClass), limits)
+			record = RecordService.SubmitLap(player, circuit.Key, race.CarClass, lapMs)
 			local after = Medals.TierOf(lapMs, limits)
 			if record and after > before then
 				medal = after -- nouvelle médaille sur ce circuit
 			end
 			if RunService:IsStudio() then
-				print(string.format("[Médailles] %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
+				print(string.format("[Médailles] %s en %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, race.CarClass, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
 			end
 		end
 		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record, Medal = medal })
@@ -1342,10 +1387,10 @@ local function checkOvertakes(race: Race, now: number)
 					state.PassesB += 1
 				end
 				if points > 0 and passer.Player.Parent then
-					RecordService.AddStyle(passer.Player, points)
+					StyleService.Add(passer.Player, points)
 					-- Défi du jour : dépassements dans UNE course.
 					passer.Overtakes += 1
-					RecordService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
+					ChallengeService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
 				end
 				sendEvent(race, passer.Player, "Overtake", { Name = passed.Name, Points = points })
 				sendEvent(race, passed.Player, "Overtaken", { Name = passer.Name })

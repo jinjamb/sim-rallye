@@ -30,7 +30,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 
 local LiveryPainter = {}
 

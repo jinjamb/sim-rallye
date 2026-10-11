@@ -25,7 +25,9 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local UserInputService = game:GetService("UserInputService")
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
-local RaceUi = require(script.Parent.RaceUi)
+local Widgets = require(script.Parent.Parent.UI.Widgets)
+local RaceTypes = require(script.Parent.RaceTypes)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Minimap = require(script.Parent.Minimap)
 
@@ -76,7 +78,7 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 	ResultsTitle: TextLabel,
 	ResultsRows: Frame,
 	ResultsFooter: TextLabel,
-	ResultsData: RaceUi.Results?,
+	ResultsData: RaceTypes.Results?,
 	RematchButton: TextButton,
 	RematchVoted: boolean,
 
@@ -89,8 +91,8 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 	LobbyLabel: TextLabel,
 	PodiumUntil: number,
 
-	Race: RaceUi.RaceSnapshot?,
-	Live: RaceUi.LivePayload?,
+	Race: RaceTypes.RaceSnapshot?,
+	Live: RaceTypes.LivePayload?,
 }
 
 local INFO_WIDTH, INFO_HEIGHT = 470, 108
@@ -137,18 +139,18 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.Scale = scale
 
 	-- Panneau principal ----------------------------------------------------------
-	local info = RaceUi.Panel(root)
+	local info = Widgets.Panel(root)
 	info.AnchorPoint = Vector2.new(0.5, 0)
 	info.Position = UDim2.new(0.5, 0, 0, 12)
 	info.Size = UDim2.fromOffset(INFO_WIDTH, INFO_HEIGHT)
 	self.Info = info
 
-	self.RoundLabel = RaceUi.Label(info, "", 12, Enum.Font.GothamBold, RaceUi.COLOR_DIM)
+	self.RoundLabel = Widgets.Label(info, "", 12, Enum.Font.GothamBold, Widgets.COLOR_DIM)
 	self.RoundLabel.Position = UDim2.fromOffset(14, 6)
 	self.RoundLabel.Size = UDim2.new(1, -28, 0, 16)
 
 	-- Position : la case jaune des retransmissions.
-	self.PositionLabel = RaceUi.Label(info, "", 50, Enum.Font.GothamBlack, Theme.ON_ACCENT)
+	self.PositionLabel = Widgets.Label(info, "", 50, Enum.Font.GothamBlack, Theme.ON_ACCENT)
 	self.PositionLabel.RichText = true
 	self.PositionLabel.BackgroundTransparency = 0
 	self.PositionLabel.BackgroundColor3 = Theme.ACCENT
@@ -157,37 +159,37 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.PositionLabel.Size = UDim2.fromOffset(126, 56)
 	Theme.Corner(self.PositionLabel, 2)
 
-	self.LapLabel = RaceUi.Label(info, "", 15, Enum.Font.GothamBold, RaceUi.COLOR_DIM)
+	self.LapLabel = Widgets.Label(info, "", 15, Enum.Font.GothamBold, Widgets.COLOR_DIM)
 	self.LapLabel.Position = UDim2.fromOffset(150, 24)
 	self.LapLabel.Size = UDim2.fromOffset(170, 18)
 
-	self.LapTimeLabel = RaceUi.Label(info, "", 34, Enum.Font.RobotoMono)
+	self.LapTimeLabel = Widgets.Label(info, "", 34, Enum.Font.RobotoMono)
 	self.LapTimeLabel.Position = UDim2.fromOffset(150, 42)
 	self.LapTimeLabel.Size = UDim2.fromOffset(170, 36)
 
 	local function chip(y: number, height: number): TextLabel
-		local label = RaceUi.Label(info, "", 12, Enum.Font.GothamBold, RaceUi.COLOR_PANEL)
+		local label = Widgets.Label(info, "", 12, Enum.Font.GothamBold, Widgets.COLOR_PANEL)
 		label.TextXAlignment = Enum.TextXAlignment.Center
 		label.BackgroundTransparency = 0
 		label.Position = UDim2.fromOffset(INFO_WIDTH - 140, y)
 		label.Size = UDim2.fromOffset(126, height)
-		RaceUi.Corner(label, 4)
+		Widgets.Corner(label, 4)
 		return label
 	end
 	self.JokerChip = chip(26, 24)
 	self.PenaltyChip = chip(56, 20)
-	self.PenaltyChip.BackgroundColor3 = RaceUi.COLOR_RED
+	self.PenaltyChip.BackgroundColor3 = Widgets.COLOR_RED
 
-	self.BottomLabel = RaceUi.Label(info, "", 14, Enum.Font.RobotoMono, RaceUi.COLOR_DIM)
+	self.BottomLabel = Widgets.Label(info, "", 14, Enum.Font.RobotoMono, Widgets.COLOR_DIM)
 	self.BottomLabel.Position = UDim2.fromOffset(14, 84)
 	self.BottomLabel.Size = UDim2.new(1, -28, 0, 18)
 
 	-- Classement ------------------------------------------------------------------
-	local standings = RaceUi.Panel(root, 0.3)
+	local standings = Widgets.Panel(root, 0.3)
 	standings.Position = UDim2.fromOffset(16, 64)
 	standings.Size = UDim2.fromOffset(STANDINGS_WIDTH, 34 + MAX_ROWS * ROW_HEIGHT + 8)
 	self.Standings = standings
-	local header = RaceUi.Label(standings, "CLASSEMENT", 16, Enum.Font.GothamBlack)
+	local header = Widgets.Label(standings, "CLASSEMENT", 16, Enum.Font.GothamBlack)
 	header.Position = UDim2.fromOffset(12, 4)
 	header.Size = UDim2.new(1, -24, 0, 20)
 	local headerChecker = Theme.Checker(standings, STANDINGS_WIDTH, 3, 2)
@@ -195,7 +197,7 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	headerChecker.BackgroundTransparency = 0.4
 	self.StandingRows = {}
 	for i = 1, MAX_ROWS do
-		local row = RaceUi.Label(standings, "", 15, Enum.Font.RobotoMono)
+		local row = Widgets.Label(standings, "", 15, Enum.Font.RobotoMono)
 		row.Position = UDim2.fromOffset(8, 32 + (i - 1) * ROW_HEIGHT)
 		row.Size = UDim2.new(1, -16, 0, ROW_HEIGHT)
 		row.RichText = true
@@ -220,7 +222,7 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.MinimapTrack = nil
 
 	-- Feux de départ ---------------------------------------------------------------
-	local lights = RaceUi.Panel(root, 0.15)
+	local lights = Widgets.Panel(root, 0.15)
 	lights.AnchorPoint = Vector2.new(0.5, 0)
 	lights.Position = UDim2.new(0.5, 0, 0, 136)
 	lights.Size = UDim2.fromOffset(5 * (LIGHT_SIZE + 12) + 12, LIGHT_SIZE + 24)
@@ -233,13 +235,13 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 		dot.Size = UDim2.fromOffset(LIGHT_SIZE, LIGHT_SIZE)
 		dot.BackgroundColor3 = COLOR_LIGHT_OFF
 		dot.BorderSizePixel = 0
-		RaceUi.Corner(dot, LIGHT_SIZE)
+		Widgets.Corner(dot, LIGHT_SIZE)
 		dot.Parent = lights
 		self.LightDots[i] = dot
 	end
 
 	-- Message ---------------------------------------------------------------------
-	local message = RaceUi.Label(root, "", 36, Enum.Font.GothamBlack)
+	local message = Widgets.Label(root, "", 36, Enum.Font.GothamBlack)
 	message.AnchorPoint = Vector2.new(0.5, 0.5)
 	message.Position = UDim2.fromScale(0.5, 0.36)
 	message.Size = UDim2.fromOffset(900, 50)
@@ -254,7 +256,7 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.Message = message
 
 	-- Résultats --------------------------------------------------------------------
-	local results = RaceUi.Panel(root, 0.08)
+	local results = Widgets.Panel(root, 0.08)
 	results.AnchorPoint = Vector2.new(0.5, 0.5)
 	results.Position = UDim2.fromScale(0.5, 0.52)
 	results.Size = UDim2.fromOffset(560, 80 + MAX_ROWS * 30)
@@ -263,7 +265,7 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	-- Tableau des résultats : damier en tête, titre en capitales condensées.
 	local resultsChecker = Theme.Checker(results, 600, 5, 2)
 	resultsChecker.BackgroundTransparency = 0.2
-	self.ResultsTitle = RaceUi.Label(results, "", 24, Enum.Font.GothamBlack)
+	self.ResultsTitle = Widgets.Label(results, "", 24, Enum.Font.GothamBlack)
 	self.ResultsTitle.Position = UDim2.fromOffset(16, 12)
 	self.ResultsTitle.Size = UDim2.new(1, -32, 0, 28)
 	local rows = Instance.new("Frame")
@@ -272,32 +274,32 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	rows.Size = UDim2.new(1, -32, 0, MAX_ROWS * 30)
 	rows.Parent = results
 	self.ResultsRows = rows
-	self.ResultsFooter = RaceUi.Label(results, "", 13, Enum.Font.GothamMedium, RaceUi.COLOR_DIM)
+	self.ResultsFooter = Widgets.Label(results, "", 13, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
 	self.ResultsFooter.Position = UDim2.new(0, 16, 1, -34)
 	self.ResultsFooter.Size = UDim2.new(1, -220, 0, 28)
 	self.ResultsFooter.TextWrapped = true
 	self.ResultsData = nil
 	-- Revanche : la salle reste ouverte pour ceux qui votent (RaceService).
-	local rematch = RaceUi.Button(results, "REVANCHE", function()
+	local rematch = Widgets.Button(results, "REVANCHE", function()
 		callbacks.Rematch()
 	end)
 	rematch.AnchorPoint = Vector2.new(1, 1)
 	rematch.Position = UDim2.new(1, -16, 1, -10)
 	rematch.Size = UDim2.fromOffset(190, 34)
 	rematch.TextSize = 16
-	RaceUi.Primary(rematch)
+	Widgets.Primary(rematch)
 	rematch.Visible = false
 	self.RematchButton = rematch
 	self.RematchVoted = false
 
 	-- Salle d'attente (on est dans la zone d'un circuit, au paddock) -------------------
-	local banner = RaceUi.Panel(root, 0.15)
+	local banner = Widgets.Panel(root, 0.15)
 	banner.AnchorPoint = Vector2.new(0.5, 0)
 	banner.Position = UDim2.new(0.5, 0, 0, 12)
 	banner.Size = UDim2.fromOffset(560, 62)
 	banner.Visible = false
 	self.LobbyBanner = banner
-	local lobbyLabel = RaceUi.Label(banner, "", 18, Enum.Font.GothamBold)
+	local lobbyLabel = Widgets.Label(banner, "", 18, Enum.Font.GothamBold)
 	lobbyLabel.RichText = true
 	lobbyLabel.TextXAlignment = Enum.TextXAlignment.Center
 	lobbyLabel.Position = UDim2.fromOffset(12, 0)
@@ -305,13 +307,13 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.LobbyLabel = lobbyLabel
 
 	-- Spectateur ------------------------------------------------------------------
-	local bar = RaceUi.Panel(root, 0.2)
+	local bar = Widgets.Panel(root, 0.2)
 	bar.AnchorPoint = Vector2.new(0.5, 1)
 	bar.Position = UDim2.new(0.5, 0, 1, -20)
 	bar.Size = UDim2.fromOffset(470, 48)
 	bar.Visible = false
 	self.SpectateBar = bar
-	self.SpectateLabel = RaceUi.Label(bar, "", 15, Enum.Font.GothamBold)
+	self.SpectateLabel = Widgets.Label(bar, "", 15, Enum.Font.GothamBold)
 	self.SpectateLabel.Position = UDim2.fromOffset(14, 0)
 	self.SpectateLabel.Size = UDim2.new(1, -200, 1, 0)
 	local buttons = Instance.new("Frame")
@@ -321,22 +323,22 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	buttons.Size = UDim2.fromOffset(180, 34)
 	buttons.Parent = bar
 	self.SpectateButtons = buttons
-	local previous = RaceUi.Button(buttons, "◀", function()
+	local previous = Widgets.Button(buttons, "◀", function()
 		callbacks.SpectateNext(-1)
 	end)
 	previous.Size = UDim2.fromOffset(40, 34)
-	local nextButton = RaceUi.Button(buttons, "▶", function()
+	local nextButton = Widgets.Button(buttons, "▶", function()
 		callbacks.SpectateNext(1)
 	end)
 	nextButton.Position = UDim2.fromOffset(46, 0)
 	nextButton.Size = UDim2.fromOffset(40, 34)
-	local stop = RaceUi.Button(buttons, "RETOUR", function()
+	local stop = Widgets.Button(buttons, "RETOUR", function()
 		callbacks.StopSpectate()
 	end)
 	stop.Position = UDim2.fromOffset(92, 0)
 	stop.Size = UDim2.fromOffset(88, 34)
 	stop.TextSize = 12
-	local watch = RaceUi.Button(bar, "REGARDER LA COURSE (V)", function()
+	local watch = Widgets.Button(bar, "REGARDER LA COURSE (V)", function()
 		callbacks.Spectate()
 	end)
 	watch.AnchorPoint = Vector2.new(1, 0.5)
@@ -394,7 +396,7 @@ function RaceHud:_gantryLights(trackId: string): { BasePart }
 end
 
 -- La course du joueur (nil : pas de course, HUD masqué).
-function RaceHud:SetRace(race: RaceUi.RaceSnapshot?)
+function RaceHud:SetRace(race: RaceTypes.RaceSnapshot?)
 	self.Race = race
 	self.Gui.Enabled = race ~= nil or os.clock() < self.PodiumUntil
 	if not race then
@@ -419,7 +421,7 @@ function RaceHud:SetRace(race: RaceUi.RaceSnapshot?)
 	end
 	if race.State == "Grid" then
 		self:HideResults()
-		self:ShowMessage("MISE EN GRILLE…", RaceUi.COLOR_TEXT, 3)
+		self:ShowMessage("MISE EN GRILLE…", Widgets.COLOR_TEXT, 3)
 	end
 	if self.MinimapTrack ~= race.TrackId then
 		local existing = self.Minimap
@@ -432,7 +434,7 @@ function RaceHud:SetRace(race: RaceUi.RaceSnapshot?)
 	end
 end
 
-function RaceHud:SetLive(payload: RaceUi.LivePayload)
+function RaceHud:SetLive(payload: RaceTypes.LivePayload)
 	local race = self.Race
 	if race and payload.Id == race.Id then
 		self.Live = payload
@@ -441,12 +443,12 @@ end
 
 function RaceHud:ShowMessage(text: string, color: Color3?, duration: number?)
 	self.Message.Text = text
-	self.Message.TextColor3 = color or RaceUi.COLOR_TEXT
+	self.Message.TextColor3 = color or Widgets.COLOR_TEXT
 	self.Message.Visible = true
 	self.MessageUntil = os.clock() + (duration or MESSAGE_TIME)
 end
 
-function RaceHud:ShowResults(results: RaceUi.Results)
+function RaceHud:ShowResults(results: RaceTypes.Results)
 	self.ResultsData = results
 	local trackName = ""
 	local circuit = Tracks.Get(results.TrackId)
@@ -461,7 +463,7 @@ function RaceHud:ShowResults(results: RaceUi.Results)
 		if index > MAX_ROWS then
 			break
 		end
-		local label = RaceUi.Label(self.ResultsRows, "", 16, Enum.Font.RobotoMono)
+		local label = Widgets.Label(self.ResultsRows, "", 16, Enum.Font.RobotoMono)
 		label.Position = UDim2.fromOffset(0, (index - 1) * 30)
 		label.Size = UDim2.new(1, 0, 0, 28)
 		label.RichText = true
@@ -478,12 +480,12 @@ function RaceHud:ShowResults(results: RaceUi.Results)
 			name = (if cut then string.sub(name, 1, cut - 1) else name) .. "…"
 		end
 		local padding = string.rep(" ", math.max(0, 15 - (utf8.len(name) or #name)))
-		local timeText = if row.Dnf then string.upper(row.DnfReason or "abandon") else RaceUi.FormatTime(row.TotalTime)
+		local timeText = if row.Dnf then string.upper(row.DnfReason or "abandon") else Format.Time(row.TotalTime)
 		local penalty = if row.Penalty > 0 and not row.Dnf then string.format(" (+%gs)", row.Penalty) else ""
-		local best = if row.BestLap then "  t. " .. RaceUi.FormatTime(row.BestLap) else ""
+		local best = if row.BestLap then "  t. " .. Format.Time(row.BestLap) else ""
 		local points = if results.Final and row.Points > 0 then string.format("  +%d pts", row.Points) else ""
 		label.Text = string.format("%d. %s%s%s%s%s%s", row.Position, name, padding, timeText, penalty, best, points)
-		label.TextColor3 = if row.UserId == self.LocalUserId then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
+		label.TextColor3 = if row.UserId == self.LocalUserId then Widgets.COLOR_ACCENT else Widgets.COLOR_TEXT
 	end
 	self.Results.Size = UDim2.fromOffset(560, 96 + math.min(#results.Rows, MAX_ROWS) * 30)
 	self.Results.Visible = true
@@ -510,7 +512,7 @@ function RaceHud:ShowPodium(names: { string }, duration: number)
 	for index, name in ipairs(names) do
 		table.insert(parts, string.format("%d. %s", index, name))
 	end
-	self:ShowMessage("PODIUM — " .. table.concat(parts, "   "), RaceUi.COLOR_ACCENT, duration)
+	self:ShowMessage("PODIUM — " .. table.concat(parts, "   "), Widgets.COLOR_ACCENT, duration)
 end
 
 function RaceHud:HideResults()
@@ -533,7 +535,7 @@ end
 -- Mise à jour
 --------------------------------------------------------------------------------
 
-function RaceHud:_myRow(): RaceUi.LiveRow?
+function RaceHud:_myRow(): RaceTypes.LiveRow?
 	local live = self.Live
 	if not live then
 		return nil
@@ -546,7 +548,7 @@ function RaceHud:_myRow(): RaceUi.LiveRow?
 	return nil
 end
 
-function RaceHud:_updateLights(race: RaceUi.RaceSnapshot, serverNow: number)
+function RaceHud:_updateLights(race: RaceTypes.RaceSnapshot, serverNow: number)
 	local lit = 0
 	local green = false
 	local visible = false
@@ -626,23 +628,23 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 		local currentLap = math.min(me.L + 1, race.Laps)
 		self.LapLabel.Text = if me.F then "ARRIVÉE" else string.format("TOUR %d/%d", currentLap, race.Laps)
 		if me.F then
-			self.LapTimeLabel.Text = RaceUi.FormatTime(me.T)
+			self.LapTimeLabel.Text = Format.Time(me.T)
 		elseif race.State == "Racing" then
-			self.LapTimeLabel.Text = RaceUi.FormatTime(serverNow - me.LS)
+			self.LapTimeLabel.Text = Format.Time(serverNow - me.LS)
 		else
-			self.LapTimeLabel.Text = RaceUi.FormatTime(0)
+			self.LapTimeLabel.Text = Format.Time(0)
 		end
 		self.JokerChip.Text = if me.J > 0 then "JOKER ✓" else "JOKER À FAIRE"
-		self.JokerChip.BackgroundColor3 = if me.J > 0 then RaceUi.COLOR_GREEN else RaceUi.COLOR_ORANGE
+		self.JokerChip.BackgroundColor3 = if me.J > 0 then Widgets.COLOR_GREEN else Widgets.COLOR_ORANGE
 		self.PenaltyChip.Visible = me.PEN > 0
 		self.PenaltyChip.Text = string.format("PÉNALITÉ +%g s", me.PEN)
-		self.BottomLabel.Text = string.format("MEILLEUR %s   DERNIER %s", RaceUi.FormatTime(me.B), RaceUi.FormatTime(me.LL))
+		self.BottomLabel.Text = string.format("MEILLEUR %s   DERNIER %s", Format.Time(me.B), Format.Time(me.LL))
 	else
 		self.PositionLabel.Text = positionText(0, count)
 		self.LapLabel.Text = string.format("TOUR 1/%d", race.Laps)
-		self.LapTimeLabel.Text = RaceUi.FormatTime(0)
+		self.LapTimeLabel.Text = Format.Time(0)
 		self.JokerChip.Text = "JOKER À FAIRE"
-		self.JokerChip.BackgroundColor3 = RaceUi.COLOR_ORANGE
+		self.JokerChip.BackgroundColor3 = Widgets.COLOR_ORANGE
 		self.PenaltyChip.Visible = false
 		self.BottomLabel.Text = ""
 	end
@@ -674,7 +676,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 			local joker = if row.J > 0 then "" else ' <font color="#FF8C28">J</font>'
 			label.Text = string.format("%d %s%s%s%s", row.P, name, padding, gap, joker)
 			local mine = row.U == self.LocalUserId
-			label.TextColor3 = if mine then RaceUi.COLOR_ACCENT else RaceUi.COLOR_TEXT
+			label.TextColor3 = if mine then Widgets.COLOR_ACCENT else Widgets.COLOR_TEXT
 			label.BackgroundTransparency = if mine then 0.82 else 1
 		else
 			label.Text = ""

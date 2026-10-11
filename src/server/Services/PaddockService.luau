@@ -44,13 +44,19 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
-local Medals = require(ReplicatedStorage.Shared.Constants.Medals)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
-local Weekly = require(ReplicatedStorage.Shared.Constants.Weekly)
-local Lessons = require(ReplicatedStorage.Shared.Constants.Lessons)
+local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local Celebrations = require(ReplicatedStorage.Shared.Cosmetics.Celebrations)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
+local EconomyService = require(script.Parent.EconomyService)
+local GarageService = require(script.Parent.GarageService)
 
 local PaddockService = {}
 
@@ -282,12 +288,6 @@ end
 -- Panneaux
 --------------------------------------------------------------------------------
 
-local function formatTime(ms: number): string
-	local seconds = ms / 1000
-	local minutes = math.floor(seconds / 60)
-	return string.format("%d:%05.2f", minutes, seconds - minutes * 60)
-end
-
 local recordText: { [string]: string } = {}
 
 local function updateSigns()
@@ -315,15 +315,18 @@ local function updateSigns()
 	end
 end
 
--- Records du tour (RecordService les diffuse aussi aux clients).
+-- Records du tour (RecordService les diffuse aussi aux clients), par
+-- catégorie puis par circuit : le panneau montre ceux de la Rally2, la
+-- catégorie de référence.
 local function onTrackRecords(boards: any)
-	if type(boards) ~= "table" then
+	local byTrack = if type(boards) == "table" then boards[CarClasses.DEFAULT] else nil
+	if type(byTrack) ~= "table" then
 		return
 	end
-	for padId, boardData in pairs(boards) do
+	for padId, boardData in pairs(byTrack) do
 		local entries = type(boardData) == "table" and boardData.Entries
 		local best = type(entries) == "table" and entries[1]
-		recordText[padId] = if best then string.format("Record du tour : %s — %s", formatTime(best.Ms), best.Name) else "Record du tour : —"
+		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s — %s", Format.Ms(best.Ms), best.Name) else "Record du tour : —"
 	end
 end
 
@@ -411,11 +414,13 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		CarService.Spawn(player, StageTrack.StartFrame(), nil)
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
-		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id } })
+		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
+		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id }, CarClass = "Rally2" })
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
 		CarService.Spawn(player, StageTrack.StartFrame(), {
 			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id },
+			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
 		})
 	elseif mode == "Practice" then
 		CarService.GiveFreeCar(player)
@@ -436,6 +441,25 @@ type PodiumRow = { UserId: number, Name: string, Position: number }
 
 local podiumToken = 0
 
+--[[
+	La célébration portée par le pilote (Items/Celebrations.luau) au-dessus
+	de sa marche ; les confettis (célébration de série) sont ceux du décor.
+	Les fumigènes prennent la couleur de sa voiture.
+]]
+local function celebrate(player: Player, index: number, top: Vector3)
+	local item = EconomyService.Equipped(player, "Celebration")
+	local effect = if item and Celebrations.Exists(item.Effect) then item.Effect :: string else "Confetti"
+	if effect == "Confetti" then
+		local emitter = confetti[index]
+		if emitter then
+			emitter.Enabled = true
+		end
+		return
+	end
+	local color = if item and item.Color then item.Color else Livery.ColorOf(GarageService.GetLivery(player))
+	Celebrations.Play(workspace, top, effect, color, PODIUM_DURATION)
+end
+
 function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 	podiumToken += 1
 	local token = podiumToken
@@ -446,11 +470,9 @@ function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 		if step and player then
 			local top = PaddockLayout.PODIUM_CENTER + step.Offset + Vector3.new(0, step.Height + 3, 0)
 			CarService.PlaceCharacter(player, CFrame.lookAt(top, top + Vector3.new(0, 0, 1)))
+			celebrate(player, index, top)
 		end
 		table.insert(names, row.Name)
-	end
-	for _, emitter in ipairs(confetti) do
-		emitter.Enabled = true
 	end
 	for _, player in ipairs(players) do
 		Remotes.RaceEvent:FireClient(player, "Podium", {

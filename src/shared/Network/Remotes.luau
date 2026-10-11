@@ -21,7 +21,7 @@ export type Remotes = {
 	-- autres joueurs (son, roues, poussière). Voir CarService.
 	CarTelemetry: UnreliableRemoteEvent,
 
-	-- Serveur -> Client : (profile) meilleur temps, fantôme, réglages, statistiques
+	-- Serveur -> Client : (profile) records et fantômes par catégorie, réglages, livrée, statistiques
 	ProfileLoaded: RemoteEvent,
 	-- Serveur -> Client : (stats, laps) statistiques et records du tour mis à jour
 	ProfileUpdated: RemoteEvent,
@@ -29,16 +29,18 @@ export type Remotes = {
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
-	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?) fantôme d'un autre
-	-- pilote à affronter sur la spéciale
+	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?, classId) fantôme d'un
+	-- autre pilote de la même catégorie à affronter sur la spéciale
 	RequestGhost: RemoteEvent,
 	-- Serveur -> Client : (opponent) le fantôme demandé (pilote, temps, trajectoire) ou l'erreur
 	GhostOpponent: RemoteEvent,
-	-- Serveur -> Client : (entries) classement de la spéciale
+	-- Serveur -> Client : (boards) classements de la spéciale, par catégorie de voiture
 	Leaderboard: RemoteEvent,
 	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
 	WeeklyBoard: RemoteEvent,
-	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
+	-- Serveur -> Client : (board) Roi du drift : meilleures combinaisons de la semaine, la sienne
+	DriftBoard: RemoteEvent,
+	-- Client -> Serveur : (classId, setup) réglages d'une catégorie de voiture à sauvegarder
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
 	SaveLivery: RemoteEvent,
@@ -72,8 +74,42 @@ export type Remotes = {
 	RaceLive: UnreliableRemoteEvent,
 	-- Serveur -> Client : (kind, data) tour bouclé, joker, pénalité, arrivée, résultats
 	RaceEvent: RemoteEvent,
-	-- Serveur -> Clients : (records) meilleurs tours par circuit
+	-- Serveur -> Clients : (records) meilleurs tours, par catégorie puis par circuit
 	TrackRecords: RemoteEvent,
+
+	-- ÉCONOMIE (EconomyService)
+	-- Serveur -> Client : (wallet, news?) crédits, objets possédés et portés ;
+	-- news : crédits gagnés, objet acheté ou débloqué, erreur
+	Wallet: RemoteEvent,
+	-- Client -> Serveur : (itemId) acheter un objet en crédits
+	BuyItem: RemoteEvent,
+	-- Client -> Serveur : (kind, itemId) porter un objet possédé
+	EquipItem: RemoteEvent,
+
+	-- COSMÉTIQUES VISIBLES PAR TOUS
+	-- Client -> Serveur : () coup de klaxon (au volant)
+	Horn: RemoteEvent,
+	-- Serveur -> Clients : (userId) ce pilote klaxonne : chacun joue le son sur sa voiture
+	HornPlayed: RemoteEvent,
+	-- Client -> Serveur : () utiliser un tirage
+	RequestRoll: RemoteEvent,
+	-- Serveur -> Client : (result) l'objet tiré { ItemId, Duplicate, Credits } ou { Error }
+	RollResult: RemoteEvent,
+	-- Serveur -> Client : (state, news?) Rallye Pass : saison, XP, premium ; news : palier atteint
+	PassState: RemoteEvent,
+
+	-- ÉCURIES (TeamService)
+	-- Client -> Serveur : (action, payload) créer, inviter, accepter, quitter, exclure, couleurs
+	TeamAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) son écurie, son invitation, le classement ; news : message
+	TeamState: RemoteEvent,
+
+	-- TROPHÉES (AchievementService)
+	-- Serveur -> Client : (earned, news?) trophées obtenus (id -> date) ; news : { New = { id } }
+	Achievements: RemoteEvent,
+	-- Serveur -> Clients : (announce) annonce à tout le serveur { Kind, Name, Text } :
+	-- record battu, platine, roi du drift, grand trophée (AnnounceService)
+	Announce: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -88,6 +124,7 @@ local RELIABLE = {
 	"GhostOpponent",
 	"Leaderboard",
 	"WeeklyBoard",
+	"DriftBoard",
 	"SaveSetup",
 	"SaveLivery",
 	"Progress",
@@ -102,6 +139,18 @@ local RELIABLE = {
 	"RaceState",
 	"RaceEvent",
 	"TrackRecords",
+	"Wallet",
+	"BuyItem",
+	"EquipItem",
+	"Horn",
+	"HornPlayed",
+	"RequestRoll",
+	"RollResult",
+	"PassState",
+	"TeamAction",
+	"TeamState",
+	"Achievements",
+	"Announce",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 
