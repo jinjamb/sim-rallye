@@ -43,6 +43,7 @@ export type StageTimer = typeof(setmetatable({}, StageTimer)) & {
 	Panel: Frame,
 	Scale: UIScale,
 	StatusLabel: TextLabel,
+	ProgressLabel: TextLabel,
 	TimeLabel: TextLabel,
 	SplitLabels: { TextLabel },
 	BestLabel: TextLabel,
@@ -94,12 +95,14 @@ local START_LATERAL_TOLERANCE = StageTrack.ROAD_WIDTH / 2 + 6
 -- Remise en piste : un peu au-dessus de la chaussée, la suspension se pose.
 local DROP_HEIGHT = StageTrack.DROP_HEIGHT
 
--- Gabarit identique au bloc principal du tableau de bord (Dashboard.luau).
-local PANEL_WIDTH = 380
-local PANEL_HEIGHT = 170
-local SCREEN_MARGIN = 24
+-- En haut à gauche, sans cadre, façon rallye illustré : la progression en très
+-- gros, le temps dans un bandeau d'encre penché, le reste en petit dessous.
+-- Les textes sont cernés d'encre pour rester lisibles sur le décor.
+local PANEL_WIDTH = 470
+local PANEL_HEIGHT = 270
+local SCREEN_MARGIN = 28
+local TOP_MARGIN = 62 -- sous la barre de Roblox
 
-local COLOR_PANEL = Theme.PANEL
 local COLOR_TEXT = Theme.TEXT
 local COLOR_DIM = Theme.DIM
 local COLOR_FASTER = Theme.GREEN
@@ -107,18 +110,29 @@ local COLOR_SLOWER = Theme.RED
 local COLOR_INVALID = Theme.RED
 local DELTA_INTERVAL = 0.1 -- l'écart en direct change 10 fois par seconde : lisible
 
-local function makeLabel(parent: Instance, y: number, height: number, textSize: number, font: Enum.Font): TextLabel
+local function makeLabel(parent: Instance, y: number, height: number, textSize: number, face: Font): TextLabel
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Position = UDim2.fromOffset(12, y)
-	label.Size = UDim2.new(1, -24, 0, height)
+	label.Position = UDim2.fromOffset(4, y)
+	label.Size = UDim2.new(1, -8, 0, height)
 	label.TextSize = textSize
-	label.Font = font
+	label.FontFace = face
 	label.TextColor3 = COLOR_TEXT
 	label.TextXAlignment = Enum.TextXAlignment.Left
 	label.Text = ""
 	label.Parent = parent
 	return label
+end
+
+-- Une étiquette pleine à largeur automatique (statut, écart).
+local function pill(label: TextLabel, padding: number)
+	label.AutomaticSize = Enum.AutomaticSize.X
+	label.BackgroundTransparency = 0
+	local inner = Instance.new("UIPadding")
+	inner.PaddingLeft = UDim.new(0, padding)
+	inner.PaddingRight = UDim.new(0, padding)
+	inner.Parent = label
+	Theme.Slant(label)
 end
 
 function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
@@ -161,73 +175,82 @@ function StageTimer.new(car: CarClass.Car, playerGui: Instance): StageTimer
 	gui.Enabled = false
 	self.Gui = gui
 
-	-- En bas à gauche, même gabarit et même style que le tableau de bord (en
-	-- bas à droite) : les deux encadrent l'écran sans masquer la route.
 	local panel = Instance.new("Frame")
 	panel.Name = "Panel"
-	panel.AnchorPoint = Vector2.new(0, 1)
-	panel.Position = UDim2.new(0, SCREEN_MARGIN, 1, -SCREEN_MARGIN)
+	panel.BackgroundTransparency = 1
+	panel.Position = UDim2.fromOffset(SCREEN_MARGIN, TOP_MARGIN)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, PANEL_HEIGHT)
-	-- Habillage du thème : contour net, ombre portée rose, bandes de vitesse
-	-- en coin, filigrane « タイム » (temps) derrière le chrono.
-	Theme.Card(panel, 0.12)
-	local stripes = Theme.Stripes(panel, Theme.ACCENT, 4)
-	stripes.AnchorPoint = Vector2.new(1, 0)
-	stripes.Position = UDim2.new(1, -12, 0, 98) -- à droite des inters, libre
-	stripes.Size = UDim2.fromOffset(64, 18)
-	local kana = Theme.Kana(panel, "タイム", 40, 0.9)
-	kana.Position = UDim2.fromOffset(-12, 36)
-	kana.Size = UDim2.new(1, 0, 0, 50)
 	panel.Parent = gui
 	self.Panel = panel
 
-	-- Même mise à l'échelle que le tableau de bord, autour du coin bas-gauche.
+	-- Même mise à l'échelle que le tableau de bord, autour du coin haut-gauche.
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	self.Scale = scale
 
-	-- Chiffres en police à chasse fixe : sinon le chrono "tremble" à chaque
-	-- centième, les chiffres n'ayant pas tous la même largeur.
-	-- Statut : étiquette pleine (jaune, verte pour un record, rouge si refusé).
-	self.StatusLabel = makeLabel(panel, 11, 18, 13, Enum.Font.GothamBlack)
-	self.StatusLabel.Size = UDim2.fromOffset(0, 18)
-	self.StatusLabel.AutomaticSize = Enum.AutomaticSize.X
-	self.StatusLabel.BackgroundTransparency = 0
-	self.StatusLabel.TextColor3 = Theme.ON_ACCENT
-	local statusPadding = Instance.new("UIPadding")
-	statusPadding.PaddingLeft = UDim.new(0, 7)
-	statusPadding.PaddingRight = UDim.new(0, 7)
-	statusPadding.Parent = self.StatusLabel
-	Theme.Slant(self.StatusLabel)
-	self.TimeLabel = makeLabel(panel, 30, 58, 56, Enum.Font.RobotoMono)
+	-- Progression : « 80% » en très gros, « PROGRESSION » dessous.
+	self.ProgressLabel = makeLabel(panel, 0, 76, 76, Theme.HEADLINE)
+	Theme.TextInk(self.ProgressLabel, 3)
+	local caption = makeLabel(panel, 70, 28, 26, Theme.HEADLINE)
+	caption.Text = "PROGRESSION"
+	Theme.TextInk(caption, 2)
+
+	-- Bandeau du temps : « TEMPS » puis le chrono, à chasse fixe (sinon les
+	-- chiffres « tremblent » à chaque centième).
+	local band = Instance.new("Frame")
+	band.Name = "TimeBand"
+	band.BorderSizePixel = 0
+	band.BackgroundColor3 = Theme.INK
+	band.BackgroundTransparency = 0.15
+	band.Position = UDim2.fromOffset(4, 104)
+	band.Size = UDim2.fromOffset(268, 38)
+	Theme.Slant(band)
+	band.Parent = panel
+	local timeCaption = Instance.new("TextLabel")
+	timeCaption.BackgroundTransparency = 1
+	timeCaption.Position = UDim2.fromOffset(10, 0)
+	timeCaption.Size = UDim2.fromOffset(80, 38)
+	timeCaption.FontFace = Theme.HEADLINE
+	timeCaption.TextSize = 20
+	timeCaption.TextColor3 = COLOR_TEXT
+	timeCaption.TextXAlignment = Enum.TextXAlignment.Left
+	timeCaption.Text = "TEMPS"
+	timeCaption.Parent = band
+	self.TimeLabel = Instance.new("TextLabel")
+	self.TimeLabel.BackgroundTransparency = 1
+	self.TimeLabel.Position = UDim2.fromOffset(92, 0)
+	self.TimeLabel.Size = UDim2.fromOffset(170, 38)
+	self.TimeLabel.FontFace = Theme.DIGITS
+	self.TimeLabel.TextSize = 28
+	self.TimeLabel.TextColor3 = COLOR_TEXT
+	self.TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+	self.TimeLabel.Parent = band
+
+	-- Écart au fantôme : pastille pleine à droite du temps (verte devant,
+	-- rouge derrière), contre qui dessous.
+	self.DeltaLabel = makeLabel(panel, 107, 32, 24, Theme.DIGITS)
+	self.DeltaLabel.Position = UDim2.fromOffset(286, 107)
+	self.DeltaLabel.Size = UDim2.fromOffset(0, 32)
+	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Center
+	pill(self.DeltaLabel, 8)
+	self.VersusLabel = makeLabel(panel, 144, 16, 12, Theme.HEADLINE_MEDIUM)
+	self.VersusLabel.Position = UDim2.fromOffset(286, 144)
+	self.VersusLabel.Size = UDim2.fromOffset(180, 16)
+	self.VersusLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	Theme.TextInk(self.VersusLabel, 1.5)
+
+	-- Statut (étiquette penchée), inters, meilleur temps et médailles.
+	self.StatusLabel = makeLabel(panel, 150, 20, 13, Theme.HEADLINE)
+	self.StatusLabel.Size = UDim2.fromOffset(0, 20)
+	pill(self.StatusLabel, 7)
 	self.SplitLabels = {}
 	for i = 1, #StageTrack.SPLITS do
-		self.SplitLabels[i] = makeLabel(panel, 94 + (i - 1) * 20, 18, 16, Enum.Font.RobotoMono)
+		self.SplitLabels[i] = makeLabel(panel, 176 + (i - 1) * 20, 18, 16, Theme.DIGITS)
+		Theme.TextInk(self.SplitLabels[i], 1.5)
 	end
-	self.BestLabel = makeLabel(panel, 94 + #StageTrack.SPLITS * 20 + 4, 16, 14, Enum.Font.RobotoMono)
-	self.BestLabel.TextColor3 = COLOR_DIM
+	self.BestLabel = makeLabel(panel, 176 + #StageTrack.SPLITS * 20 + 4, 16, 14, Theme.DIGITS)
 	self.BestLabel.RichText = true
-	-- Écart au fantôme, et contre qui : une colonne à droite du chrono, qui
-	-- ne déborde pas sur ses chiffres (un nom long est tronqué).
-	-- Écart : pastille pleine, verte devant le fantôme, rouge derrière.
-	self.DeltaLabel = makeLabel(panel, 38, 30, 26, Enum.Font.RobotoMono)
-	self.DeltaLabel.AnchorPoint = Vector2.new(1, 0)
-	self.DeltaLabel.Position = UDim2.new(1, -12, 0, 38)
-	self.DeltaLabel.Size = UDim2.fromOffset(0, 30)
-	self.DeltaLabel.AutomaticSize = Enum.AutomaticSize.X
-	self.DeltaLabel.TextXAlignment = Enum.TextXAlignment.Center
-	self.DeltaLabel.TextColor3 = Theme.ON_ACCENT
-	local deltaPadding = Instance.new("UIPadding")
-	deltaPadding.PaddingLeft = UDim.new(0, 8)
-	deltaPadding.PaddingRight = UDim.new(0, 8)
-	deltaPadding.Parent = self.DeltaLabel
-	Theme.Slant(self.DeltaLabel)
-	self.VersusLabel = makeLabel(panel, 68, 16, 12, Enum.Font.GothamBold)
-	self.VersusLabel.Position = UDim2.new(1, -142, 0, 68)
-	self.VersusLabel.Size = UDim2.fromOffset(130, 16)
-	self.VersusLabel.TextXAlignment = Enum.TextXAlignment.Right
-	self.VersusLabel.TextColor3 = COLOR_DIM
-	self.VersusLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	Theme.TextInk(self.BestLabel, 1.5)
 
 	gui.Parent = playerGui
 	self:_refresh(0)
@@ -242,16 +265,9 @@ function StageTimer:Destroy()
 	self.Gui:Destroy()
 end
 
--- Disposition tactile : le volant occupe le coin bas-gauche, le chrono monte
--- en haut à gauche (sous la barre de Roblox).
+-- Disposition tactile : déjà en haut à gauche ; un peu plus près du bord.
 function StageTimer:SetTouchLayout(enabled: boolean)
-	if enabled then
-		self.Panel.AnchorPoint = Vector2.new(0, 0)
-		self.Panel.Position = UDim2.new(0, 12, 0, 12)
-	else
-		self.Panel.AnchorPoint = Vector2.new(0, 1)
-		self.Panel.Position = UDim2.new(0, SCREEN_MARGIN, 1, -SCREEN_MARGIN)
-	end
+	self.Panel.Position = if enabled then UDim2.fromOffset(12, TOP_MARGIN - 8) else UDim2.fromOffset(SCREEN_MARGIN, TOP_MARGIN)
 end
 
 local function dropFrame(sample: StageTrack.Sample): CFrame
@@ -469,6 +485,13 @@ function StageTimer:_refresh(now: number)
 	self.Scale.Scale = math.clamp(viewport.Y / 1080, 0.6, 1.2)
 
 	local state = self.State
+	-- Progression : part du parcours chronométré déjà couverte.
+	local start = StageTrack.START_DISTANCE
+	local timedLength = StageTrack.GetFinishDistance() - start
+	local done = if state == "Finished" then 1
+		elseif state == "Running" or state == "Invalid" then math.clamp((self.LastProgress - start) / timedLength, 0, 1)
+		else 0
+	self.ProgressLabel.Text = string.format("%d%%", math.floor(done * 100))
 	-- Couleur de l'étiquette de statut : jaune par défaut.
 	local tone = Theme.ACCENT
 	local weekly = self.Weekly
