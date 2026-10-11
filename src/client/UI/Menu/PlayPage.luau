@@ -15,6 +15,7 @@ local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
+local CopilotVoice = require(script.Parent.Parent.Parent.Audio.CopilotVoice)
 local Widgets = require(script.Parent.Parent.Widgets)
 
 type Context = MenuKit.Context
@@ -111,6 +112,11 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 		end)
 		other.TextTruncate = Enum.TextTruncate.AtEnd
 	end
+	-- Voix du copilote (aussi : touche N).
+	MenuKit.Stepper(ctx, b, "Voix du copilote (N)", CopilotVoice.MODE_NAMES[CopilotVoice.GetMode()], function(direction)
+		CopilotVoice.Cycle(direction)
+		ctx.Rebuild()
+	end)
 end
 
 -- Rallycross : un bouton par circuit.
