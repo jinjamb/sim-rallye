@@ -13,9 +13,9 @@
 	Limite : une MeshPart texturée (TextureID, SurfaceAppearance) garde sa
 	texture, la couleur n'y change rien. Le numéro, lui, apparaît toujours.
 
-	NUMÉROS : un rond blanc cerclé de la couleur du joueur, sur chaque flanc et
-	sur le toit. Leurs emplacements sont trouvés par des rayons lancés vers la
-	carrosserie (flancs à mi-hauteur, toit par-dessus) sur la première voiture
+	NUMÉROS : un rond blanc cerclé de la couleur du joueur, sur chaque flanc
+	(pas sur le toit). Leurs emplacements sont trouvés par des rayons lancés
+	vers la carrosserie, à mi-hauteur des flancs, sur la première voiture
 	posée dans le monde, puis réutilisés. Panneaux sans masse ni collision,
 	soudés au châssis : la physique n'en voit rien. Le style du numéro
 	(Livery.PLATES) change le fond, le chiffre et le cercle.
@@ -58,7 +58,6 @@ local BASE_COLOR_ATTRIBUTE = "BaseColor"
 -- Faces qui reçoivent le motif : tout sauf le dessous, qu'on ne voit pas.
 local PATTERN_FACES = { Enum.NormalId.Top, Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
 local SIDE_PANEL = 3.2
-local ROOF_PANEL = 4.2
 local STRIPE_STEP = 0.8 -- studs entre deux points d'une bande
 local STRIPE_LIFT = 0.035 -- au-dessus de la peinture (sous les numéros, à 0.06)
 local STRIPE_THICKNESS = 0.03
@@ -222,7 +221,6 @@ local function computeAnchors(car: Model, chassis: BasePart): { Anchor }
 		local outward = frame.RightVector * side
 		cast(flankCenter + outward * reach, -outward * reach, sideSize)
 	end
-	cast(frame.Position + frame.UpVector * reach, -frame.UpVector * reach, ROOF_PANEL)
 	return found
 end
 

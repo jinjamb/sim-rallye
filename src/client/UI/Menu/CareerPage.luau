@@ -148,7 +148,7 @@ function CareerPage.Livery(ctx: Context, b: Builder)
 		changed.Number = ((current.Number - Livery.MIN_NUMBER + direction) % range) + Livery.MIN_NUMBER
 		send(changed)
 	end)
-	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
+	b:Text("Visible de tous : carrosserie, numéros sur les flancs. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
 end
 
 -- Ta voiture : la catégorie (à porter ou à acheter), la couleur, le numéro.
