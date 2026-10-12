@@ -270,6 +270,7 @@ local PART_ICONS: { [string]: string } = {
 	Bumper = "🛡️",
 	Hood = "💡",
 	Flares = "📐",
+	Pattern = "🎨",
 }
 
 -- Une pièce : les jantes en couleur (un cercle et ses branches), une icône sinon.

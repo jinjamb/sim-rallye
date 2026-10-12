@@ -12,6 +12,17 @@
 	emplacement, 1 = de série). Même chemin que la couleur : sauvegardé,
 	vérifié, débloqué en jouant (Progression.luau), posé par LiveryPainter.
 
+	PEINTURE PAR PIÈCE (Paints) : une couleur de la palette par zone de la
+	carrosserie (CarBodies.ZONES : capot, toit, portières, boucliers...) ;
+	une zone absente garde sa peinture d'origine.
+
+	MOTIF (Pattern, PatternColor) : une image répétée sur toute la
+	carrosserie peinte dans la couleur principale (une zone peinte à part
+	reste unie), teintée dans la couleur du motif. Chaque motif est une
+	image blanche sur fond transparent (assets/patterns/), importée sur
+	Roblox : son identifiant va dans PATTERNS (Image). Tant qu'il vaut 0, le
+	motif se choisit mais ne s'affiche pas.
+
 	Une palette plutôt qu'une couleur libre : des teintes franches, qui se
 	distinguent bien de loin et dans la poussière.
 
@@ -38,11 +49,18 @@ export type Livery = {
 	Hood: number,
 	Flares: number,
 	Rims: number,
+	-- Peinture par zone (CarBodies.ZONES) : indice dans COLORS ; zone absente = d'origine.
+	Paints: { [string]: number },
+	Pattern: number, -- Livery.PATTERNS (1 = aucun)
+	PatternColor: number, -- Livery.COLORS
 }
 export type Swatch = { Name: string, Color: Color3 }
 -- Une bande : décalage latéral de son axe et largeur (studs, repère du châssis).
 export type Lane = { X: number, Width: number }
 export type StripeStyle = { Name: string, Lanes: { Lane } }
+-- Un motif : l'image (identifiant Roblox, 0 = pas encore importée) et la
+-- taille d'une répétition (studs).
+export type PatternStyle = { Name: string, Image: number, Tile: number, Transparency: number }
 export type PlateStyle = { Name: string, Disc: Color3, Text: Color3, GoldRing: boolean }
 
 Livery.COLORS = {
@@ -79,6 +97,18 @@ Livery.STRIPES = {
 	{ Name = "Filets latéraux", Lanes = { { X = -1.6, Width = 0.35 }, { X = 1.6, Width = 0.35 } } },
 } :: { StripeStyle }
 
+Livery.PATTERNS = {
+	{ Name = "Aucun", Image = 0, Tile = 1, Transparency = 0 },
+	{ Name = "Damier", Image = 0, Tile = 2, Transparency = 0 }, -- assets/patterns/damier.png
+	{ Name = "Pois", Image = 0, Tile = 2.5, Transparency = 0 }, -- assets/patterns/pois.png
+	{ Name = "Hexagones", Image = 0, Tile = 3, Transparency = 0 }, -- assets/patterns/hexagones.png
+	{ Name = "Carbone", Image = 0, Tile = 1.2, Transparency = 0.15 }, -- assets/patterns/carbone.png
+	{ Name = "Camouflage", Image = 0, Tile = 7, Transparency = 0 }, -- assets/patterns/camouflage.png
+	{ Name = "Zébrures", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/zebrures.png
+	{ Name = "Flammes", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/flammes.png
+	{ Name = "Sakura", Image = 0, Tile = 5, Transparency = 0 }, -- assets/patterns/sakura.png
+} :: { PatternStyle }
+
 local INK = Color3.fromRGB(16, 16, 20)
 Livery.PLATES = {
 	{ Name = "Classique", Disc = Color3.new(1, 1, 1), Text = INK, GoldRing = false },
@@ -104,6 +134,9 @@ function Livery.Default(userId: number): Livery
 		Hood = 1,
 		Flares = 1,
 		Rims = 1,
+		Paints = {},
+		Pattern = 1,
+		PatternColor = 4, -- noir
 	}
 end
 
@@ -130,6 +163,16 @@ function Livery.Sanitize(input: any, userId: number): Livery
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		(result :: any)[slot.Key] = index(input[slot.Key], #slot.Options) or 1
 	end
+	if type(input.Paints) == "table" then
+		for zone, color in pairs(input.Paints) do
+			local valid = index(color, #Livery.COLORS)
+			if CarBodies.ZoneExists(zone) and valid then
+				result.Paints[zone] = valid
+			end
+		end
+	end
+	result.Pattern = index(input.Pattern, #Livery.PATTERNS) or 1
+	result.PatternColor = index(input.PatternColor, #Livery.COLORS) or result.PatternColor
 	return result
 end
 
@@ -143,6 +186,18 @@ end
 
 function Livery.StripeColorOf(livery: Livery): Color3
 	return (Livery.COLORS[livery.StripeColor] or Livery.COLORS[3]).Color
+end
+
+function Livery.PatternColorOf(livery: Livery): Color3
+	return (Livery.COLORS[livery.PatternColor] or Livery.COLORS[4]).Color
+end
+
+-- La couleur choisie pour une zone (nil : peinture d'origine).
+function Livery.ZoneColorOf(livery: Livery, zone: string): Color3?
+	local paints = livery.Paints
+	local chosen = if paints then paints[zone] else nil
+	local swatch = if chosen then Livery.COLORS[chosen] else nil
+	return if swatch then swatch.Color else nil
 end
 
 function Livery.Equals(a: Livery, b: Livery): boolean
@@ -160,6 +215,9 @@ function Livery.ItemName(kind: string, index: number): string
 	elseif kind == "Plate" then
 		local plate = Livery.PLATES[index]
 		return "Numéro " .. (if plate then plate.Name else "?")
+	elseif kind == "Pattern" then
+		local pattern = Livery.PATTERNS[index]
+		return "Motif " .. (if pattern then pattern.Name else "?")
 	elseif kind == "Body" then
 		local body = CarBodies.LIST[index]
 		return "Modèle " .. (if body then body.Name else "?")
@@ -174,8 +232,13 @@ end
 
 -- Clé courte de la livrée (repeindre seulement si elle change).
 function Livery.Key(livery: Livery): string
+	local paints = {}
+	for _, zone in ipairs(CarBodies.ZONES) do
+		local chosen = if livery.Paints then livery.Paints[zone.Key] else nil
+		table.insert(paints, tostring(chosen or 0))
+	end
 	return string.format(
-		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d",
+		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s",
 		livery.Color,
 		livery.Number,
 		livery.Stripes,
@@ -186,7 +249,10 @@ function Livery.Key(livery: Livery): string
 		livery.Bumper or 1,
 		livery.Hood or 1,
 		livery.Flares or 1,
-		livery.Rims or 1
+		livery.Rims or 1,
+		livery.Pattern or 1,
+		livery.PatternColor or 4,
+		table.concat(paints, ",")
 	)
 end
 

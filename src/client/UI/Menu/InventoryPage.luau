@@ -9,7 +9,10 @@
 		             un clic dessus dit comment le débloquer (niveau, médaille,
 		             tirage...). Un clic sur une pastille libre l'équipe aussitôt
 		             (sauvegardé comme la livrée : Livery.luau).
-		LIVRÉE       couleurs, bandes et plaques, en pastilles, de même.
+		LIVRÉE       couleurs, bandes, plaques et motif, en pastilles, de
+		             même ; puis la PEINTURE PAR PIÈCE : on choisit une zone
+		             de la carrosserie (capot, toit, portières...), puis sa
+		             couleur (ou « d'origine »).
 		ÉQUIPEMENT   ses voitures, sons moteur, fumées, klaxons, célébrations :
 		             seulement ce qu'on possède, en cartes avec PORTER.
 
@@ -199,7 +202,85 @@ function InventoryPage.Livery(ctx: Context, b: Builder)
 	chips(ctx, b, "Plate", names(Livery.PLATES), livery.Plate, function(i)
 		equip(ctx, livery, "Plate", i)
 	end)
+	b:Text("MOTIF", 13, Theme.YELLOW)
+	chips(ctx, b, "Pattern", names(Livery.PATTERNS), livery.Pattern or 1, function(i)
+		equip(ctx, livery, "Pattern", i)
+	end)
+	local pattern = Livery.PATTERNS[livery.Pattern or 1]
+	if pattern and (livery.Pattern or 1) > 1 then
+		if pattern.Image == 0 then
+			b:Text("Ce motif arrive bientôt : il s'affichera sur ta voiture dès qu'il sera disponible.", 12, Widgets.COLOR_DIM)
+		end
+		b:Text("COULEUR DU MOTIF", 13, Theme.YELLOW)
+		chips(ctx, b, "Color", names(Livery.COLORS), livery.PatternColor or 4, function(i)
+			equip(ctx, livery, "PatternColor", i)
+		end)
+	end
 	b:Text("Numéro et couleur des bandes : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
+end
+
+--[[
+	Peinture par pièce : la zone choisie (ctx.View.PaintZone), puis sa
+	couleur. « D'origine » rend à la zone sa peinture de série. Une pièce
+	peinte à part reste unie (le motif couvre la couleur principale).
+]]
+function InventoryPage.Paint(ctx: Context, b: Builder)
+	local livery = ctx.Data.Livery
+	if not livery then
+		return
+	end
+	b:Section("Peinture par pièce")
+	local body = CarBodies.Get(livery.Body)
+	if not body.Custom then
+		b:Text("La carrosserie d'origine se peint d'un seul bloc : choisis un modèle du jeu pour peindre chaque pièce.", 12, Widgets.COLOR_DIM)
+		return
+	end
+	local zoneIndex = 1
+	for index, zone in ipairs(CarBodies.ZONES) do
+		if zone.Key == ctx.View.PaintZone then
+			zoneIndex = index
+		end
+	end
+	local zone = CarBodies.ZONES[zoneIndex]
+	local paints = livery.Paints or {}
+	-- Les zones : celles déjà peintes à part sont marquées d'un point.
+	local zoneNames = {}
+	for _, entry in ipairs(CarBodies.ZONES) do
+		table.insert(zoneNames, (if paints[entry.Key] then "● " else "") .. entry.Name)
+	end
+	b:Text("PIÈCE", 13, Theme.YELLOW)
+	chips(ctx, b, "Zone", zoneNames, zoneIndex, function(i)
+		ctx.View.PaintZone = CarBodies.ZONES[i].Key
+		ctx.Rebuild()
+	end)
+	-- Sa couleur.
+	local chosen = paints[zone.Key]
+	b:Text("COULEUR · " .. Format.Upper(zone.Name), 13, Theme.YELLOW)
+	local function setZone(color: number?)
+		local changed: any = table.clone(livery)
+		local newPaints = table.clone(paints)
+		newPaints[zone.Key] = color
+		changed.Paints = newPaints
+		ctx.Action("Livery", changed)
+	end
+	local row = b:Row(CHIP_HEIGHT + 4)
+	local original = ctx.Button(row, "D'ORIGINE", 0, MenuKit.CONTENT_WIDTH, function()
+		if chosen ~= nil then
+			setZone(nil)
+		end
+	end)
+	original.Size = UDim2.new(0, MenuKit.CONTENT_WIDTH, 0, CHIP_HEIGHT)
+	original.TextSize = 12
+	original.BackgroundColor3 = if chosen == nil then Theme.ACCENT else Theme.PANEL_2
+	original.TextColor3 = if chosen == nil then Theme.ON_ACCENT else Widgets.COLOR_TEXT
+	local colorNames = {}
+	for _, swatch in ipairs(Livery.COLORS) do
+		table.insert(colorNames, swatch.Name)
+	end
+	chips(ctx, b, "Color", colorNames, chosen or 0, function(i)
+		setZone(i)
+	end)
+	b:Text("Une pièce peinte à part reste unie : le motif couvre seulement la couleur principale.", 12, Widgets.COLOR_DIM)
 end
 
 -- Ce qu'on possède, par sorte : les cartes PORTER de la boutique.

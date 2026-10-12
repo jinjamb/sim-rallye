@@ -30,6 +30,16 @@
 	MODÈLES (CarBodies.luau) : Apply pose d'abord le modèle et les pièces
 	choisis dans la livrée. Numéros et bandes dépendent de la forme : leurs
 	emplacements sont gardés PAR FORME (CarBodies.ShapeKey).
+
+	PEINTURE PAR PIÈCE : une pièce d'un modèle du jeu porte sa zone (attribut
+	PaintZone) ; si la livrée donne une couleur à cette zone (Livery.Paints),
+	la pièce la prend, sinon elle garde sa peinture d'origine (la couleur de
+	la livrée, ou BaseColor pour les garnitures).
+
+	MOTIF : une image répétée (Texture) sur les faces visibles (pas le
+	dessous) de chaque pièce peinte dans la couleur principale, teintée dans
+	la couleur du motif. Rien tant que l'image du motif n'est pas importée
+	(Livery.PATTERNS : Image = 0).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -42,6 +52,11 @@ local LiveryPainter = {}
 local PAINT_ATTRIBUTE = "LiveryPaint"
 local PANEL_NAME = "LiveryNumber"
 local STRIPE_NAME = "LiveryStripe"
+local PATTERN_NAME = "LiveryPattern"
+local ZONE_ATTRIBUTE = "PaintZone"
+local BASE_COLOR_ATTRIBUTE = "BaseColor"
+-- Faces qui reçoivent le motif : tout sauf le dessous, qu'on ne voit pas.
+local PATTERN_FACES = { Enum.NormalId.Top, Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
 local SIDE_PANEL = 3.2
 local ROOF_PANEL = 4.2
 local STRIPE_STEP = 0.8 -- studs entre deux points d'une bande
@@ -375,6 +390,21 @@ function LiveryPainter.Prepare(car: Model)
 	end
 end
 
+-- Le motif sur une pièce : une image répétée par face visible.
+local function addPattern(part: BasePart, style: Livery.PatternStyle, color: Color3)
+	for _, face in ipairs(PATTERN_FACES) do
+		local texture = Instance.new("Texture")
+		texture.Name = PATTERN_NAME
+		texture.Texture = "rbxassetid://" .. tostring(style.Image)
+		texture.Face = face
+		texture.StudsPerTileU = style.Tile
+		texture.StudsPerTileV = style.Tile
+		texture.Color3 = color
+		texture.Transparency = style.Transparency
+		texture.Parent = part
+	end
+end
+
 -- Peinture, bandes et numéros. La voiture doit être dans le monde (rayons).
 function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 	local chassis = car:FindFirstChild("Chassis")
@@ -384,11 +414,31 @@ function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 	local color = Livery.ColorOf(livery)
 	-- Le modèle et ses pièces d'abord : la peinture et les numéros se posent dessus.
 	CarBodies.Apply(car, livery, color)
+	-- Aucun motif, ou image pas encore importée : rien à poser.
+	local style = Livery.PATTERNS[livery.Pattern or 1]
+	local pattern: Livery.PatternStyle? = if style and style.Image ~= 0 then style else nil
+	local patternColor = Livery.PatternColorOf(livery)
 	for _, item in ipairs(car:GetDescendants()) do
-		if item:IsA("BasePart") and item:GetAttribute(PAINT_ATTRIBUTE) == true then
-			item.Color = color
-		elseif item.Name == PANEL_NAME or item.Name == STRIPE_NAME then
+		if item.Name == PANEL_NAME or item.Name == STRIPE_NAME or item.Name == PATTERN_NAME then
 			item:Destroy()
+		elseif item:IsA("BasePart") then
+			-- Une zone peinte à part prend sa couleur (et reste unie) ; sinon, la peinture d'origine.
+			local zone = item:GetAttribute(ZONE_ATTRIBUTE)
+			local zoneColor = if type(zone) == "string" then Livery.ZoneColorOf(livery, zone) else nil
+			local painted = item:GetAttribute(PAINT_ATTRIBUTE) == true
+			if zoneColor then
+				item.Color = zoneColor
+			elseif painted then
+				item.Color = color
+			else
+				local base = item:GetAttribute(BASE_COLOR_ATTRIBUTE)
+				if typeof(base) == "Color3" then
+					item.Color = base
+				end
+			end
+			if pattern and painted and not zoneColor and item.Transparency < 1 then
+				addPattern(item, pattern, patternColor)
+			end
 		end
 	end
 	car:SetAttribute("RaceNumber", livery.Number)

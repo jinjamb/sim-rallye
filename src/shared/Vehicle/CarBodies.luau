@@ -33,6 +33,12 @@
 	La carrosserie d'origine (importée, de forme inconnue) ne prend que les
 	jantes : les autres pièces n'auraient pas où se poser.
 
+	ZONES DE PEINTURE (ZONES) : chaque pièce appartient à une zone (capot,
+	toit, portières, boucliers...) que le joueur peut peindre d'une autre
+	couleur que la carrosserie (Livery.Paints) ; sans choix, la pièce garde
+	sa peinture d'origine (couleur de la livrée, ou noir des garnitures).
+	Les zones n'existent que sur les modèles du jeu (pas sur l'Origine).
+
 	OÙ C'EST CHOISI : dans la livrée (Livery.luau : champs Body, Wing,
 	Bumper, Hood, Flares, Rims), donc sauvegardé, vérifié (déblocages :
 	Progression.luau) et appliqué partout où la livrée l'est
@@ -66,6 +72,8 @@ local FOLDER = "CustomBody"
 local PAINT_ATTRIBUTE = "LiveryPaint" -- comme LiveryPainter
 local DESIGN_ATTRIBUTE = "DesignKey"
 local HIDDEN_ATTRIBUTE = "BodyTransparency" -- transparence d'origine d'une pièce masquée
+local ZONE_ATTRIBUTE = "PaintZone" -- zone de peinture de la pièce (ZONES)
+local BASE_COLOR_ATTRIBUTE = "BaseColor" -- couleur d'origine d'une pièce non peinte (garnitures)
 local CAR_COLLISION_GROUP = "Cars" -- CarService : les rayons des autres voitures traversent
 
 type Paint = "Body" | "Trim" | "Glass" | "Head" | "Tail" | "Lamp" | "Chrome"
@@ -566,6 +574,58 @@ local function flareParts(list: { Spec }, m: Mounts, option: number)
 end
 
 --------------------------------------------------------------------------------
+-- Zones de peinture
+--------------------------------------------------------------------------------
+
+export type Zone = { Key: string, Name: string, Parts: { string } }
+
+--[[
+	Les zones, dans l'ordre du garage. « Avant » et « Arrière » se partagent
+	les coins (Corner) selon leur position. Les vitres et les feux ne se
+	peignent pas.
+]]
+CarBodies.ZONES = {
+	{ Key = "Hood", Name = "Capot et coffre", Parts = { "Tub", "Bulge" } },
+	{ Key = "Front", Name = "Avant", Parts = { "Nose", "NoseSlope", "Corner" } },
+	{ Key = "Rear", Name = "Arrière", Parts = { "Tail", "TailSlope", "Fastback", "Corner" } },
+	{ Key = "Doors", Name = "Portières", Parts = { "Door" } },
+	{ Key = "Fenders", Name = "Ailes", Parts = { "Fender", "Arch", "Flare" } },
+	{ Key = "Roof", Name = "Toit", Parts = { "Roof" } },
+	{ Key = "Pillars", Name = "Montants", Parts = { "Pillar" } },
+	{ Key = "Wing", Name = "Aileron", Parts = { "Wing", "WingPost", "WingPlate", "Spoiler" } },
+	{ Key = "Bumpers", Name = "Boucliers", Parts = { "Grille", "Valance", "Diffuser", "Lip", "Splitter", "SkidPlate", "Canard", "RearPanel", "Intake" } },
+	{ Key = "Skirts", Name = "Bas de caisse", Parts = { "Skirt", "FlareLip" } },
+	{ Key = "Mirrors", Name = "Rétroviseurs", Parts = { "Mirror" } },
+	{ Key = "Details", Name = "Accessoires", Parts = { "Vent", "Louver", "LampBar", "SpotLampRim" } },
+} :: { Zone }
+
+local zoneByPart: { [string]: string } = {}
+local zoneExists: { [string]: boolean } = {}
+for _, zone in ipairs(CarBodies.ZONES) do
+	zoneExists[zone.Key] = true
+	for _, name in ipairs(zone.Parts) do
+		if zoneByPart[name] == nil then
+			zoneByPart[name] = zone.Key
+		end
+	end
+end
+
+function CarBodies.ZoneExists(key: any): boolean
+	return type(key) == "string" and zoneExists[key] == true
+end
+
+-- La zone d'une pièce décrite (nil : vitre, feu, chrome : pas de peinture).
+local function zoneOf(spec: Spec): string?
+	if spec.Paint ~= "Body" and spec.Paint ~= "Trim" then
+		return nil
+	end
+	if spec.Name == "Corner" then
+		return if spec.At.Position.Z < 0 then "Front" else "Rear"
+	end
+	return zoneByPart[spec.Name]
+end
+
+--------------------------------------------------------------------------------
 -- API
 --------------------------------------------------------------------------------
 
@@ -629,11 +689,16 @@ local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 	part.BottomSurface = Enum.SurfaceType.Smooth
 	part.Material = Enum.Material.SmoothPlastic
 	local paint = spec.Paint
+	local zone = zoneOf(spec)
+	if zone then
+		part:SetAttribute(ZONE_ATTRIBUTE, zone)
+	end
 	if paint == "Body" then
 		part.Color = livery
 		part:SetAttribute(PAINT_ATTRIBUTE, true)
 	elseif paint == "Trim" then
 		part.Color = TRIM
+		part:SetAttribute(BASE_COLOR_ATTRIBUTE, TRIM)
 	elseif paint == "Glass" then
 		part.Color = GLASS
 		part.Material = Enum.Material.Glass

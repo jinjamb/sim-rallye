@@ -4,7 +4,9 @@
 	Le garage du paddock : entrer dans la zone violette ouvre ce panneau.
 		- sa progression : niveau, licence, barre d'XP (Progression.luau) ;
 		- la livrée : couleur, numéro, bandes de course et leur couleur, style
-		  du numéro (sauvegardée, visible de tous en course) ;
+		  du numéro, motif et sa couleur (sauvegardée, visible de tous en
+		  course) ; la peinture pièce par pièce se fait dans le menu
+		  (INVENTAIRE), l'aperçu d'ici la montre ;
 		- accès aux réglages de la voiture (le menu P).
 	Derrière la zone, la voiture tourne sur sa plaque, aux couleurs choisies,
 	peinte exactement comme en jeu (LiveryPainter.luau). Cet aperçu est une
@@ -16,8 +18,6 @@
 	qu'elle utilise est débloqué (le serveur le vérifie aussi). En sortant du
 	garage, l'aperçu revient à la livrée sauvegardée.
 
-	Une seule voiture pour l'instant (la Rally2 du gabarit) : le choix du
-	modèle viendra avec d'autres gabarits.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -63,6 +63,8 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	StripesLabel: TextLabel,
 	StripeColorLabel: TextLabel,
 	PlateLabel: TextLabel,
+	PatternLabel: TextLabel,
+	PatternColorLabel: TextLabel,
 	-- Carrosserie (CarBodies.luau) : le modèle, puis une ligne par emplacement de pièce.
 	BodyLabel: TextLabel,
 	SlotLabels: { [string]: TextLabel },
@@ -80,7 +82,7 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 }
 
 local PANEL_WIDTH = 380
-local PANEL_HEIGHT = 690
+local PANEL_HEIGHT = 766
 local BODY_ROW = 34 -- lignes de la carrosserie, un peu plus serrées
 local SPIN_SPEED = 0.35 -- rad/s
 local COLOR_LOCKED = Theme.ORANGE
@@ -149,7 +151,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	fill.Parent = track
 	self.XpFill = fill
 
-	local car = Widgets.Label(panel, "Voiture : Rally2, 4 roues motrices (une seule voiture pour l'instant)", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+	local car = Widgets.Label(panel, "Peinture pièce par pièce : menu C › INVENTAIRE", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
 	car.Position = UDim2.fromOffset(16, 82)
 	car.Size = UDim2.new(1, -32, 0, 18)
 
@@ -189,7 +191,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 		end
 		local draft: any = table.clone(base)
 		local low = first or 1
-		draft[field] = ((draft[field] - low + direction) % count) + low
+		draft[field] = (((draft[field] or low) - low + direction) % count) + low
 		self.Draft = draft
 		if self:_lockedText(draft) == nil then
 			callbacks.SetLivery(draft)
@@ -212,13 +214,19 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	self.PlateLabel = stepper(y + 152, "Style numéro", function(direction)
 		change("Plate", #Livery.PLATES, direction)
 	end)
+	self.PatternLabel = stepper(y + 190, "Motif", function(direction)
+		change("Pattern", #Livery.PATTERNS, direction)
+	end)
+	self.PatternColorLabel = stepper(y + 228, "Couleur motif", function(direction)
+		change("PatternColor", #Livery.COLORS, direction)
+	end)
 
 	-- Carrosserie : le modèle et ses pièces. Une pièce que le modèle ne prend
 	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « — ».
 	local bodyTitle = Widgets.Label(panel, "CARROSSERIE", 14, Enum.Font.GothamBlack, Theme.ACCENT)
-	bodyTitle.Position = UDim2.fromOffset(16, y + 190)
+	bodyTitle.Position = UDim2.fromOffset(16, y + 266)
 	bodyTitle.Size = UDim2.new(1, -32, 0, 18)
-	local bodyY = y + 212
+	local bodyY = y + 288
 	self.BodyLabel = stepper(bodyY, "Modèle", function(direction)
 		change("Body", #CarBodies.LIST, direction)
 	end)
@@ -270,8 +278,13 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 		{ Kind = "Stripes", Index = livery.Stripes },
 		{ Kind = "Color", Index = livery.StripeColor },
 		{ Kind = "Plate", Index = livery.Plate },
+		{ Kind = "Pattern", Index = livery.Pattern or 1 },
+		{ Kind = "Color", Index = livery.PatternColor or 4 },
 		{ Kind = "Body", Index = livery.Body },
 	}
+	for _, color in pairs(livery.Paints or {}) do
+		table.insert(checks, { Kind = "Color", Index = color })
+	end
 	local body = CarBodies.Get(livery.Body)
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		if CarBodies.HasSlot(body, slot.Key) then
@@ -319,7 +332,7 @@ function Garage:_refresh()
 
 	local livery = self:_shown()
 	if not livery then
-		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel, self.BodyLabel }) do
+		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel, self.PatternLabel, self.PatternColorLabel, self.BodyLabel }) do
 			label.Text = "…"
 		end
 		for _, label in pairs(self.SlotLabels) do
@@ -354,6 +367,14 @@ function Garage:_refresh()
 	local plateUnlocked = Progression.IsUnlocked("Plate", livery.Plate, progress, owned)
 	self.PlateLabel.Text = valueText(plate.Name, plateUnlocked)
 	plain(self.PlateLabel, plateUnlocked)
+	local patternIndex = livery.Pattern or 1
+	local pattern = Livery.PATTERNS[patternIndex] or Livery.PATTERNS[1]
+	local patternUnlocked = Progression.IsUnlocked("Pattern", patternIndex, progress, owned)
+	self.PatternLabel.Text = valueText(pattern.Name, patternUnlocked)
+	plain(self.PatternLabel, patternUnlocked)
+	local patternColor = Livery.COLORS[livery.PatternColor or 4] or Livery.COLORS[4]
+	self.PatternColorLabel.Text = valueText(patternColor.Name, Progression.IsUnlocked("Color", livery.PatternColor or 4, progress, owned))
+	swatch(self.PatternColorLabel, patternColor.Color)
 
 	-- Carrosserie : le modèle, et chaque pièce (« — » si le modèle ne la prend pas).
 	local body = CarBodies.Get(livery.Body)

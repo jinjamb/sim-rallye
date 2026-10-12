@@ -144,6 +144,10 @@ Une prévision (`Weather.luau`) tient en trois valeurs : le mode (sec, pluie, va
 
 Le profil vierge déclenche le tutoriel express (`TutorialService`) : le client lance aussitôt la spéciale par défaut, au sec, sans passer par le menu, et `Tutorial.luau` guide le pilote (accélérer, tourner, frein à main, suivre le copilote jusqu'à l'arrivée). La première spéciale terminée boucle le tutoriel et rapporte des crédits et un tirage ; le menu s'ouvre ensuite. Un joueur arrivé par l'invitation d'un ami est noté comme filleul (`ReferralService`) : quand il termine sa première spéciale ou sa première course, lui et son parrain sont récompensés.
 
+## Peinture et motifs
+
+La livrée (`Livery.luau`) porte, en plus de la couleur principale, une couleur par zone de carrosserie (`Paints` : capot, toit, portières, boucliers…, zones définies dans `CarBodies.ZONES` et posées sur chaque pièce par l'attribut `PaintZone`) et un motif (`Pattern`, `PatternColor`). `LiveryPainter` repeint chaque zone, puis pose le motif (une `Texture` répétée par face visible) sur les pièces restées dans la couleur principale. Les images des motifs sont dans `assets/patterns/` (générées par `generate.py`) : chacune s'importe sur Roblox, et son identifiant va dans `Livery.PATTERNS` (`Image`). Tant qu'il vaut 0, le motif se choisit mais ne s'affiche pas.
+
 ## Conventions
 
 - `--!strict` partout. Les types exportés sont nommés comme le module (`Car.Car`, `MainMenu.MainMenu`).

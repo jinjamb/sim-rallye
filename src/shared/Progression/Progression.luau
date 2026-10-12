@@ -183,7 +183,7 @@ export type Requirement = {
 -- Objets possédés (identifiant -> true), pour les conditions Item.
 export type Owned = { [string]: boolean }
 
-export type Kind = "Color" | "Stripes" | "Plate" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -204,6 +204,15 @@ Progression.ITEMS = {
 	-- Style du numéro (Livery.PLATES)
 	{ Kind = "Plate", Index = 2, Requirement = { Level = 4 } }, -- Noir
 	{ Kind = "Plate", Index = 3, Requirement = { Level = 22 } }, -- Or (licence Élite)
+	-- Motifs (Livery.PATTERNS). « Item » : seulement aux tirages (Items/Parts.luau).
+	{ Kind = "Pattern", Index = 2, Requirement = { Level = 3 } }, -- Damier
+	{ Kind = "Pattern", Index = 3, Requirement = { Level = 5 } }, -- Pois
+	{ Kind = "Pattern", Index = 4, Requirement = { Level = 7 } }, -- Hexagones
+	{ Kind = "Pattern", Index = 5, Requirement = { Level = 10 } }, -- Carbone
+	{ Kind = "Pattern", Index = 6, Requirement = { Level = 12 } }, -- Camouflage
+	{ Kind = "Pattern", Index = 7, Requirement = { AnyMedal = 3 } }, -- Zébrures
+	{ Kind = "Pattern", Index = 8, Requirement = { Item = "part_pattern_flames" } }, -- Flammes
+	{ Kind = "Pattern", Index = 9, Requirement = { Item = "part_pattern_sakura" } }, -- Sakura
 	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
 	{ Kind = "Body", Index = 3, Requirement = { Level = 6 } }, -- Yama
 	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
@@ -361,6 +370,20 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 	keep("StripeColor", "Color")
 	keep("Stripes", "Stripes")
 	keep("Plate", "Plate")
+	if result.Pattern ~= nil then
+		keep("Pattern", "Pattern")
+		keep("PatternColor", "Color")
+	end
+	-- Peinture par zone : une couleur verrouillée laisse la zone d'origine.
+	if type(result.Paints) == "table" then
+		local paints = {}
+		for zone, color in pairs(result.Paints) do
+			if Progression.IsUnlocked("Color", color, snapshot, owned) then
+				paints[zone] = color
+			end
+		end
+		result.Paints = paints
+	end
 	-- Modèle et pièces (CarBodies.luau) : le champ porte le nom de sa sorte.
 	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims" } :: { Kind }) do
 		if result[kind] ~= nil then

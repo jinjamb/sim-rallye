@@ -277,6 +277,7 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 	if tab == "Inventory" then
 		InventoryPage.Car(ctx, b)
 		InventoryPage.Livery(ctx, b)
+		InventoryPage.Paint(ctx, b)
 		InventoryPage.Gear(ctx, b)
 	elseif tab == "Challenges" then
 		ChallengesPage.Weekly(ctx, b)
