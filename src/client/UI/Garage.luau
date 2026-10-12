@@ -36,6 +36,7 @@ local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Widgets = require(script.Parent.Widgets)
 local Theme = require(script.Parent.Theme)
+local CarOutlines = require(script.Parent.Parent.World.CarOutlines)
 
 local Garage = {}
 Garage.__index = Garage
@@ -494,6 +495,7 @@ function Garage:_buildShowroom(): Model?
 	self.ShowroomBase = CFrame.new(top + Vector3.new(0, bottomOffset, 0)) * pivot.Rotation
 	model:PivotTo(self.ShowroomBase :: CFrame)
 	model.Parent = workspace
+	CarOutlines.Track(model)
 
 	-- Emplacements des numéros et tracés des bandes, tant que les rayons
 	-- touchent encore la carrosserie ; puis l'aperçu devient inerte.

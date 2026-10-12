@@ -55,6 +55,7 @@ local WET_LIGHTING = {
 	FogEnd = 700,
 }
 local WET_ATMOSPHERE = { Density = 0.42, Haze = 2.4, Color = Color3.fromRGB(170, 176, 186) }
+local WET_CLOUDS = { Cover = 0.92, Density = 0.85, Color = Color3.fromRGB(150, 154, 166) }
 
 local function lerp(a: number, b: number, t: number): number
 	return a + (b - a) * t
@@ -110,6 +111,8 @@ function WeatherClient.Start(forecast: Weather.Forecast): () -> ()
 	local baseAtmosphere = if atmosphere
 		then { Density = atmosphere.Density, Haze = atmosphere.Haze, Color = atmosphere.Color }
 		else nil
+	local clouds = terrain:FindFirstChildOfClass("Clouds")
+	local baseClouds = if clouds then { Cover = clouds.Cover, Density = clouds.Density, Color = clouds.Color } else nil
 	local sky = Lighting:FindFirstChildOfClass("Sky")
 	local skyHidden = false
 	local baseColors: { [Enum.Material]: Color3 } = {}
@@ -154,6 +157,12 @@ function WeatherClient.Start(forecast: Weather.Forecast): () -> ()
 			atmosphere.Density = lerp(baseAtmosphere.Density, WET_ATMOSPHERE.Density, rain)
 			atmosphere.Haze = lerp(baseAtmosphere.Haze, WET_ATMOSPHERE.Haze, rain)
 			atmosphere.Color = baseAtmosphere.Color:Lerp(WET_ATMOSPHERE.Color, rain)
+		end
+		-- Les nuages (Ambiance.luau) se referment et grisent avant l'averse.
+		if clouds and baseClouds then
+			clouds.Cover = lerp(baseClouds.Cover, WET_CLOUDS.Cover, rain)
+			clouds.Density = lerp(baseClouds.Density, WET_CLOUDS.Density, rain)
+			clouds.Color = baseClouds.Color:Lerp(WET_CLOUDS.Color, rain)
 		end
 		-- Le ciel peint (plein soleil) jure sous l'averse : sans lui, Roblox
 		-- affiche son ciel gris.
@@ -205,6 +214,11 @@ function WeatherClient.Start(forecast: Weather.Forecast): () -> ()
 			atmosphere.Density = baseAtmosphere.Density
 			atmosphere.Haze = baseAtmosphere.Haze
 			atmosphere.Color = baseAtmosphere.Color
+		end
+		if clouds and baseClouds then
+			clouds.Cover = baseClouds.Cover
+			clouds.Density = baseClouds.Density
+			clouds.Color = baseClouds.Color
 		end
 		if sky and skyHidden then
 			sky.Parent = Lighting

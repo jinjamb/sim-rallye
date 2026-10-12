@@ -101,6 +101,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Tutorial/` | `Tutorial` : le tutoriel express (un nouveau pilote au volant dès son arrivée, guidé en quatre étapes selon son appareil). |
 | `Weather/` | `WeatherClient` : la météo chez le pilote (adhérence mouillée, pluie, ciel, routes assombries).                |
+| `World/`   | L'ambiance lumineuse, style anime : profils par surface et par circuit (`Ambiances`), application à l'éclairage (`Ambiance` : soleil, ombres colorées, brume, nuages, étalonnage, halo), trait d'encre autour des voitures (`CarOutlines`). |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
 | `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), vignettes des objets (`ItemArt`), aide des commandes (`ControlsHint`), classement, réglages, garage, et le menu principal (`UI/Menu`, avec la barre de boutons `HubBar` et l'onglet `InventoryPage`). |

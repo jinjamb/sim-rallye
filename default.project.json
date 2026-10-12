@@ -72,7 +72,10 @@
         "Brightness": 2,
         "GlobalShadows": true,
         "Outlines": false,
-        "Technology": "Voxel"
+        "Technology": "Future",
+        "ShadowSoftness": 0,
+        "EnvironmentSpecularScale": 1,
+        "EnvironmentDiffuseScale": 0.25
       },
       "Atmosphere": {
         "$className": "Atmosphere",

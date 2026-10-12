@@ -48,6 +48,8 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Tutorial = require(script.Parent.Tutorial.Tutorial)
 local Slipstream = require(script.Parent.Driving.Slipstream)
+local Ambiance = require(script.Parent.World.Ambiance)
+local CarOutlines = require(script.Parent.World.CarOutlines)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -81,6 +83,10 @@ local isTouch = TouchControls.IsTouchDevice()
 --------------------------------------------------------------------------------
 -- Ce qui dure toute la partie
 --------------------------------------------------------------------------------
+
+-- L'ambiance du paddock, et le trait d'encre autour des voitures.
+Ambiance.Reset()
+CarOutlines.Start()
 
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)
