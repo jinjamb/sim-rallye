@@ -41,7 +41,9 @@ end
 
 ProfileSchema.GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 ProfileSchema.GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
-ProfileSchema.MAX_RECEIPTS = 50 -- achats Robux retenus (Roblox ne rejoue que les récents)
+ProfileSchema.MAX_RECEIPTS = 50
+-- Gamme de voitures : 1 = Rally2 de série (avant), 2 = Rally4 de série.
+ProfileSchema.GARAGE_VERSION = 2 -- achats Robux retenus (Roblox ne rejoue que les récents)
 
 export type Ghost = { Rate: number, Frames: { number } }
 export type StageRecord = { Ms: number, Ghost: Ghost? }
@@ -91,6 +93,7 @@ export type Profile = {
 	ReferralQualified: boolean, -- ce filleul a pris le volant : récompenses du parrainage données
 	Referrals: number, -- amis parrainés récompensés
 	ReferralsPending: number, -- récompenses de parrainage pas encore remises (écrites par un autre serveur)
+	GarageVersion: number, -- gamme de voitures connue du profil (EconomyService : la Rally2 gardée par les anciens)
 }
 
 export type ChampionshipRun = {
@@ -157,6 +160,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		ReferralQualified = false,
 		Referrals = 0,
 		ReferralsPending = 0,
+		GarageVersion = ProfileSchema.GARAGE_VERSION, -- un nouveau profil connaît la gamme actuelle
 	}
 end
 
@@ -236,6 +240,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.ReferralQualified = data.ReferralQualified == true
 	profile.Referrals = count(data.Referrals)
 	profile.ReferralsPending = count(data.ReferralsPending)
+	profile.GarageVersion = math.max(1, count(data.GarageVersion)) -- profil d'avant la nouvelle gamme : 1
 	if type(data.ChampBests) == "table" then
 		for key, ms in pairs(data.ChampBests) do
 			if type(key) == "string" and type(ms) == "number" and ms > 0 then

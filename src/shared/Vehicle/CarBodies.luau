@@ -5,7 +5,7 @@
 	est une carrosserie construite par le jeu, en pièces Roblox (style
 	low-poly), posée sur le même châssis physique (build-rig.luau) : le
 	modèle ne change rien à la conduite, seulement le look. La catégorie
-	(Rally2, Rally4, Groupe B : CarClasses.luau) reste celle de la voiture.
+	(Rally4, Rally2, WRC, Groupe B : CarClasses.luau) reste celle de la voiture.
 
 		1 Origine   la carrosserie du gabarit (modèle importé), telle quelle ;
 		2 Kaze      (« vent ») citadine WRC moderne à hayon, nez plongeant ;

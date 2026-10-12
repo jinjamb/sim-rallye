@@ -134,7 +134,7 @@ function Car.new(chassis: BasePart, classId: string?): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
 	self.Class = CarClasses.Get(classId)
-	self.Aerodynamics = AerodynamicsClass.new(chassis)
+	self.Aerodynamics = AerodynamicsClass.new(chassis, self.Class.DragRatio, self.Class.AeroBalance)
 	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
 	self.SteerAssist = 1 -- réglable (CarSetup.SteerAssist)
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO

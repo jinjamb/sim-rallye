@@ -25,6 +25,10 @@
 	AVANTAGES (Perks.luau) : les crédits gagnés en jouant sont multipliés
 	(pass Crédits ×2, bonus Roblox Premium) ; les achats, eux, ne le sont pas.
 
+	NOUVELLE GAMME (GarageVersion) : la Rally2 était de série, c'est
+	maintenant la Rally4. Un pilote arrivé avant garde sa Rally2 (possédée,
+	et portée s'il n'avait rien choisi d'autre).
+
 	PORTER (EquipItem) : un objet de chaque sorte, s'il est possédé. Les
 	objets portés sont montrés aux autres joueurs par la voiture
 	(EquippedChanged, branché sur CarService par Main.server.luau).
@@ -317,8 +321,34 @@ end
 -- Démarrage
 --------------------------------------------------------------------------------
 
+-- La Rally2 de série d'avant la nouvelle gamme : gardée par ceux qui l'avaient.
+local LEGACY_CAR = "car_rally2"
+local function migrateGarage(player: Player, profile: Profile)
+	if profile.GarageVersion >= ProfileSchema.GARAGE_VERSION then
+		return
+	end
+	local equipNow = profile.Equipped.Car == nil
+	profile.Owned[LEGACY_CAR] = true
+	if equipNow then
+		profile.Equipped.Car = LEGACY_CAR
+	end
+	profile.GarageVersion = ProfileSchema.GARAGE_VERSION
+	ProfileStore.Update(player.UserId, "nouvelle gamme", function(stored)
+		if stored.GarageVersion >= ProfileSchema.GARAGE_VERSION then
+			return false
+		end
+		stored.Owned[LEGACY_CAR] = true
+		if stored.Equipped.Car == nil then
+			stored.Equipped.Car = LEGACY_CAR
+		end
+		stored.GarageVersion = ProfileSchema.GARAGE_VERSION
+		return true
+	end)
+end
+
 function EconomyService.Start()
-	ProfileStore.OnLoaded(function(player)
+	ProfileStore.OnLoaded(function(player, profile)
+		migrateGarage(player, profile)
 		sendWallet(player)
 		EconomyService.EquippedChanged(player)
 	end)

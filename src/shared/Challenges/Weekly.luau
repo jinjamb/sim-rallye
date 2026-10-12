@@ -45,6 +45,7 @@ Weekly.MODIFIERS = {
 local CLASS_WEIGHTS: { { Id: string, Weight: number } } = {
 	{ Id = "Rally2", Weight = 2 },
 	{ Id = "Rally4", Weight = 1 },
+	{ Id = "WRC", Weight = 1 },
 	{ Id = "GroupB", Weight = 1 },
 }
 

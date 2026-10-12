@@ -112,6 +112,7 @@ SoundBank.TONES = {
 	-- Catégories de voitures (son de série).
 	Rally2 = tone(1.18, -3, 0, 2, 0.08),
 	Rally4 = tone(1.32, -5, 1, 3, 0.05, 0.9),
+	WRC = tone(1.26, -2, 2, 4, 0.14, 1.05),
 	GroupB = tone(1.08, 2, 0, 1, 0.25, 1.1),
 	-- Sons moteur à débloquer (Items/Engines.luau).
 	V8 = tone(1, 0, 0, 0, 0),

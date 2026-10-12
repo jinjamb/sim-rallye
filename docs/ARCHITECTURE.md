@@ -20,7 +20,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 |----------------|------------------------------------------------------------------------------------------|
 | `Network/`     | `Remotes` : la liste de tous les RemoteEvents (créés par le serveur, attendus par le client). |
 | `Util/`        | `Format` (temps, milliers, compte à rebours) et `Units` (échelle stud/mètre, gravité).    |
-| `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, Groupe B), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
+| `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, WRC, Groupe B, aérodynamique comprise), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
 | `Stage/`       | Les spéciales : `Stages` (la liste des spéciales et leurs tracés), `StageTrack` (construction d'un tracé, abscisse) et `Pacenotes` (notes du copilote). |
 | `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
@@ -119,9 +119,9 @@ Un trophée est une entrée de `shared/Progression/Achievements.luau`. Il est d�
 
 ## Catégories de voitures
 
-Une catégorie est une fiche dans `shared/Vehicle/CarClasses.luau`. Elle définit le moteur, la boîte, la transmission, les pneus et le kit de carrosserie. Elle donne aussi un suffixe aux clés des records : la Rally2 garde les clés d'avant les catégories. La physique (`Car`, `Powertrain`, `Gearbox`) lit la fiche de la voiture conduite.
+Une catégorie est une fiche dans `shared/Vehicle/CarClasses.luau`. Elle définit le moteur, la boîte, la transmission, les pneus, l'aérodynamique (traînée, répartition de l'appui, appui de série) et le kit de carrosserie. Elle donne aussi un suffixe aux clés des records : la Rally2 garde les clés d'avant les catégories. La physique (`Car`, `Powertrain`, `Gearbox`) lit la fiche de la voiture conduite.
 
-Records, fantômes, médailles et classements sont propres à chaque catégorie. La voiture achetable correspondante est un objet `Car` du catalogue (`Economy/Items/Cars.luau`).
+Records, fantômes, médailles et classements sont propres à chaque catégorie. La voiture achetable correspondante est un objet `Car` du catalogue (`Economy/Items/Cars.luau`). La carrière va de la Rally4 (de série) à la Rally2, à la WRC puis au Groupe B ; les profils d'avant cette gamme gardent leur Rally2 (`GarageVersion`, `EconomyService`).
 
 ## Spéciales et cartes
 

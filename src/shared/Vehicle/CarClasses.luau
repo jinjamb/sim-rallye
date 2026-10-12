@@ -8,14 +8,25 @@
 	Toutes partagent le même gabarit physique (masse, suspension, géométrie :
 	Car.luau se recale sur la masse). Ce qui les distingue : la puissance
 	ramenée au poids, la forme de la courbe de couple, le turbo, la boîte, la
-	transmission (traction ou 4 roues motrices) et les pneus.
+	transmission (traction ou 4 roues motrices), les pneus et l'aérodynamique.
 
-		Rally4    traction, ~210 ch : agile, facile, mais il faut la placer
-		          avant le virage (pas de motricité arrière pour pivoter).
+	LA GAMME, dans l'ordre de la carrière (Items/Cars.luau) :
+		Rally4    la voiture de série : traction, ~210 ch. Agile, facile,
+		          mais il faut la placer avant le virage (pas de motricité
+		          arrière pour pivoter).
 		Rally2    la référence : 4 roues motrices, ~290 ch.
+		WRC       la voiture d'usine : 4 roues motrices, ~380 ch, anti-lag
+		          (réponse immédiate), boîte courte, gros appui aéro. Très
+		          rapide partout, exigeante à haute vitesse.
 		Groupe B  la légende des années 80 : 4 roues motrices, ~500 ch, un
 		          turbo qui met du temps à souffler, des pneus moins
-		          accrocheurs. Brutale.
+		          accrocheurs, peu d'appui. Brutale.
+
+	AÉRODYNAMIQUE (Aerodynamics.luau) : chaque catégorie a sa traînée
+	(DragRatio) et sa répartition d'appui (AeroBalance) ; la quantité d'appui
+	est un réglage (Downforce, CarSetup.luau) dont la valeur de série est
+	dans Setup. L'appui ajoute de la charge sur les pneus, donc de
+	l'adhérence, d'autant plus qu'on va vite.
 
 	CLASSEMENTS ÉQUITABLES : records, fantômes, médailles et classements sont
 	propres à chaque catégorie (RecordKey). La Rally2 garde les clés d'avant
@@ -54,6 +65,8 @@ export type Class = {
 	TurboLag: number,
 	TurboShare: number,
 	TireGrip: number, -- adhérence des pneus (1 = Rally2)
+	DragRatio: number, -- traînée à 100 km/h, en fraction du poids (Aerodynamics.luau)
+	AeroBalance: number, -- part de l'appui sur l'arrière (0.5 : neutre ; plus : stable)
 	MedalScale: number, -- vitesses des médailles, relatives à la Rally2
 	Setup: { [string]: number }, -- réglages par défaut propres (CarSetup.luau)
 	Engine: string, -- son moteur de série (SoundBank.luau)
@@ -91,6 +104,8 @@ local LIST: { Class } = {
 		TurboLag = 0,
 		TurboShare = 0,
 		TireGrip = 0.97,
+		DragRatio = 0.028, -- petite voiture, simple becquet
+		AeroBalance = 0.55,
 		MedalScale = 0.9,
 		Setup = { FinalDrive = 3.4, Downforce = 0.14, BrakeBias = 0.62, SteerAngle = 47 },
 		Engine = "Rally4",
@@ -123,11 +138,48 @@ local LIST: { Class } = {
 		TurboLag = 0,
 		TurboShare = 0,
 		TireGrip = 1,
+		DragRatio = 0.03,
+		AeroBalance = 0.6,
 		MedalScale = 1,
 		Setup = {},
 		Engine = "Rally2",
 		Body = "Rally2",
 		RecordSuffix = "",
+	},
+	{
+		Id = "WRC",
+		Name = "WRC",
+		Description = "4 roues motrices, 380 ch, gros appui aéro. La voiture d'usine.",
+		Drive = "AWD",
+		PowerToWeight = 200,
+		-- 1.6 turbo bridé, anti-lag : un plateau de couple énorme, de 3000 à 6000.
+		TorqueCurve = {
+			{ rpm = 0, torque = 0 },
+			{ rpm = 1000, torque = 220 },
+			{ rpm = 3000, torque = 640 },
+			{ rpm = 6000, torque = 660 },
+			{ rpm = 7600, torque = 470 },
+			{ rpm = 8200, torque = 0 },
+		},
+		IdleRPM = 1000,
+		MaxRPM = 8200,
+		LimiterRPM = 8000,
+		LaunchRPM = 5000,
+		-- 6 rapports courts. Au rupteur (pont 3.6, roue de 1 stud) : 57 | 78 | 99 | 122 | 146 | 174.
+		GearRatios = { 4.20, 3.05, 2.40, 1.95, 1.62, 1.36 },
+		ReverseRatio = 3.80,
+		UpshiftRPM = 7300,
+		DownshiftRPM = 4000,
+		TurboLag = 0,
+		TurboShare = 0,
+		TireGrip = 1.03,
+		DragRatio = 0.036, -- grands ailerons, lame avant, ailes ouvertes : l'appui se paie
+		AeroBalance = 0.55, -- lame et canards à l'avant : l'avant mord à haute vitesse
+		MedalScale = 1.08,
+		Setup = { FinalDrive = 3.6, Downforce = 0.30, BrakeForce = 0.95, CenterLock = 0.5 },
+		Engine = "WRC",
+		Body = "WRC",
+		RecordSuffix = "_wrc",
 	},
 	{
 		Id = "GroupB",
@@ -157,6 +209,8 @@ local LIST: { Class } = {
 		TurboLag = 0.6,
 		TurboShare = 0.45,
 		TireGrip = 0.95,
+		DragRatio = 0.033, -- aileron double étage, mais carrosserie des années 80
+		AeroBalance = 0.65, -- appui surtout à l'arrière : l'avant se déleste à haute vitesse
 		MedalScale = 1.12,
 		Setup = { FinalDrive = 3.2, Downforce = 0.08, CenterSplit = 0.65, BrakeForce = 0.8 },
 		Engine = "GroupB",

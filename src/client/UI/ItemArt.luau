@@ -258,8 +258,9 @@ end
 
 -- Modèle du jeu qui représente chaque catégorie (CarBodies.LIST) sur les vignettes.
 local CLASS_BODIES: { [string]: number } = {
-	Rally2 = 2, -- Kaze, citadine WRC
 	Rally4 = 6, -- Hoshi
+	Rally2 = 5, -- Hayate, berline de rallye
+	WRC = 2, -- Kaze, citadine WRC
 	GroupB = 4, -- Raijin, coupé des années 80
 }
 
