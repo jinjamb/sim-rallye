@@ -14,6 +14,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
@@ -46,7 +47,8 @@ local function circuitRow(ctx: Context, b: Builder, id: string)
 	local details = string.match(circuit.Description, "^[^%.]+") or ""
 	local status = {}
 	if waiting then
-		table.insert(status, string.format("%d en attente · %s · %d tours · %s", waiting.Count, CarClasses.Get(waiting.CarClass).Name, waiting.Laps, MenuKit.RaceFormatName(waiting.Format)))
+		local weather = Weather.Sanitize(waiting.Weather)
+		table.insert(status, string.format("%d en attente · %s · %d tours · %s%s", waiting.Count, CarClasses.Get(waiting.CarClass).Name, waiting.Laps, MenuKit.RaceFormatName(waiting.Format), if weather == "Dry" then "" else " · " .. string.lower(Weather.MODE_NAMES[weather])))
 	end
 	if racing > 0 then
 		table.insert(status, string.format("%d en course", racing))
@@ -99,6 +101,14 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 	local width = MenuKit.CONTENT_WIDTH
 	b:Section("Spéciales")
 	b:Text("Bats ton record sur chaque spéciale et grimpe au classement (L) : chacune a ses médailles et ses fantômes.", 13, Widgets.COLOR_DIM)
+	-- Météo de la prochaine spéciale (gardée dans le menu tant que la partie dure).
+	local weather = Weather.Sanitize(ctx.View.StageWeather)
+	MenuKit.Stepper(ctx, b, "Météo", Weather.MODE_NAMES[weather], function(direction)
+		local index = table.find(Weather.MODES, weather) or 1
+		ctx.View.StageWeather = Weather.MODES[((index - 1 + direction) % #Weather.MODES) + 1]
+		ctx.Rebuild()
+	end)
+	b:Text(Weather.MODE_DESCRIPTIONS[weather], 12, Widgets.COLOR_DIM)
 	for index, id in ipairs(Stages.List()) do
 		local track = Stages.Get(id)
 		local row = b:Row(44)
@@ -111,7 +121,7 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 		info.TextWrapped = true
 		info.TextTruncate = Enum.TextTruncate.AtEnd
 		local launch = ctx.Button(row, "LANCER", width - 168, 168, function()
-			ctx.Action("Play", { Mode = "Stage", TrackId = id })
+			ctx.Action("Play", { Mode = "Stage", TrackId = id, Weather = weather })
 		end)
 		if index == 1 then
 			Widgets.Primary(launch)

@@ -142,4 +142,9 @@ SoundBank.TarmacRoll = id(9112886486) -- "Tire Constant 2"
 -- PAS ENCORE ÉCOUTÉ : à remplacer s'il sonne mal ou ne boucle pas proprement.
 SoundBank.Wind = id(5813077875) -- "wind"
 
+-- Pluie sur la carrosserie, en boucle (WeatherClient.luau), plus forte avec
+-- l'averse. "" : pas encore choisie (la pluie reste muette) ; à prendre dans
+-- la sonothèque Roblox (Creator Store > Audio, « rain loop »).
+SoundBank.Rain = ""
+
 return SoundBank

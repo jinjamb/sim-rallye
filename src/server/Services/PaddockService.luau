@@ -46,6 +46,7 @@ local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -390,7 +391,8 @@ local function refuse(player: Player, message: string)
 	Remotes.RaceEvent:FireClient(player, "Error", { Message = message })
 end
 
-local function onPlayMode(player: Player, mode: any, trackId: any)
+-- `weather` : la météo choisie pour une spéciale (Weather.luau), sec sinon.
+local function onPlayMode(player: Player, mode: any, trackId: any, weather: any)
 	local now = os.clock()
 	if now - (lastPlayAt[player] or -math.huge) < PLAY_COOLDOWN then
 		return
@@ -423,7 +425,8 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 
 	if mode == "Stage" then
 		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
-		CarService.Spawn(player, track.StartFrame(), { Attributes = { Stage = track.Id } })
+		local forecast = Weather.New(weather, workspace:GetServerTimeNow())
+		CarService.Spawn(player, track.StartFrame(), { Attributes = Weather.ToAttributes(forecast, { Stage = track.Id }) })
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
 		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
@@ -431,8 +434,10 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
 		local track = Stages.Get(Stages.DEFAULT)
+		-- Défi « pluie » : la météo pluie, pour tous les concurrents de la semaine.
+		local forecast = Weather.New(if week.Modifier.Id == "Rain" then "Rain" else "Dry", workspace:GetServerTimeNow())
 		CarService.Spawn(player, track.StartFrame(), {
-			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id },
+			Attributes = Weather.ToAttributes(forecast, { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id }),
 			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
 		})
 	elseif mode == "Practice" then

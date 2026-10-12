@@ -36,6 +36,8 @@ local Copilot = require(script.Parent.Parent.Stage.Copilot)
 local Ghost = require(script.Parent.Parent.Stage.Ghost)
 local StylePoints = require(script.Parent.StylePoints)
 local StageModifier = require(script.Parent.Parent.Stage.StageModifier)
+local WeatherClient = require(script.Parent.Parent.Weather.WeatherClient)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local DrivingSchool = require(script.Parent.Parent.School.DrivingSchool)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
@@ -85,6 +87,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	-- Défi de la semaine (clé de semaine) et de quoi défaire sa contrainte.
 	Weekly: string?,
 	UndoModifier: (() -> ())?,
+	UndoWeather: (() -> ())?, -- météo de la spéciale ou de la course (WeatherClient)
 	-- Leçon de l'école de pilotage en cours.
 	School: DrivingSchool.DrivingSchool?,
 	HasControl: boolean,
@@ -127,6 +130,10 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local car = CarClass.new(self.Chassis, self.ClassId)
 	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))
 	self.Car = car
+
+	-- Météo de la spéciale ou de la course (Weather.luau), posée par le serveur.
+	local forecast = Weather.FromAttributes(model:GetAttribute("Weather"), model:GetAttribute("WeatherSeed"), model:GetAttribute("WeatherStart"))
+	self.UndoWeather = if forecast then WeatherClient.Start(forecast) else nil
 
 	local wheelAttachments: { Attachment } = {}
 	for i, wheel in ipairs(car.Wheels) do
@@ -462,6 +469,11 @@ function DrivingSession:Destroy()
 	self.UndoModifier = nil
 	if undo then
 		undo()
+	end
+	local undoWeather: (() -> ())? = self.UndoWeather
+	self.UndoWeather = nil
+	if undoWeather then
+		undoWeather()
 	end
 	self.HasControl = false
 	self.Dashboard:Destroy()

@@ -172,7 +172,7 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Play" then
 			-- Spéciale, essais libres, ou salle d'attente d'un circuit (PaddockService).
 			if type(payload) == "table" then
-				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId)
+				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId, payload.Weather)
 			end
 			-- La salle d'attente s'affiche dans le menu : on le laisse ouvert.
 			if type(payload) ~= "table" or payload.Mode ~= "Rallycross" then

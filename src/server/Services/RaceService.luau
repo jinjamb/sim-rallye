@@ -80,6 +80,7 @@ local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 
 local RaceService = {}
 
@@ -202,6 +203,10 @@ type Race = {
 	-- Catégorie de voiture de la course (CarClasses.luau) : tout le monde la
 	-- conduit (prêtée à qui ne l'a pas), records du tour de cette catégorie.
 	CarClass: string,
+	-- Météo choisie par l'hôte (Weather.luau), et sa prévision, tirée au
+	-- départ de la première manche et gardée jusqu'au retour en salle d'attente.
+	Weather: Weather.Mode,
+	Forecast: Weather.Forecast?,
 	HostUserId: number,
 	Members: { Member },
 	State: RaceState,
@@ -270,6 +275,7 @@ local function lobbyList()
 				Format = race.Format,
 				Contacts = race.Contacts,
 				CarClass = race.CarClass,
+				Weather = race.Weather,
 				Host = hostName,
 				Count = #race.Members,
 				Max = MAX_PLAYERS,
@@ -297,6 +303,8 @@ local function raceSnapshot(race: Race)
 		Format = race.Format,
 		Contacts = race.Contacts,
 		CarClass = race.CarClass,
+		Weather = race.Weather,
+		Forecast = race.Forecast,
 		HostUserId = race.HostUserId,
 		State = race.State,
 		Round = race.Round,
@@ -680,6 +688,11 @@ startRound = function(race: Race, round: number)
 		end
 	end
 
+	-- La météo de la course : la même averse pour tous, manche après manche.
+	if not race.Forecast then
+		race.Forecast = Weather.New(race.Weather, serverNow())
+	end
+
 	race.Runners = {}
 	race.Pairs = {}
 	for slot, member in ipairs(members) do
@@ -729,6 +742,7 @@ startRound = function(race: Race, round: number)
 				Contacts = race.Contacts,
 				Held = true,
 				CarClass = race.CarClass,
+				Attributes = if race.Forecast then Weather.ToAttributes(race.Forecast) else nil,
 			})
 			pending -= 1
 			-- Parti de la course pendant le chargement : sa voiture n'a rien à faire sur la grille.
@@ -890,6 +904,8 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Format = "Sprint",
 		Contacts = true,
 		CarClass = hostClass(host),
+		Weather = "Dry",
+		Forecast = nil,
 		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
@@ -1073,6 +1089,7 @@ closeEvent = function(race: Race)
 		end
 	end
 	race.State = "Lobby"
+	race.Forecast = nil
 	race.Round = 1
 	race.RoundCount = if race.Format == "Event" then 2 else 1
 	race.Runners = {}
@@ -1181,6 +1198,9 @@ local function onSettings(player: Player, payload: any)
 	end
 	if type(payload.Contacts) == "boolean" then
 		race.Contacts = payload.Contacts
+	end
+	if payload.Weather ~= nil then
+		race.Weather = Weather.Sanitize(payload.Weather)
 	end
 	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
 	if CarClasses.Exists(payload.CarClass) then

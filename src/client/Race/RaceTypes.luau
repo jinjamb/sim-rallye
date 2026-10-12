@@ -15,6 +15,7 @@ export type LobbyRace = {
 	Format: string, -- "Sprint" | "Event"
 	Contacts: boolean,
 	CarClass: string, -- catégorie de voiture de la course (CarClasses.luau)
+	Weather: string?, -- météo choisie par l'hôte (Weather.luau)
 	Host: string,
 	Count: number,
 	Max: number,
@@ -31,6 +32,8 @@ export type RaceSnapshot = {
 	Format: string,
 	Contacts: boolean,
 	CarClass: string,
+	Weather: string?, -- météo choisie par l'hôte (Weather.luau)
+	Forecast: any, -- sa prévision, une fois la course partie
 	HostUserId: number,
 	State: string, -- "Lobby" | "Grid" | "Countdown" | "Racing" | "Results"
 	Round: number,

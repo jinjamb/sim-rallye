@@ -30,6 +30,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
 | `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux), `Rolls` (règles et probabilités des tirages), `Pass` (saisons et paliers du Rallye Pass). `Items/Parts` : les pièces de carrosserie. |
+| `Weather/`     | `Weather` : la météo (sec, pluie, variable), ses averses et l'eau sur la route, calculées de la même façon par le serveur et chaque client. |
 | `Teams/`       | `Teams` : les écuries (taille, nom et sigle valides, couleurs communes).                  |
 
 ## `src/server` : l'autorité
@@ -92,6 +93,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style. |
 | `Stage/`   | Ce qui sert sur la spéciale : chrono, copilote, fantômes, contrainte du défi (`StageModifier` : nuit, pluie, brouillard…). |
 | `School/`  | Déroulement d'une leçon.                                                                                      |
+| `Weather/` | `WeatherClient` : la météo chez le pilote (adhérence mouillée, pluie, ciel, routes assombries).                |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
 | `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), vignettes des objets (`ItemArt`), aide des commandes (`ControlsHint`), classement, réglages, garage, et le menu principal (`UI/Menu`, avec la barre de boutons `HubBar` et l'onglet `InventoryPage`). |
@@ -126,6 +128,10 @@ Le terrain et le décor se construisent dans Studio avec les outils de `tools/` 
 - `build-rig.luau`, `attach-body.luau`, `build-test-track.luau` : le gabarit de la voiture et la piste d'essai.
 
 Modifier le tracé d'une spéciale change sa longueur, donc la clé de ses records : ses temps repartent de zéro.
+
+## Météo
+
+Une prévision (`Weather.luau`) tient en trois valeurs : le mode (sec, pluie, variable), une graine et l'heure du serveur de son début. Le serveur la tire au lancement d'une spéciale (mode choisi au menu) ou au départ d'une course (mode réglé par l'hôte) et la pose sur la voiture (attributs `Weather`, `WeatherSeed`, `WeatherStart`). Chaque client en déduit les mêmes averses au même moment, et l'eau sur la route qui monte sous la pluie puis sèche (`WET_TIME`, `DRY_TIME`). L'adhérence suit l'eau (`Surfaces.EffectiveGrip`) : l'asphalte perd le plus, la neige presque rien.
 
 ## Conventions
 

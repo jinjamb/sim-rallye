@@ -12,6 +12,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local CareerPage = require(script.Parent.CareerPage)
 local MenuKit = require(script.Parent.MenuKit)
@@ -48,13 +49,21 @@ function RacePage.Race(ctx: Context, b: Builder, race: RaceTypes.RaceSnapshot)
 				ctx.Action("Settings", { CarClass = classes[((index - 1 + direction) % #classes) + 1] })
 			end
 		end)
+		-- Météo : la même pour tous (averses comprises).
+		local weather = Weather.Sanitize(race.Weather)
+		MenuKit.Stepper(ctx, b, "Météo", Weather.MODE_NAMES[weather], function(direction)
+			local index = table.find(Weather.MODES, weather) or 1
+			ctx.Action("Settings", { Weather = Weather.MODES[((index - 1 + direction) % #Weather.MODES) + 1] })
+		end)
+		b:Text(Weather.MODE_DESCRIPTIONS[weather], 12, Widgets.COLOR_DIM)
 	else
 		b:Text(string.format(
-			"%s · %d tours · %s · contacts %s",
+			"%s · %d tours · %s · contacts %s · météo %s",
 			CarClasses.Get(race.CarClass).Name,
 			race.Laps,
 			MenuKit.RaceFormatName(race.Format),
-			if race.Contacts then "activés" else "désactivés"
+			if race.Contacts then "activés" else "désactivés",
+			string.lower(Weather.MODE_NAMES[Weather.Sanitize(race.Weather)])
 		), 14)
 		if inLobby and not table.find(MenuKit.OwnedClasses(ctx), race.CarClass) then
 			b:Text("Tu n'as pas cette voiture : elle t'est prêtée pour la course.", 12, Widgets.COLOR_GREEN)
