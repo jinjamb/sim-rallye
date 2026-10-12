@@ -7,8 +7,8 @@
 	lancement) d'après PaddockLayout.luau :
 		- point d'apparition ;
 		- une ZONE par circuit, anneau lumineux au sol, et au-dessus un panneau :
-		  nom et longueur du circuit, record du tour, pilotes en attente, compte
-		  à rebours, pilotes en course ;
+		  nom et longueur du circuit, record du tour, temps des médailles
+		  (Medals.luau), pilotes en attente, compte à rebours, pilotes en course ;
 		- la zone VOITURE : sa voiture pour les essais libres et la spéciale ;
 		- le podium, et ses confettis.
 
@@ -17,6 +17,16 @@
 		  (RaceService.JoinPad). On peut y venir à pied ou en voiture.
 		- Sortir de la zone = quitter la salle (tant que la course n'est pas partie).
 		- Entrer à pied dans la zone VOITURE = recevoir sa voiture.
+	MENU (C, ou bouton MENU sur mobile ; ouvert à l'arrivée) : le raccourci de
+	tout ça, d'où qu'on soit :
+		- Lancer une spéciale : la voiture est posée sur la ligne de départ ;
+		- Défi de la semaine : pareil, avec la contrainte de la semaine
+		  (Weekly.luau ; attributs Weekly et Modifier sur la voiture) ;
+		- École de pilotage : la voiture au départ de la leçon (Lessons.luau ;
+		  attribut Lesson) ;
+		- Rallycross : rejoindre (ou ouvrir) la salle d'attente d'un circuit ;
+		  on y reste sans avoir à se tenir dans la zone ;
+		- Essais libres : la voiture à sa place au paddock.
 	RETOUR : depuis les essais libres ou la spéciale, H (ou le menu C, ou le
 	bouton PADDOCK sur mobile) ramène à pied au paddock, sans la voiture.
 	L'entrée est détectée au FRANCHISSEMENT : quelqu'un qui quitte la salle par
@@ -34,9 +44,20 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
+local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local Celebrations = require(ReplicatedStorage.Shared.Cosmetics.Celebrations)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarService = require(script.Parent.CarService)
 local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
+local EconomyService = require(script.Parent.EconomyService)
+local GarageService = require(script.Parent.GarageService)
+local PaddockScenery = require(script.Parent.Parent.World.PaddockScenery)
 
 local PaddockService = {}
 
@@ -45,6 +66,7 @@ local SIGN_INTERVAL = 0.5
 local CAR_PAD_COOLDOWN = 3
 local RETURN_COOLDOWN = 2
 local PODIUM_DURATION = 9
+local PLAY_COOLDOWN = 1.5 -- entre deux choix du menu (chaque choix recrée la voiture)
 
 type Sign = {
 	Status: TextLabel,
@@ -179,9 +201,13 @@ local function buildPaddock()
 		local _, frame = board(folder, pad.Position + Vector3.new(0, 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
 		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
 		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-		local record = label(frame, "Record du tour : —", 200, 60, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
-		local status = label(frame, "Entre dans la zone pour courir", 290, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
-		label(frame, "2 à 6 pilotes · départ 20 s après le 2e · C : options", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
+		local record = label(frame, "Record du tour : —", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
+		if circuit then
+			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, Color3.fromRGB(200, 202, 210))
+			medals.RichText = true
+		end
+		local status = label(frame, "Entre dans la zone pour courir", 292, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
+		label(frame, "1 à 6 pilotes · départ 20 s après le 1er · C : menu", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 		signs[pad.Id] = { Status = status, Record = record }
 	end
 
@@ -190,7 +216,7 @@ local function buildPaddock()
 	padRing(folder, carPad)
 	local _, carFrame = board(folder, carPad.Position + Vector3.new(0, 4, -carPad.Radius - 4), Vector2.new(16, 7), carPad.Color)
 	label(carFrame, "TA VOITURE", 30, 90, Enum.Font.GothamBlack, carPad.Color)
-	label(carFrame, "Essais libres, piste d'essai, spéciale chronométrée", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
+	label(carFrame, "Essais libres sur la piste d'essai · spéciale : menu C", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
 	label(carFrame, "Entre à pied dans la zone · E : monter · Q : descendre", 230, 60, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 
 	-- Garage : zone, plaque tournante (la voiture y est posée par chaque client,
@@ -256,18 +282,15 @@ local function buildPaddock()
 		table.insert(confetti, emitter)
 	end
 
+	-- Décor : stands, tribunes, arbres, tentes... et la vue fermée sur l'accueil.
+	PaddockScenery.Build(folder)
+
 	folder.Parent = workspace
 end
 
 --------------------------------------------------------------------------------
 -- Panneaux
 --------------------------------------------------------------------------------
-
-local function formatTime(ms: number): string
-	local seconds = ms / 1000
-	local minutes = math.floor(seconds / 60)
-	return string.format("%d:%05.2f", minutes, seconds - minutes * 60)
-end
 
 local recordText: { [string]: string } = {}
 
@@ -296,15 +319,18 @@ local function updateSigns()
 	end
 end
 
--- Records du tour (RecordService les diffuse aussi aux clients).
+-- Records du tour (RecordService les diffuse aussi aux clients), par
+-- catégorie puis par circuit : le panneau montre ceux de la Rally2, la
+-- catégorie de référence.
 local function onTrackRecords(boards: any)
-	if type(boards) ~= "table" then
+	local byTrack = if type(boards) == "table" then boards[CarClasses.DEFAULT] else nil
+	if type(byTrack) ~= "table" then
 		return
 	end
-	for padId, boardData in pairs(boards) do
+	for padId, boardData in pairs(byTrack) do
 		local entries = type(boardData) == "table" and boardData.Entries
 		local best = type(entries) == "table" and entries[1]
-		recordText[padId] = if best then string.format("Record du tour : %s — %s", formatTime(best.Ms), best.Name) else "Record du tour : —"
+		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s — %s", Format.Ms(best.Ms), best.Name) else "Record du tour : —"
 	end
 end
 
@@ -353,12 +379,97 @@ local function pollZones()
 end
 
 --------------------------------------------------------------------------------
+-- Menu principal : lancer une spéciale, une course de rallycross, des essais
+--------------------------------------------------------------------------------
+
+local lastPlayAt: { [Player]: number } = {}
+
+local function refuse(player: Player, message: string)
+	Remotes.RaceEvent:FireClient(player, "Error", { Message = message })
+end
+
+local function onPlayMode(player: Player, mode: any, trackId: any)
+	local now = os.clock()
+	if now - (lastPlayAt[player] or -math.huge) < PLAY_COOLDOWN then
+		return
+	end
+	if mode == "Rallycross" then
+		if type(trackId) ~= "string" or not Tracks.Get(trackId) then
+			return
+		end
+		if RaceService.GetLobbyTrack(player) == trackId then
+			return -- déjà dans cette salle d'attente
+		end
+	elseif mode == "Lesson" then
+		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
+			return
+		end
+	elseif mode == "Stage" then
+		-- trackId : la spéciale choisie (Stages.luau) ; la spéciale par défaut sinon.
+		if trackId ~= nil and not Stages.Exists(trackId) then
+			return
+		end
+	elseif mode ~= "Practice" and mode ~= "Weekly" then
+		return
+	end
+	local ok, reason = RaceService.ReleaseForMode(player)
+	if not ok then
+		refuse(player, reason or "Impossible pour l'instant.")
+		return
+	end
+	lastPlayAt[player] = now
+
+	if mode == "Stage" then
+		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
+		CarService.Spawn(player, track.StartFrame(), { Attributes = { Stage = track.Id } })
+	elseif mode == "Lesson" then
+		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
+		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
+		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id }, CarClass = "Rally2" })
+	elseif mode == "Weekly" then
+		local week = Weekly.Current()
+		local track = Stages.Get(Stages.DEFAULT)
+		CarService.Spawn(player, track.StartFrame(), {
+			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id },
+			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
+		})
+	elseif mode == "Practice" then
+		CarService.GiveFreeCar(player)
+	elseif RaceService.IsInRace(player) then
+		-- Arrivé et revenu au paddock, mais sa course n'est pas finie pour les autres.
+		refuse(player, "Ta course n'est pas encore terminée : patiente jusqu'aux résultats.")
+	else
+		-- La voiture actuelle (essais, spéciale) reste jusqu'à la mise en grille.
+		RaceService.JoinPad(player, trackId, true)
+	end
+end
+
+--------------------------------------------------------------------------------
 -- Podium
 --------------------------------------------------------------------------------
 
 type PodiumRow = { UserId: number, Name: string, Position: number }
 
 local podiumToken = 0
+
+--[[
+	La célébration portée par le pilote (Items/Celebrations.luau) au-dessus
+	de sa marche ; les confettis (célébration de série) sont ceux du décor.
+	Les fumigènes prennent la couleur de sa voiture.
+]]
+local function celebrate(player: Player, index: number, top: Vector3)
+	local item = EconomyService.Equipped(player, "Celebration")
+	local effect = if item and Celebrations.Exists(item.Effect) then item.Effect :: string else "Confetti"
+	if effect == "Confetti" then
+		local emitter = confetti[index]
+		if emitter then
+			emitter.Enabled = true
+		end
+		return
+	end
+	local color = if item and item.Color then item.Color else Livery.ColorOf(GarageService.GetLivery(player))
+	Celebrations.Play(workspace, top, effect, color, PODIUM_DURATION)
+end
 
 function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 	podiumToken += 1
@@ -370,19 +481,28 @@ function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 		if step and player then
 			local top = PaddockLayout.PODIUM_CENTER + step.Offset + Vector3.new(0, step.Height + 3, 0)
 			CarService.PlaceCharacter(player, CFrame.lookAt(top, top + Vector3.new(0, 0, 1)))
+			celebrate(player, index, top)
 		end
 		table.insert(names, row.Name)
 	end
-	for _, emitter in ipairs(confetti) do
-		emitter.Enabled = true
-	end
 	for _, player in ipairs(players) do
-		Remotes.RaceEvent:FireClient(player, "Podium", {
-			Names = names,
-			Duration = PODIUM_DURATION,
-			Eye = PaddockLayout.PODIUM_CAMERA_EYE,
-			Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
-		})
+		-- Avec le streaming, le paddock n'est pas chargé chez un pilote resté sur
+		-- le circuit : on le fait charger avant de montrer la cérémonie.
+		task.spawn(function()
+			if workspace.StreamingEnabled then
+				pcall(function()
+					player:RequestStreamAroundAsync(PaddockLayout.PODIUM_CENTER, 4)
+				end)
+			end
+			if player.Parent then
+				Remotes.RaceEvent:FireClient(player, "Podium", {
+					Names = names,
+					Duration = PODIUM_DURATION,
+					Eye = PaddockLayout.PODIUM_CAMERA_EYE,
+					Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
+				})
+			end
+		end)
 	end
 	task.delay(PODIUM_DURATION, function()
 		if podiumToken == token then
@@ -457,10 +577,13 @@ function PaddockService.Start()
 		end
 	end)
 
+	Remotes.PlayMode.OnServerEvent:Connect(onPlayMode)
+
 	Players.PlayerRemoving:Connect(function(player: Player)
 		currentPad[player] = nil
 		lastCarAt[player] = nil
 		lastReturnAt[player] = nil
+		lastPlayAt[player] = nil
 	end)
 
 	local pollAccumulator, signAccumulator = 0, 0

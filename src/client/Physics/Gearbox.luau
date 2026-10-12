@@ -1,7 +1,9 @@
 --!strict
 --[[
 	Gearbox.luau
-	Boîte séquentielle 6 rapports + marche arrière, avec le pont (transaxle).
+	Boîte séquentielle + marche arrière, avec le pont (transaxle). Rapports,
+	pont et régimes de passage viennent de la fiche de la catégorie
+	(CarClasses.luau) ; les commentaires ci-dessous décrivent la Rally2.
 
 	Elle ne connaît ni le couple ni l'embrayage : elle dit seulement quel rapport
 	est engagé, si un passage est en cours (coupure de couple) et, en mode
@@ -11,6 +13,10 @@
 	Toutes les vitesses passées en argument sont des vitesses AU SOL, en studs/s,
 	signées (positives vers l'avant du châssis).
 ]]
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 
 local Gearbox = {}
 Gearbox.__index = Gearbox
@@ -22,6 +28,9 @@ export type Gearbox = typeof(setmetatable({}, Gearbox)) & {
 	LimiterRPM: number,
 	WheelRadius: number,
 	UpshiftRPM: number, -- point de montée optimal, aussi utilisé par la LED de passage
+	DownshiftRPM: number, -- en dessous, la boîte auto descend
+	-- Plus haut régime d'arrivée accepté pour une descente automatique.
+	DownshiftMaxLandingRPM: number,
 
 	Gear: number,
 	Automatic: boolean,
@@ -44,9 +53,6 @@ export type Gearbox = typeof(setmetatable({}, Gearbox)) & {
 	Vitesse au rupteur (8000 tr/min, roue de 1 stud), en studs/s ~ km/h :
 		1re 54 | 2e 75 | 3e 98 | 4e 123 | 5e 152 | 6e 184
 ]]
-local GEAR_RATIOS = { 4.40, 3.20, 2.45, 1.95, 1.58, 1.30 }
-local REVERSE_RATIO = 3.80
-local FINAL_DRIVE = 3.5
 
 --[[
 	Durées de passage : couple coupé pendant ce temps. Une séquentielle de rallye
@@ -66,9 +72,8 @@ local DOWNSHIFT_TIME = 0.18
 	que la boîte ne "pompe" jamais : après une montée à 6800 on retombe au-dessus
 	de 4900, bien loin du seuil de descente.
 ]]
-local UPSHIFT_RPM = 6800
-local DOWNSHIFT_RPM = 3500
-local DOWNSHIFT_MAX_LANDING_RPM = 6000 -- jamais de descente qui ferait arriver au-dessus
+-- Une descente ne doit jamais faire arriver à moins de cet écart du rupteur.
+local DOWNSHIFT_LANDING_MARGIN = 1800 -- tr/min (Rally2 : 7800 - 1800 = 6000)
 local AUTO_COOLDOWN = 0.35 -- délai minimal entre deux décisions automatiques
 
 -- En dessous de cette vitesse (studs/s), on considère la voiture arrêtée :
@@ -89,14 +94,16 @@ local DOWNSHIFT_QUEUE_TIMEOUT = 2.5 -- secondes
 
 local RAD_PER_SEC_TO_RPM = 9.5492
 
-function Gearbox.new(limiterRPM: number, wheelRadius: number): Gearbox
+function Gearbox.new(limiterRPM: number, wheelRadius: number, class: CarClasses.Class): Gearbox
 	local self = (setmetatable({}, Gearbox) :: any) :: Gearbox
-	self.Ratios = table.clone(GEAR_RATIOS)
-	self.ReverseRatio = REVERSE_RATIO
-	self.FinalDrive = FINAL_DRIVE
+	self.Ratios = table.clone(class.GearRatios)
+	self.ReverseRatio = class.ReverseRatio
+	self.FinalDrive = CarSetup.Default(class.Id).FinalDrive
 	self.LimiterRPM = limiterRPM
 	self.WheelRadius = wheelRadius
-	self.UpshiftRPM = UPSHIFT_RPM
+	self.UpshiftRPM = class.UpshiftRPM
+	self.DownshiftRPM = class.DownshiftRPM
+	self.DownshiftMaxLandingRPM = limiterRPM - DOWNSHIFT_LANDING_MARGIN
 
 	self.Gear = 1
 	self.Automatic = true
@@ -273,7 +280,7 @@ function Gearbox:UpdateAutomatic(groundSpeed: number, throttle: number, brake: n
 
 	-- On ne monte qu'à l'accélération : lever le pied en appui garde le rapport,
 	-- et donc le frein moteur. C'est ce qu'on attend en rallye.
-	if throttle > 0 and rpm >= UPSHIFT_RPM and self.Gear < self:GetTopGear() then
+	if throttle > 0 and rpm >= self.UpshiftRPM and self.Gear < self:GetTopGear() then
 		self:_engage(self.Gear + 1)
 		return
 	end
@@ -286,15 +293,15 @@ function Gearbox:UpdateAutomatic(groundSpeed: number, throttle: number, brake: n
 		On descend tant que le régime d'arrivée reste sous la limite, et on
 		s'arrête au premier rapport qui remet le moteur dans son couple.
 	]]
-	if rpm < DOWNSHIFT_RPM and self.Gear > 1 then
+	if rpm < self.DownshiftRPM and self.Gear > 1 then
 		local target = self.Gear
 		for gear = self.Gear - 1, 1, -1 do
 			local landing = math.abs(self:GetGroundRPM(gear, groundSpeed))
-			if landing >= DOWNSHIFT_MAX_LANDING_RPM then
+			if landing >= self.DownshiftMaxLandingRPM then
 				break
 			end
 			target = gear
-			if landing >= DOWNSHIFT_RPM then
+			if landing >= self.DownshiftRPM then
 				break
 			end
 		end

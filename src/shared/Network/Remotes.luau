@@ -21,7 +21,8 @@ export type Remotes = {
 	-- autres joueurs (son, roues, poussière). Voir CarService.
 	CarTelemetry: UnreliableRemoteEvent,
 
-	-- Serveur -> Client : (profile) meilleur temps, fantôme, réglages, statistiques
+	-- Serveur -> Client : (profile) records et fantômes par spéciale puis par catégorie
+	-- (Stage[stageId][classId]), réglages, livrée, statistiques
 	ProfileLoaded: RemoteEvent,
 	-- Serveur -> Client : (stats, laps) statistiques et records du tour mis à jour
 	ProfileUpdated: RemoteEvent,
@@ -29,14 +30,38 @@ export type Remotes = {
 	RunValidated: RemoteEvent,
 	-- Client -> Serveur : (ghost) trajectoire du meilleur passage qu'on vient de valider
 	SubmitGhost: RemoteEvent,
-	-- Serveur -> Client : (entries) classement de la spéciale
+	-- Client -> Serveur : (mode: "Rival" | "Record" | "Player", userId?, classId, stageId) fantôme
+	-- d'un autre pilote de la même catégorie à affronter sur cette spéciale
+	RequestGhost: RemoteEvent,
+	-- Serveur -> Client : (opponent) le fantôme demandé (pilote, temps, trajectoire) ou l'erreur
+	GhostOpponent: RemoteEvent,
+	-- Serveur -> Client : (boards) classements des spéciales : boards[stageId][classId]
 	Leaderboard: RemoteEvent,
-	-- Client -> Serveur : (setup) réglages de la voiture à sauvegarder
+	-- Serveur -> Client : (board) défi de la semaine : contrainte, fin, classement, son temps
+	WeeklyBoard: RemoteEvent,
+	-- Serveur -> Client : (board) Roi du drift : meilleures combinaisons de la semaine, la sienne
+	DriftBoard: RemoteEvent,
+	-- Client -> Serveur : (classId, setup) réglages d'une catégorie de voiture à sauvegarder
 	SaveSetup: RemoteEvent,
 	-- Client -> Serveur : (livery) couleur et numéro de course à sauvegarder
 	SaveLivery: RemoteEvent,
+	-- Serveur -> Client : (snapshot, news?) progression (XP, niveau, licence, médailles) ;
+	-- news : niveau gagné, cosmétiques débloqués (Progression.luau)
+	Progress: RemoteEvent,
+	-- Client -> Serveur : (points, kind, detail?) points de style gagnés (dérapage, saut) ;
+	-- detail : multiplicateur d'une combinaison, temps en l'air d'un saut (défis du jour)
+	SubmitStyle: RemoteEvent,
+	-- Client -> Serveur : () remise en piste pendant la spéciale (défi « sans remise en piste »)
+	Recovered: RemoteEvent,
+	-- Serveur -> Client : (state, news?) défis du jour : objectifs, progression ; news : réussis
+	Daily: RemoteEvent,
+	-- Client -> Serveur : (lessonId, tier) médaille obtenue à une leçon de l'école de pilotage
+	LessonResult: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
+	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
+	-- menu principal : lancer une spéciale, des essais libres, une course de rallycross
+	PlayMode: RemoteEvent,
 
 	-- RALLYCROSS (RaceService)
 	-- Client -> Serveur : (action: string, payload) quitter, abandonner, lancer, réglages de la course
@@ -50,8 +75,46 @@ export type Remotes = {
 	RaceLive: UnreliableRemoteEvent,
 	-- Serveur -> Client : (kind, data) tour bouclé, joker, pénalité, arrivée, résultats
 	RaceEvent: RemoteEvent,
-	-- Serveur -> Clients : (records) meilleurs tours par circuit
+	-- Serveur -> Clients : (records) meilleurs tours, par catégorie puis par circuit
 	TrackRecords: RemoteEvent,
+
+	-- ÉCONOMIE (EconomyService)
+	-- Serveur -> Client : (wallet, news?) crédits, objets possédés et portés ;
+	-- news : crédits gagnés, objet acheté ou débloqué, erreur
+	Wallet: RemoteEvent,
+	-- Client -> Serveur : (itemId) acheter un objet en crédits
+	BuyItem: RemoteEvent,
+	-- Client -> Serveur : (kind, itemId) porter un objet possédé
+	EquipItem: RemoteEvent,
+	-- Client -> Serveur : ("Item", itemId) | ("Unlock", kind, index) | ("Product", key)
+	-- acheter en Robux : le serveur vérifie, retient la demande et ouvre l'achat
+	-- (MonetizationService)
+	RequestRobuxPurchase: RemoteEvent,
+
+	-- COSMÉTIQUES VISIBLES PAR TOUS
+	-- Client -> Serveur : () coup de klaxon (au volant)
+	Horn: RemoteEvent,
+	-- Serveur -> Clients : (userId) ce pilote klaxonne : chacun joue le son sur sa voiture
+	HornPlayed: RemoteEvent,
+	-- Client -> Serveur : () utiliser un tirage
+	RequestRoll: RemoteEvent,
+	-- Serveur -> Client : (result) l'objet tiré { ItemId, Duplicate, Credits } ou { Error }
+	RollResult: RemoteEvent,
+	-- Serveur -> Client : (state, news?) Rallye Pass : saison, XP, premium ; news : palier atteint
+	PassState: RemoteEvent,
+
+	-- ÉCURIES (TeamService)
+	-- Client -> Serveur : (action, payload) créer, inviter, accepter, quitter, exclure, couleurs
+	TeamAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) son écurie, son invitation, le classement ; news : message
+	TeamState: RemoteEvent,
+
+	-- TROPHÉES (AchievementService)
+	-- Serveur -> Client : (earned, news?) trophées obtenus (id -> date) ; news : { New = { id } }
+	Achievements: RemoteEvent,
+	-- Serveur -> Clients : (announce) annonce à tout le serveur { Kind, Name, Text } :
+	-- record battu, platine, roi du drift, grand trophée (AnnounceService)
+	Announce: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -62,15 +125,38 @@ local RELIABLE = {
 	"ProfileUpdated",
 	"RunValidated",
 	"SubmitGhost",
+	"RequestGhost",
+	"GhostOpponent",
 	"Leaderboard",
+	"WeeklyBoard",
+	"DriftBoard",
 	"SaveSetup",
 	"SaveLivery",
+	"Progress",
+	"SubmitStyle",
+	"Recovered",
+	"Daily",
+	"LessonResult",
 	"ReturnToPaddock",
+	"PlayMode",
 	"RaceAction",
 	"LobbyState",
 	"RaceState",
 	"RaceEvent",
 	"TrackRecords",
+	"Wallet",
+	"BuyItem",
+	"EquipItem",
+	"RequestRobuxPurchase",
+	"Horn",
+	"HornPlayed",
+	"RequestRoll",
+	"RollResult",
+	"PassState",
+	"TeamAction",
+	"TeamState",
+	"Achievements",
+	"Announce",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

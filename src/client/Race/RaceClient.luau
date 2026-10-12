@@ -3,21 +3,40 @@
 	RaceClient.luau
 	Le rallycross côté client : reçoit ce qu'envoie RaceService (courses
 	ouvertes, état de sa course, classement en direct, événements, records) et
-	le répartit entre le menu (RaceMenu), l'affichage de course (RaceHud) et la
-	caméra spectateur (SpectatorCamera).
+	le répartit entre le menu principal (MainMenu), l'affichage de course
+	(RaceHud) et la caméra spectateur (SpectatorCamera). Il tient aussi ce que
+	le menu affiche du profil (progression, défis, livrée, portefeuille) et
+	transmet ses demandes au serveur (jouer, acheter, porter un objet).
 
 	Les décisions (tours, positions, arrivée) sont toutes prises par le serveur :
 	ce module ne fait qu'afficher et transmettre les demandes du joueur.
 ]]
 
+local MarketplaceService = game:GetService("MarketplaceService")
+local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
-local RaceUi = require(script.Parent.RaceUi)
-local RaceMenu = require(script.Parent.RaceMenu)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Products = require(ReplicatedStorage.Shared.Economy.Products)
+local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
+local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
+local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
+local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Banner = require(script.Parent.Parent.UI.Banner)
+local Widgets = require(script.Parent.Parent.UI.Widgets)
+local RaceTypes = require(script.Parent.RaceTypes)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+local MainMenu = require(script.Parent.Parent.UI.Menu.MainMenu)
+local MenuKit = require(script.Parent.Parent.UI.Menu.MenuKit)
+local Toast = require(script.Parent.Parent.UI.Toast)
+local Theme = require(script.Parent.Parent.UI.Theme)
 local RaceHud = require(script.Parent.RaceHud)
 local Minimap = require(script.Parent.Minimap)
-local SpectatorCamera = require(script.Parent.SpectatorCamera)
+local SpectatorCamera = require(script.Parent.Parent.Camera.SpectatorCamera)
 
 local RaceClient = {}
 RaceClient.__index = RaceClient
@@ -30,29 +49,43 @@ export type Options = {
 	GetOtherCars: () -> { [number]: BasePart },
 	-- Le joueur quitte la vue spectateur : la caméra de poursuite reprend la main.
 	OnSpectateStopped: () -> (),
+	-- Menu : ralenti d'un passage ("Own" : le sien ; "Opponent" : le fantôme affronté).
+	OnReplay: (string) -> (),
 }
 
 export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Options: Options,
-	Menu: RaceMenu.RaceMenu,
+	Menu: MainMenu.MainMenu,
 	Hud: RaceHud.RaceHud,
 	Spectator: SpectatorCamera.SpectatorCamera,
-	Lobby: { RaceUi.LobbyRace },
-	Race: RaceUi.RaceSnapshot?,
-	Live: RaceUi.LivePayload?,
-	Records: { [string]: RaceUi.TrackBoard },
-	Stats: RaceUi.Stats?,
+	Lobby: { RaceTypes.LobbyRace },
+	Race: RaceTypes.RaceSnapshot?,
+	Live: RaceTypes.LivePayload?,
+	Records: RaceTypes.ClassBoards,
+	Stats: RaceTypes.Stats?,
+	Progress: Progression.Snapshot?,
+	Weekly: any, -- défi de la semaine (RecordService : WeeklyBoard)
+	Daily: any, -- défis du jour (RecordService : Daily)
+	ReplayOpponent: string?, -- nom du fantôme affronté (ralenti possible)
 	LapBests: { [string]: number },
 	MyChassis: BasePart?,
 	Livery: any,
 	LiverySaveToken: number,
+	Wallet: MenuKit.Wallet?, -- crédits, objets (EconomyService)
+	Pass: any, -- Rallye Pass (PassService)
+	Drift: any, -- Roi du drift (ChallengeService)
+	Team: any, -- écurie (TeamService)
+	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
+	-- Course finie : le menu se rouvre (après le podium) pour enchaîner.
+	ReopenMenuAt: number?,
 	PodiumEye: Vector3,
 	PodiumFocus: Vector3,
 }
 
 local LIVERY_SAVE_DELAY = 1 -- regroupe une rafale de clics en une seule sauvegarde
+local REOPEN_MENU_DELAY = 3 -- après la fin d'une course, le temps de revenir au paddock
 
 local function serverNow(): number
 	return workspace:GetServerTimeNow()
@@ -66,25 +99,93 @@ function RaceClient.new(options: Options): RaceClient
 	self.Live = nil
 	self.Records = {}
 	self.Stats = nil
+	self.Progress = nil
+	self.Weekly = nil
+	self.Daily = nil
+	self.ReplayOpponent = nil
 	self.LapBests = {}
 	self.MyChassis = nil
 	self.Livery = nil
 	self.LiverySaveToken = 0
+	self.Wallet = nil
+	self.Pass = nil
+	self.Drift = nil
+	self.Team = nil
+	self.Achievements = nil
 	self.PodiumUntil = 0
+	self.ReopenMenuAt = nil
 	self.PodiumEye = Vector3.zero
 	self.PodiumFocus = Vector3.zero
 
-	self.Menu = RaceMenu.new(options.PlayerGui, options.LocalUserId, function(action: string, payload: any)
+	self.Menu = MainMenu.new(options.PlayerGui, options.LocalUserId, function(action: string, payload: any)
 		if action == "Livery" then
 			self:SaveLivery(payload)
+		elseif action == "Buy" then
+			Remotes.BuyItem:FireServer(payload)
+		elseif action == "Equip" then
+			if type(payload) == "table" then
+				Remotes.EquipItem:FireServer(payload.Kind, payload.Id)
+				-- Retour immédiat : une fumée ou un son ne se voit qu'en roulant.
+				local item = Catalog.Get(payload.Id)
+				if item then
+					Toast.Show("<b>Équipé</b> · " .. item.Name .. " (" .. string.lower(Catalog.KIND_NAMES[item.Kind]) .. ")", Theme.GREEN)
+				end
+			end
+		elseif action == "Team" then
+			if type(payload) == "table" then
+				Remotes.TeamAction:FireServer(payload.Action, payload)
+			end
+		elseif action == "Roll" then
+			Remotes.RequestRoll:FireServer()
+		elseif action == "BuyRobux" then
+			-- Offre à prix fixe : le serveur vérifie (pack de démarrage déjà pris,
+			-- tirages interdits dans le pays...) puis ouvre l'achat.
+			local product = Products.Get(if type(payload) == "string" then payload else nil)
+			if product and Products.IsAvailable(product) then
+				Remotes.RequestRobuxPurchase:FireServer("Product", product.Key)
+			end
+		elseif action == "RobuxItem" then
+			-- Un objet du catalogue, au palier de sa rareté (MonetizationService).
+			if type(payload) == "string" then
+				Remotes.RequestRobuxPurchase:FireServer("Item", payload)
+			end
+		elseif action == "RobuxUnlock" then
+			-- Un déblocage de progression (modèle, pièce, couleur...).
+			if type(payload) == "table" then
+				Remotes.RequestRobuxPurchase:FireServer("Unlock", payload.Kind, payload.Index)
+			end
+		elseif action == "BuyPass" then
+			local pass = Products.Pass(if type(payload) == "string" then payload else "")
+			if pass and Products.IsPassAvailable(pass) then
+				MarketplaceService:PromptGamePassPurchase(Players.LocalPlayer, pass.GamePassId)
+			end
+		elseif action == "Premium" then
+			pcall(function()
+				MarketplaceService:PromptPremiumPurchase(Players.LocalPlayer)
+			end)
 		elseif action == "Paddock" then
 			Remotes.ReturnToPaddock:FireServer()
 			self.Menu:SetOpen(false)
+		elseif action == "Replay" then
+			self.Menu:SetOpen(false)
+			options.OnReplay(if type(payload) == "table" then tostring(payload.Which) else "Own")
+		elseif action == "Play" then
+			-- Spéciale, essais libres, ou salle d'attente d'un circuit (PaddockService).
+			if type(payload) == "table" then
+				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId)
+			end
+			-- La salle d'attente s'affiche dans le menu : on le laisse ouvert.
+			if type(payload) ~= "table" or payload.Mode ~= "Rallycross" then
+				self.Menu:SetOpen(false)
+			end
 		else
 			Remotes.RaceAction:FireServer(action, payload)
 		end
 	end)
 	self.Hud = RaceHud.new(options.PlayerGui, options.LocalUserId, {
+		Rematch = function()
+			Remotes.RaceAction:FireServer("Rematch", nil)
+		end,
 		Spectate = function()
 			self:StartSpectating()
 		end,
@@ -132,9 +233,23 @@ function RaceClient:_refreshMenu()
 		Race = self.Race,
 		Records = self.Records,
 		Stats = self.Stats,
+		Progress = self.Progress,
+		Weekly = self.Weekly,
+		Daily = self.Daily,
+		ReplayOpponent = self.ReplayOpponent,
 		Laps = self.LapBests,
 		Livery = self.Livery,
+		Wallet = self.Wallet,
+		Pass = self.Pass,
+		Drift = self.Drift,
+		Team = self.Team,
+		Achievements = self.Achievements,
 	})
+end
+
+-- Un réglage local affiché au menu a changé (voix du copilote...).
+function RaceClient:RefreshMenu()
+	self:_refreshMenu()
 end
 
 -- Livrée choisie dans le menu : sauvegardée (et repeinte par le serveur) après
@@ -166,9 +281,14 @@ function RaceClient:SetLivery(livery: any)
 	end
 end
 
-function RaceClient:_setRace(snapshot: RaceUi.RaceSnapshot?)
+function RaceClient:_setRace(snapshot: RaceTypes.RaceSnapshot?)
 	local previous = self.Race
 	self.Race = snapshot
+	-- Fin d'une course (pas d'une simple salle d'attente quittée) : le menu
+	-- revient pour enchaîner.
+	if snapshot == nil and previous ~= nil and previous.State ~= "Lobby" then
+		self.ReopenMenuAt = os.clock() + REOPEN_MENU_DELAY
+	end
 	if not snapshot or snapshot.State == "Lobby" then
 		self.Live = nil
 		self:StopSpectating()
@@ -189,44 +309,76 @@ function RaceClient:_onEvent(kind: string, data: any)
 	local race = self.Race
 	if kind == "Error" then
 		local message = tostring(data.Message or "Action impossible.")
-		self.Menu:SetStatus(message, RaceUi.COLOR_RED)
-		hud:ShowMessage(message, RaceUi.COLOR_RED)
+		self.Menu:SetStatus(message, Widgets.COLOR_RED)
+		hud:ShowMessage(message, Widgets.COLOR_RED)
 	elseif kind == "Go" then
-		hud:ShowMessage("GO !", RaceUi.COLOR_GREEN, 1.2)
+		hud:ShowMessage("GO !", Widgets.COLOR_GREEN, 1.2)
+		-- Le joker est obligatoire : on le rappelle dès le départ.
+		Banner.Show("JOKER OBLIGATOIRE", "Une fois par course, par la branche orange de la mini-carte · sinon +5 s", Widgets.COLOR_ORANGE, 3.5)
 	elseif kind == "Lap" then
 		local lap = tonumber(data.Lap) or 0
-		local text = string.format("TOUR %d — %s", lap, RaceUi.FormatTime(tonumber(data.Time)))
-		local color = RaceUi.COLOR_TEXT
+		local text = string.format("TOUR %d — %s", lap, Format.Time(tonumber(data.Time)))
+		local color = Widgets.COLOR_TEXT
 		if data.Record then
 			text ..= " — RECORD PERSO DU CIRCUIT !"
-			color = RaceUi.COLOR_ACCENT
+			color = Widgets.COLOR_ACCENT
 		elseif data.Best and lap > 1 then
 			text ..= " — MEILLEUR TOUR"
-			color = RaceUi.COLOR_GREEN
+			color = Widgets.COLOR_GREEN
 		end
 		if race and lap == race.Laps - 1 then
 			local myRow = self:_myRow()
 			local jokerDue = myRow ~= nil and myRow.J == 0
-			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. RaceUi.FormatTime(tonumber(data.Time))
-			color = if jokerDue then RaceUi.COLOR_ORANGE else RaceUi.COLOR_TEXT
+			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
+			color = if jokerDue then Widgets.COLOR_ORANGE else Widgets.COLOR_TEXT
+			if jokerDue then
+				Banner.Show("JOKER PAS FAIT !", "Dernier tour : prends la branche orange, sinon +5 s à l'arrivée", Widgets.COLOR_ORANGE, 4, true)
+			end
 		end
 		hud:ShowMessage(text, color, 3)
+		-- Nouvelle médaille sur ce circuit (meilleur tour, Medals.luau).
+		local tier = Medals.Get(tonumber(data.Medal) or 0)
+		if tier then
+			local circuit = if race then Tracks.Get(race.TrackId) else nil
+			Banner.Show(
+				tier.Title,
+				string.format("%s — tour en %s", if circuit then circuit.Name else "Circuit", Format.Time(tonumber(data.Time))),
+				tier.Color,
+				4,
+				true
+			)
+		end
+	elseif kind == "Rematch" then
+		local voters = if type(data.Voters) == "table" then data.Voters else {}
+		hud:SetRematch(tonumber(data.Votes) or 0, tonumber(data.Members) or 0, table.find(voters, self.Options.LocalUserId) ~= nil)
+	elseif kind == "RematchStart" then
+		hud:ShowMessage("REVANCHE ! Nouveau départ après le podium", Widgets.COLOR_ACCENT, 4)
+		Banner.Show("REVANCHE", "Même circuit, mêmes réglages · départ dans 25 s (C : menu)", Widgets.COLOR_ACCENT, 3.5)
+	elseif kind == "Overtake" then
+		local points = tonumber(data.Points) or 0
+		hud:ShowMessage(
+			"DÉPASSEMENT — " .. tostring(data.Name) .. (if points > 0 then "  +" .. Format.Thousands(points) else ""),
+			Widgets.COLOR_GREEN,
+			2
+		)
+	elseif kind == "Overtaken" then
+		hud:ShowMessage("DÉPASSÉ PAR " .. tostring(data.Name), Widgets.COLOR_ORANGE, 2)
 	elseif kind == "Joker" then
 		local count = tonumber(data.Count) or 1
 		if count == 1 then
-			hud:ShowMessage("JOKER ✓", RaceUi.COLOR_GREEN)
+			hud:ShowMessage("JOKER ✓", Widgets.COLOR_GREEN)
 		else
-			hud:ShowMessage("JOKER EN TROP : un seul suffit", RaceUi.COLOR_ORANGE)
+			hud:ShowMessage("JOKER EN TROP : un seul suffit", Widgets.COLOR_ORANGE)
 		end
 	elseif kind == "Penalty" then
-		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), string.upper(tostring(data.Reason))), RaceUi.COLOR_RED, 3.5)
+		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
 	elseif kind == "Chequered" then
-		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", RaceUi.COLOR_TEXT, 3)
+		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
 	elseif kind == "Finished" then
 		local returnIn = tonumber(data.ReturnIn) or 6
 		hud:ShowMessage(
 			string.format("ARRIVÉE — P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
-			RaceUi.COLOR_ACCENT,
+			Widgets.COLOR_ACCENT,
 			returnIn
 		)
 	elseif kind == "Results" then
@@ -240,10 +392,15 @@ function RaceClient:_onEvent(kind: string, data: any)
 			self.PodiumUntil = os.clock() + duration
 		end
 		hud:ShowPodium(if type(data.Names) == "table" then data.Names else {}, duration)
+		-- Place à la cérémonie ; le menu reviendra après.
+		self.Menu:SetOpen(false)
+		if self.ReopenMenuAt then
+			self.ReopenMenuAt = os.clock()
+		end
 	end
 end
 
-function RaceClient:_myRow(): RaceUi.LiveRow?
+function RaceClient:_myRow(): RaceTypes.LiveRow?
 	local live = self.Live
 	if not live then
 		return nil
@@ -267,6 +424,193 @@ function RaceClient:SetProfile(stats: any, laps: any)
 	self:_refreshMenu()
 end
 
+--[[
+	Progression (RecordService) : gardée pour le menu et le garage ; un niveau
+	gagné ou un cosmétique débloqué est annoncé en grand.
+]]
+function RaceClient:SetProgress(snapshot: any, news: any)
+	if type(snapshot) ~= "table" or type(snapshot.Level) ~= "number" then
+		return
+	end
+	local previous = self.Progress
+	self.Progress = snapshot
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if news.LevelUp then
+		local licence = Progression.LICENCES[snapshot.Licence] or Progression.LICENCES[1]
+		local newLicence = previous ~= nil and snapshot.Licence > previous.Licence
+		local nextXp = snapshot.NextXp
+		if newLicence then
+			Banner.Show("LICENCE " .. licence.Short, "Niveau " .. snapshot.Level .. "  ·  bravo, pilote !", licence.Color, 5, true)
+		else
+			Banner.Show(
+				"NIVEAU " .. snapshot.Level,
+				"Licence " .. licence.Name .. (if nextXp then "  ·  prochain niveau à " .. Format.Thousands(nextXp) .. " XP" else ""),
+				licence.Color,
+				4,
+				true
+			)
+		end
+	end
+	if type(news.Unlocks) == "table" then
+		for _, item in ipairs(news.Unlocks) do
+			if type(item) == "table" then
+				Banner.Show("DÉBLOQUÉ", Livery.ItemName(tostring(item.Kind), tonumber(item.Index) or 0) .. "  ·  au garage", Widgets.COLOR_ACCENT, 3.5, true)
+			end
+		end
+	end
+end
+
+--[[
+	Défis du jour : gardés pour le menu ; un défi réussi (et les trois) est
+	annoncé en grand.
+]]
+function RaceClient:SetDaily(state: any, news: any)
+	if type(state) ~= "table" or type(state.Challenges) ~= "table" then
+		return
+	end
+	self.Daily = state
+	self:_refreshMenu()
+	if type(news) ~= "table" or type(news.Completed) ~= "table" then
+		return
+	end
+	for _, id in ipairs(news.Completed) do
+		for _, challenge in ipairs(state.Challenges) do
+			if challenge.Id == id then
+				Banner.Show("DÉFI DU JOUR RÉUSSI", tostring(challenge.Text) .. "  ·  +" .. tostring(state.Xp) .. " XP", Widgets.COLOR_GREEN, 3.5, true)
+			end
+		end
+	end
+	if news.AllDone then
+		Banner.Show("LES TROIS DÉFIS DU JOUR !", "Bonus  +" .. tostring(state.BonusXp) .. " XP  ·  nouveaux défis demain", Widgets.COLOR_ACCENT, 4, true)
+	end
+end
+
+-- Fantôme affronté (défi du fantôme) : le menu propose aussi son ralenti.
+--[[
+	Crédits et objets (EconomyService), et ce qui vient de se passer : un gain
+	(petite notification), un achat ou un déblocage (bandeau), une erreur.
+]]
+function RaceClient:SetWallet(wallet: any, news: any)
+	if type(wallet) ~= "table" or type(wallet.Credits) ~= "number" then
+		return
+	end
+	self.Wallet = wallet
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.Gain) == "number" then
+		Toast.Show(string.format("<b>+%s</b>  ·  %s", Credits.Format(news.Gain), tostring(news.Reason or "")))
+	end
+	if type(news.RollsGained) == "number" then
+		Toast.Show(string.format("<b>+%d tirage%s</b>  ·  %s", news.RollsGained, if news.RollsGained > 1 then "s" else "", tostring(news.Reason or "")), Theme.PURPLE)
+	end
+	local item = Catalog.Get(news.Bought or news.Unlocked)
+	if item then
+		Banner.Show(if news.Bought then "ACHAT" else "DÉBLOQUÉ", item.Name .. (if news.Reason then " · " .. tostring(news.Reason) else ""), Rarity.Get(item.Rarity).Color, 3.5, true)
+	end
+	local product = Products.Get(news.Purchased)
+	if product then
+		-- Ce qui a vraiment été donné (un palier donne l'objet demandé).
+		local granted = if type(news.Granted) == "table" then news.Granted else product.Grant
+		local bought = Catalog.Get(granted.Item)
+		local text = if bought then bought.Name
+			elseif granted.Unlock then "Déblocage obtenu : choisis-le dans l'INVENTAIRE ou au garage"
+			elseif granted.XpBoostMinutes then "XP ×2 pendant " .. tostring(granted.XpBoostMinutes) .. " min"
+			elseif granted.Rolls then "+" .. tostring(granted.Rolls) .. " tirage" .. (if granted.Rolls > 1 then "s" else "")
+			elseif granted.Credits then "+" .. Credits.Format(granted.Credits)
+			else product.Name
+		Banner.Show("MERCI !", text, Theme.GREEN, 3.5, true)
+	end
+	local pass = Products.Pass(if type(news.PassBought) == "string" then news.PassBought else "")
+	if pass then
+		Banner.Show("MERCI !", "Pass " .. pass.Name .. " activé · " .. pass.Description, Theme.YELLOW, 4.5, true)
+	end
+	if type(news.Error) == "string" then
+		self.Menu:SetStatus(news.Error, Widgets.COLOR_RED)
+		Toast.Show(news.Error, Theme.RED)
+	end
+end
+
+-- Trophées obtenus ; un nouveau s'annonce (Roblox signale aussi son badge).
+function RaceClient:SetAchievements(earned: any, news: any)
+	if type(earned) ~= "table" then
+		return
+	end
+	self.Achievements = earned
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.New) == "table" then
+		for _, id in ipairs(news.New) do
+			local achievement = Achievements.Get(tostring(id))
+			if achievement then
+				Banner.Show("TROPHÉE", achievement.Name .. "  ·  " .. achievement.Description, Theme.ACCENT, 4.5, true)
+			end
+		end
+	end
+end
+
+-- Écurie : la sienne, son invitation, le classement ; un message s'affiche.
+function RaceClient:SetTeam(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Team = state
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
+		if news.Error then
+			self.Menu:SetStatus(news.Message, Widgets.COLOR_RED)
+		end
+	end
+end
+
+-- Roi du drift : meilleures combinaisons de la semaine (menu, DÉFIS).
+function RaceClient:SetDrift(board: any)
+	if type(board) == "table" and type(board.Entries) == "table" then
+		self.Drift = board
+		self:_refreshMenu()
+	end
+end
+
+-- Rallye Pass : saison, XP, premium ; un palier atteint s'annonce.
+function RaceClient:SetPass(state: any, news: any)
+	if type(state) ~= "table" or type(state.Xp) ~= "number" then
+		return
+	end
+	self.Pass = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.TierReached) == "number" then
+		Banner.Show("RALLYE PASS", "Palier " .. tostring(news.TierReached) .. " atteint : récompense reçue", Theme.ACCENT, 3.5, true)
+	elseif news.Premium then
+		Banner.Show("RALLYE PASS PREMIUM", "Les récompenses premium des paliers atteints sont à toi", Theme.ACCENT, 4, true)
+	end
+end
+
+function RaceClient:GetWallet(): MenuKit.Wallet?
+	return self.Wallet
+end
+
+function RaceClient:SetReplayOpponent(name: string?)
+	self.ReplayOpponent = name
+	self:_refreshMenu()
+end
+
+-- Défi de la semaine : pour le menu.
+function RaceClient:SetWeekly(board: any)
+	self.Weekly = board
+	self:_refreshMenu()
+end
+
+function RaceClient:GetProgress(): Progression.Snapshot?
+	return self.Progress
+end
+
 function RaceClient:SetTouchLayout(enabled: boolean)
 	self.Menu:SetTouchLayout(enabled)
 	self.Hud:SetTouchLayout(enabled)
@@ -274,6 +618,16 @@ end
 
 function RaceClient:ToggleMenu()
 	self.Menu:Toggle()
+end
+
+-- Menu principal ouvert (arrivée dans le jeu).
+function RaceClient:OpenMenu()
+	self.Menu:SetOpen(true)
+end
+
+-- Barre de boutons à gauche (à pied, hors course, hors ralenti).
+function RaceClient:SetHubVisible(visible: boolean)
+	self.Menu:SetHubVisible(visible)
 end
 
 -- Châssis de sa propre voiture (pour la mini-carte), nil sans voiture.
@@ -293,6 +647,17 @@ function RaceClient:CanSpectate(): boolean
 	local mine = self.MyChassis
 	return race ~= nil and race.State == "Racing" and me ~= nil and me.F
 		and mine ~= nil and mine:IsDescendantOf(workspace)
+end
+
+-- Inscrit à une course : salle d'attente, grille, course ou résultats.
+function RaceClient:IsInRace(): boolean
+	return self.Race ~= nil
+end
+
+-- Course lancée : mise en grille, départ ou course.
+function RaceClient:IsRaceUnderway(): boolean
+	local race = self.Race
+	return race ~= nil and (race.State == "Grid" or race.State == "Countdown" or race.State == "Racing")
 end
 
 function RaceClient:IsSpectating(): boolean
@@ -396,6 +761,15 @@ end
 
 function RaceClient:Update(dt: number)
 	self.Menu:Update()
+	-- Retour d'une course : le menu revient, une fois le podium passé, si le
+	-- joueur est à pied (il a pu repartir en spéciale entre-temps).
+	local reopenAt = self.ReopenMenuAt
+	if reopenAt and os.clock() >= reopenAt and self.PodiumUntil == 0 and self.Race == nil then
+		self.ReopenMenuAt = nil
+		if self.MyChassis == nil then
+			self.Menu:SetOpen(true)
+		end
+	end
 	local race = self.Race
 	local cars: { Minimap.CarDot } = {}
 	if race and race.State ~= "Lobby" then

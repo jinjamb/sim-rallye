@@ -5,9 +5,12 @@
 
 	CYCLE D'UNE COURSE
 		Lobby     : salle d'attente, liée à une ZONE du paddock (un circuit par
-		            zone, PaddockService). Entrer dans la zone fait rejoindre la
-		            salle (créée au besoin), en sortir la fait quitter. 2 à 6
-		            joueurs. Compte à rebours dès le 2e pilote (PAD_COUNTDOWN),
+		            zone, PaddockService). On la rejoint de deux façons :
+		              - par le menu (« Rallycross », PaddockService) : on y reste
+		                où qu'on soit, jusqu'à QUITTER ;
+		              - en entrant dans la zone : en sortir fait quitter la salle.
+		            1 à 6 joueurs : on peut courir seul. Compte à rebours dès le
+		            1er pilote (PAD_COUNTDOWN), pour laisser les autres rejoindre,
 		            raccourci quand la salle est pleine ; l'hôte (le premier
 		            arrivé) peut lancer tout de suite et choisir tours, format,
 		            contacts.
@@ -18,7 +21,12 @@
 		Results   : classement de la manche. Format "Qualif + Finale" : la finale
 		            suit, grille dans l'ordre de la qualification. Puis tout le monde
 		            revient au paddock À PIED, les trois premiers sur le podium ; la
-		            salle est dissoute (pour une revanche, on retourne sur la zone).
+		            salle est dissoute...
+		REVANCHE  : ... sauf si quelqu'un a voté REVANCHE à l'écran des
+		            résultats : la salle reste ouverte pour ceux qui ont voté,
+		            mêmes réglages, départ REMATCH_COUNTDOWN secondes plus tard
+		            (le temps du podium) ; les autres rentrent. Si tout le monde
+		            vote, on n'attend pas la fin des résultats.
 
 	INSTANCES : plusieurs courses peuvent tourner en même temps, même sur le même
 	circuit. Chaque client ne montre que les voitures de sa propre course
@@ -33,6 +41,18 @@
 	par l'herbe ne fait donc rien gagner : la distance "coupée" n'est jamais
 	comptée, et il faudra la rouler quand même avant de franchir la ligne. Une
 	téléportation (remise en piste) ne fait gagner que quelques studs.
+
+	COURSE EN SOLO : même déroulement, mais elle ne compte pas pour la carrière
+	(points, victoires, podiums) : une victoire seul n'en est pas une. Les
+	records du tour, eux, comptent.
+
+	DÉPASSEMENTS : comparés deux à deux, sur l'avancement intégré (un pilote
+	dépassé d'un tour reste derrière : le prendre d'un tour n'est pas un
+	dépassement). Le nouvel ordre doit tenir OVERTAKE_CONFIRM secondes (pas de
+	points pour deux voitures qui se chamaillent sur la ligne). Ils rapportent
+	des points de style (StyleService.Add, progression), au plus
+	MAX_PASSES_PER_PAIR fois par paire et par manche : deux amis qui
+	s'échangent la place ne font pas fortune.
 
 	JOKER : obligatoire une fois par course. Il est compté quand la voiture passe
 	le milieu de la branche joker. Pas de joker à l'arrivée : +5 s.
@@ -51,12 +71,20 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
+local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local CarService = require(script.Parent.CarService)
 local RecordService = require(script.Parent.RecordService)
+local StyleService = require(script.Parent.StyleService)
+local ChallengeService = require(script.Parent.ChallengeService)
+local EconomyService = require(script.Parent.EconomyService)
+local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 
 local RaceService = {}
 
-local MIN_PLAYERS = 2
+local MIN_PLAYERS = 1 -- on peut courir seul
+local CAREER_MIN_RUNNERS = 2 -- en dessous, la course ne compte pas pour la carrière
 local MAX_PLAYERS = 6
 local MAX_RACES = 8
 local MIN_LAPS, MAX_LAPS = 2, 8
@@ -74,6 +102,8 @@ local LIGHT_INTERVAL = 0.7
 local LIGHTS_OUT_MIN, LIGHTS_OUT_MAX = 0.4, 1.8 -- délai aléatoire après le 5e feu
 local FINISH_WINDOW = 30 -- après le vainqueur, les autres ont 30 s pour finir
 local RESULTS_TIME = 12
+local REMATCH_COUNTDOWN = 25 -- départ de la revanche : podium, puis grille
+local PODIUM_DELAY = 3 -- le temps que chacun soit revenu au paddock
 
 local SAMPLE_INTERVAL = 0.1
 local LIVE_INTERVAL = 0.25
@@ -88,6 +118,9 @@ local JUMP_START_DISTANCE = 4
 local JUMP_START_PENALTY = 1
 local JOKER_MISSED_PENALTY = 5
 local MILESTONE = 40 -- studs entre deux points de mesure des écarts
+local OVERTAKE_CONFIRM = 2 -- s : la nouvelle position doit tenir
+local OVERTAKE_POINTS = 2000 -- points de style par dépassement (10 XP)
+local MAX_PASSES_PER_PAIR = 2 -- dépassements récompensés par paire, sens et manche
 
 local POINTS = { 10, 8, 6, 4, 2, 1 }
 
@@ -98,6 +131,8 @@ type Member = {
 	Player: Player,
 	UserId: number,
 	Name: string,
+	-- Inscrit par le menu : reste dans la salle hors de la zone du paddock.
+	Pinned: boolean,
 }
 
 type Runner = {
@@ -133,6 +168,8 @@ type Runner = {
 	Milestones: { [number]: number },
 	LastMilestone: number,
 
+	Overtakes: number, -- dépassements récompensés dans cette manche (défis du jour)
+
 	-- Après l'arrivée : ramené à pied au paddock (Returned), sauf s'il a choisi
 	-- de rester regarder la course (Watching).
 	Watching: boolean,
@@ -151,6 +188,9 @@ type ResultRow = {
 	Points: number,
 }
 
+-- Deux pilotes : qui est devant (A = le premier de la clé), depuis quand.
+type PairState = { Ahead: boolean, Since: number, Stable: boolean, PassesA: number, PassesB: number }
+
 type Race = {
 	Id: string,
 	PadId: string, -- zone du paddock d'où vient la course
@@ -159,6 +199,9 @@ type Race = {
 	Laps: number,
 	Format: Format,
 	Contacts: boolean,
+	-- Catégorie de voiture de la course (CarClasses.luau) : tout le monde la
+	-- conduit (prêtée à qui ne l'a pas), records du tour de cette catégorie.
+	CarClass: string,
 	HostUserId: number,
 	Members: { Member },
 	State: RaceState,
@@ -173,6 +216,10 @@ type Race = {
 	Runners: { Runner },
 	LastResults: { ResultRow }?,
 	GridOrder: { number }?, -- UserIds, pole en premier (manche suivante)
+	Pairs: { [string]: PairState }, -- dépassements, par paire de pilotes
+	-- Écran des résultats de la dernière manche : votes pour la revanche.
+	RematchOpen: boolean,
+	RematchVotes: { [number]: boolean },
 }
 
 local races: { [string]: Race } = {}
@@ -222,6 +269,7 @@ local function lobbyList()
 				Laps = race.Laps,
 				Format = race.Format,
 				Contacts = race.Contacts,
+				CarClass = race.CarClass,
 				Host = hostName,
 				Count = #race.Members,
 				Max = MAX_PLAYERS,
@@ -248,13 +296,14 @@ local function raceSnapshot(race: Race)
 		Laps = race.Laps,
 		Format = race.Format,
 		Contacts = race.Contacts,
+		CarClass = race.CarClass,
 		HostUserId = race.HostUserId,
 		State = race.State,
 		Round = race.Round,
 		RoundCount = race.RoundCount,
 		RoundName = roundName(race, race.Round),
 		Members = members,
-		MinPlayers = if RunService:IsStudio() then 1 else MIN_PLAYERS,
+		MinPlayers = MIN_PLAYERS,
 		MaxPlayers = MAX_PLAYERS,
 		AutoStartAt = race.AutoStartAt,
 		LightsStart = race.LightsStart,
@@ -360,6 +409,7 @@ end
 
 local startRound: (Race, number) -> ()
 local updateAutoStart: (Race) -> ()
+local closeEvent: (Race) -> ()
 
 local function deleteRace(race: Race)
 	race.Token += 1
@@ -418,6 +468,22 @@ end
 -- Cérémonie du podium : (pilotes de la course, trois premiers arrivés).
 RaceService.PodiumHandler = function(_players: { Player }, _podium: { ResultRow }) end
 
+-- Crédits d'une arrivée en finale (ou course simple) : seul, une petite somme.
+local function raceCredits(position: number, counts: boolean): number
+	local rewards = Credits.REWARDS
+	if not counts then
+		return rewards.SoloRace
+	end
+	local amount = rewards.RaceFinish
+	if position <= 3 then
+		amount += rewards.RacePodium
+	end
+	if position == 1 then
+		amount += rewards.RaceWin
+	end
+	return amount
+end
+
 local function endRound(race: Race)
 	if race.State ~= "Racing" then
 		return
@@ -425,12 +491,14 @@ local function endRound(race: Race)
 	race.State = "Results"
 	race.Token += 1
 	local final = race.Round >= race.RoundCount
+	-- Seul en piste : pas de points, la carrière n'en tient pas compte.
+	local counts = #race.Runners >= CAREER_MIN_RUNNERS
 
 	local sorted = sortRunners(race)
 	local rows: { ResultRow } = {}
 	local order: { number } = {}
 	for position, runner in ipairs(sorted) do
-		local points = if final and runner.Finished then (POINTS[position] or 0) else 0
+		local points = if final and counts and runner.Finished then (POINTS[position] or 0) else 0
 		table.insert(rows, {
 			UserId = runner.UserId,
 			Name = runner.Name,
@@ -443,12 +511,18 @@ local function endRound(race: Race)
 			Points = points,
 		})
 		table.insert(order, runner.UserId)
-		if final and runner.Player.Parent then
+		if final and counts and runner.Player.Parent then
 			RecordService.AddRaceResult(runner.Player, if runner.Finished then position else 0, points)
+		end
+		if final and runner.Finished and runner.Player.Parent then
+			EconomyService.Earn(runner.Player, raceCredits(position, counts), "Course terminée")
 		end
 	end
 	race.LastResults = rows
 	race.GridOrder = order
+	-- Dernière manche : on peut voter pour la revanche jusqu'à la fin des résultats.
+	race.RematchOpen = final
+	race.RematchVotes = {}
 
 	local nextAt = serverNow() + RESULTS_TIME
 	sendRaceState(race)
@@ -471,14 +545,10 @@ local function endRound(race: Race)
 		end
 		if not final and #race.Members > 0 then
 			startRound(race, race.Round + 1)
+		elseif final then
+			closeEvent(race)
 		else
-			local podium: { ResultRow } = {}
-			for _, row in ipairs(rows) do
-				if not row.Dnf and #podium < 3 then
-					table.insert(podium, row)
-				end
-			end
-			dissolve(race, if final then podium else nil)
+			dissolve(race, nil)
 		end
 	end)
 end
@@ -498,6 +568,9 @@ end
 
 local function finishRunner(race: Race, runner: Runner, crossing: number)
 	runner.Finished = true
+	if runner.Player.Parent then
+		ChallengeService.DailyEvent(runner.Player, "RaceFinished", 1)
+	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then
 		runner.Penalty += JOKER_MISSED_PENALTY
@@ -608,6 +681,7 @@ startRound = function(race: Race, round: number)
 	end
 
 	race.Runners = {}
+	race.Pairs = {}
 	for slot, member in ipairs(members) do
 		table.insert(race.Runners, {
 			Player = member.Player,
@@ -621,6 +695,7 @@ startRound = function(race: Race, round: number)
 			LastPosition = Vector3.zero,
 			LastTime = 0,
 			Laps = 0,
+			Overtakes = 0,
 			LapStart = 0,
 			LapTimes = {},
 			BestLap = nil,
@@ -653,6 +728,7 @@ startRound = function(race: Race, round: number)
 				RaceId = race.Id,
 				Contacts = race.Contacts,
 				Held = true,
+				CarClass = race.CarClass,
 			})
 			pending -= 1
 			-- Parti de la course pendant le chargement : sa voiture n'a rien à faire sur la grille.
@@ -696,7 +772,7 @@ local function startRace(race: Race)
 end
 
 local function minimumPlayers(): number
-	return if RunService:IsStudio() then 1 else MIN_PLAYERS
+	return MIN_PLAYERS
 end
 
 local function scheduleStart(race: Race, at: number)
@@ -786,13 +862,20 @@ end
 -- Actions des joueurs
 --------------------------------------------------------------------------------
 
-local function addMember(race: Race, player: Player)
+local function addMember(race: Race, player: Player, pinned: boolean)
 	table.insert(race.Members, {
 		Player = player,
 		UserId = player.UserId,
 		Name = player.DisplayName,
+		Pinned = pinned,
 	})
 	raceOf[player] = race
+end
+
+-- La voiture choisie par l'hôte : celle de la course, au départ.
+local function hostClass(host: Player): string
+	local chosen = EconomyService.Equipped(host, "Car")
+	return CarClasses.Get(if chosen then chosen.CarClass else nil).Id
 end
 
 local function createRace(padId: string, circuit: Circuit.Circuit, host: Player): Race
@@ -806,6 +889,7 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Laps = circuit.DefaultLaps,
 		Format = "Sprint",
 		Contacts = true,
+		CarClass = hostClass(host),
 		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
@@ -820,6 +904,9 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Runners = {},
 		LastResults = nil,
 		GridOrder = nil,
+		Pairs = {},
+		RematchOpen = false,
+		RematchVotes = {},
 	}
 	races[id] = race
 	table.insert(raceOrder, id)
@@ -827,11 +914,12 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 end
 
 --[[
-	Entrée dans la zone d'un circuit (PaddockService) : rejoint la salle
-	d'attente de cette zone, ou en ouvre une si elle est pleine ou déjà partie
-	(plusieurs courses peuvent tourner sur le même circuit).
+	Rejoint la salle d'attente d'un circuit, ou en ouvre une si elle est pleine
+	ou déjà partie (plusieurs courses peuvent tourner sur le même circuit).
+	`pinned` : par le menu (on reste inscrit hors de la zone) ; sinon, entrée
+	dans la zone du paddock (PaddockService), qu'il ne faut pas quitter.
 ]]
-function RaceService.JoinPad(player: Player, padId: string): boolean
+function RaceService.JoinPad(player: Player, padId: string, pinned: boolean?): boolean
 	if raceOf[player] then
 		return false
 	end
@@ -855,20 +943,53 @@ function RaceService.JoinPad(player: Player, padId: string): boolean
 		race = createRace(padId, circuit, player)
 	end
 	local joined = race :: Race
-	addMember(joined, player)
+	addMember(joined, player, pinned == true)
 	updateAutoStart(joined)
 	sendRaceState(joined)
 	broadcastLobby()
 	return true
 end
 
--- Zone de la salle d'attente du joueur, s'il attend un départ (nil sinon).
+-- Zone de la salle d'attente du joueur, s'il l'a rejointe PAR LA ZONE et
+-- attend un départ (nil sinon) : en sortir fait quitter la salle.
 function RaceService.GetLobbyPad(player: Player): string?
 	local race = raceOf[player]
 	if race and race.State == "Lobby" then
-		return race.PadId
+		for _, member in ipairs(race.Members) do
+			if member.Player == player and not member.Pinned then
+				return race.PadId
+			end
+		end
 	end
 	return nil
+end
+
+-- Circuit de la salle d'attente du joueur (nil s'il n'attend pas de départ).
+function RaceService.GetLobbyTrack(player: Player): string?
+	local race = raceOf[player]
+	return if race and race.State == "Lobby" then race.TrackId else nil
+end
+
+--[[
+	Le joueur choisit autre chose dans le menu (spéciale, essais libres, autre
+	circuit) : il quitte sa salle d'attente. Refusé en pleine course (on passe
+	par "Abandonner") ; une fois arrivé et revenu au paddock, il est libre.
+	Renvoie false et la raison si c'est refusé.
+]]
+function RaceService.ReleaseForMode(player: Player): (boolean, string?)
+	local race = raceOf[player]
+	if not race then
+		return true, nil
+	end
+	if race.State == "Lobby" then
+		removeMember(race, player)
+		return true, nil
+	end
+	local runner = runnerOf(race, player)
+	if runner and runner.Returned then
+		return true, nil
+	end
+	return false, "Tu es en course : abandonne d'abord (menu), ou attends l'arrivée."
 end
 
 function RaceService.IsInRace(player: Player): boolean
@@ -903,6 +1024,108 @@ function RaceService.PaddockRequest(player: Player): string
 		return "handled"
 	end
 	return "blocked"
+end
+
+--[[
+	Fin de l'épreuve (après la dernière manche) : revanche pour ceux qui l'ont
+	votée, sinon dissolution. Dans les deux cas, podium.
+]]
+closeEvent = function(race: Race)
+	race.Token += 1
+	race.RematchOpen = false
+	local podium: { ResultRow } = {}
+	for _, row in ipairs(race.LastResults or {}) do
+		if not row.Dnf and #podium < 3 then
+			table.insert(podium, row)
+		end
+	end
+	local voters: { [number]: boolean } = {}
+	local voterCount = 0
+	for _, member in ipairs(race.Members) do
+		if race.RematchVotes[member.UserId] and member.Player.Parent then
+			voters[member.UserId] = true
+			voterCount += 1
+		end
+	end
+	if voterCount == 0 then
+		dissolve(race, podium)
+		return
+	end
+
+	-- Ceux qui n'ont pas voté rentrent (et verront le podium quand même).
+	local everyone: { Player } = {}
+	for _, member in ipairs(table.clone(race.Members)) do
+		table.insert(everyone, member.Player)
+		if not voters[member.UserId] then
+			removeMember(race, member.Player)
+		end
+	end
+	-- Les autres reviennent au paddock à pied et attendent la revanche, inscrits
+	-- comme par le menu (ils peuvent se promener).
+	for _, member in ipairs(race.Members) do
+		member.Pinned = true
+		local runner = runnerOf(race, member.Player)
+		if not (runner and runner.Returned) then
+			local player = member.Player
+			task.spawn(function()
+				CarService.ReturnToPaddock(player)
+			end)
+		end
+	end
+	race.State = "Lobby"
+	race.Round = 1
+	race.RoundCount = if race.Format == "Event" then 2 else 1
+	race.Runners = {}
+	race.Pairs = {}
+	race.GridOrder = nil
+	race.LastResults = nil
+	race.StartTime = nil
+	race.LightsStart = nil
+	race.FinishDeadline = nil
+	race.Timeout = nil
+	race.RematchVotes = {}
+	scheduleStart(race, serverNow() + REMATCH_COUNTDOWN)
+	sendRaceState(race)
+	sendEvent(race, nil, "RematchStart", { Count = voterCount })
+	broadcastLobby()
+
+	if #podium > 0 then
+		task.delay(PODIUM_DELAY, function()
+			local present: { Player } = {}
+			for _, player in ipairs(everyone) do
+				if player.Parent then
+					table.insert(present, player)
+				end
+			end
+			RaceService.PodiumHandler(present, podium)
+		end)
+	end
+end
+
+-- Vote pour la revanche (écran des résultats de la dernière manche).
+local function onRematch(player: Player)
+	local race = raceOf[player]
+	if not race or race.State ~= "Results" or not race.RematchOpen then
+		return
+	end
+	-- Un second clic retire le vote.
+	if race.RematchVotes[player.UserId] then
+		race.RematchVotes[player.UserId] = nil
+	else
+		race.RematchVotes[player.UserId] = true
+	end
+	local votes, voters = 0, {}
+	for _, member in ipairs(race.Members) do
+		if race.RematchVotes[member.UserId] then
+			votes += 1
+			table.insert(voters, member.UserId)
+		end
+	end
+	sendEvent(race, nil, "Rematch", { Votes = votes, Members = #race.Members, Voters = voters })
+	-- Tout le monde est partant : inutile d'attendre la fin des résultats.
+	if votes == #race.Members then
+		closeEvent(race)
+	end
 end
 
 -- Arrivé, il préfère rester regarder la course plutôt que rentrer au paddock.
@@ -958,6 +1181,13 @@ local function onSettings(player: Player, payload: any)
 	end
 	if type(payload.Contacts) == "boolean" then
 		race.Contacts = payload.Contacts
+	end
+	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
+	if CarClasses.Exists(payload.CarClass) then
+		local item = Catalog.CarItem(payload.CarClass)
+		if item and EconomyService.Owns(player, item.Id) then
+			race.CarClass = payload.CarClass
+		end
 	end
 	sendRaceState(race)
 	broadcastLobby()
@@ -1094,14 +1324,77 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		if isBest then
 			runner.BestLap = lapTime
 		end
-		-- Le premier tour part arrêté de la grille : il ne compte pas pour le record.
+		-- Le premier tour part arrêté de la grille : il ne compte ni pour le
+		-- record ni pour les médailles (Medals.luau : seuils d'un tour lancé).
 		local record = false
+		local medal: number? = nil
 		if runner.Laps > 1 then
-			record = RecordService.SubmitLap(player, circuit.Key, math.floor(lapTime * 1000 + 0.5))
+			local lapMs = math.floor(lapTime * 1000 + 0.5)
+			local limits = Medals.ForCircuit(race.TrackId, length, race.CarClass)
+			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key, race.CarClass), limits)
+			record = RecordService.SubmitLap(player, circuit.Key, race.CarClass, lapMs)
+			local after = Medals.TierOf(lapMs, limits)
+			if record and after > before then
+				medal = after -- nouvelle médaille sur ce circuit
+			end
+			if RunService:IsStudio() then
+				print(string.format("[Médailles] %s en %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, race.CarClass, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
+			end
 		end
-		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record })
+		sendEvent(race, player, "Lap", { Lap = runner.Laps, Time = lapTime, Best = isBest, Record = record, Medal = medal })
 		if runner.Laps >= race.Laps then
 			finishRunner(race, runner, crossing)
+		end
+	end
+end
+
+--[[
+	Dépassements : pour chaque paire de pilotes encore en course, l'ordre sur
+	l'avancement. Un changement d'ordre qui tient OVERTAKE_CONFIRM secondes
+	est un dépassement : points de style pour celui qui passe, message pour
+	les deux.
+]]
+local function checkOvertakes(race: Race, now: number)
+	local runners = race.Runners
+	for i = 1, #runners - 1 do
+		for j = i + 1, #runners do
+			local a, b = runners[i], runners[j]
+			if a.Finished or b.Finished or a.Dnf or b.Dnf then
+				continue
+			end
+			local key = a.UserId .. ":" .. b.UserId
+			local ahead = a.Valid > b.Valid
+			local state = race.Pairs[key]
+			if not state then
+				race.Pairs[key] = { Ahead = ahead, Since = now, Stable = ahead, PassesA = 0, PassesB = 0 }
+				continue
+			end
+			if ahead ~= state.Ahead then
+				state.Ahead = ahead
+				state.Since = now
+			end
+			if state.Ahead ~= state.Stable and now - state.Since >= OVERTAKE_CONFIRM then
+				state.Stable = state.Ahead
+				local passer, passed = a, b
+				if not state.Ahead then
+					passer, passed = b, a
+				end
+				local passes = if passer == a then state.PassesA else state.PassesB
+				local points = if passes < MAX_PASSES_PER_PAIR then OVERTAKE_POINTS else 0
+				if passer == a then
+					state.PassesA += 1
+				else
+					state.PassesB += 1
+				end
+				if points > 0 and passer.Player.Parent then
+					StyleService.Add(passer.Player, points)
+					-- Défi du jour : dépassements dans UNE course.
+					passer.Overtakes += 1
+					ChallengeService.DailyEvent(passer.Player, "Overtakes", passer.Overtakes)
+				end
+				sendEvent(race, passer.Player, "Overtake", { Name = passed.Name, Points = points })
+				sendEvent(race, passed.Player, "Overtaken", { Name = passer.Name })
+			end
 		end
 	end
 end
@@ -1125,6 +1418,8 @@ function RaceService.Start()
 			onSettings(player, payload)
 		elseif action == "Watch" then
 			onWatch(player)
+		elseif action == "Rematch" then
+			onRematch(player)
 		end
 	end)
 
@@ -1159,6 +1454,9 @@ function RaceService.Start()
 						else
 							markDnf(race, runner, "déconnecté")
 						end
+					end
+					if race.State == "Racing" then
+						checkOvertakes(race, now)
 					end
 					checkRoundEnd(race)
 				end

@@ -1,0 +1,291 @@
+--!strict
+--[[
+	SetupMenu.luau
+	Menu des réglages de la voiture, construit à partir du schéma partagé
+	(Shared/Vehicle/CarSetup.luau) : ajouter un réglage au schéma l'ajoute ici.
+
+	P (ou stick gauche enfoncé, ou bouton RÉGLAGES sur mobile) ouvre et ferme.
+	Chaque réglage se change par pas avec -/+ ; une ligne explique l'effet du
+	dernier réglage touché. Préréglages : Défaut, Terre, Asphalte.
+	Les changements s'appliquent à la voiture aussitôt (callback OnChange, voir
+	Main.client.luau), voiture en mouvement comprise, et sont sauvegardés.
+
+	Le contenu défile (ScrollingFrame) : sur un téléphone, le menu est affiché
+	plus grand -- des boutons à la taille d'un doigt -- et ne tient plus en
+	hauteur ; il se fait défiler du pouce.
+
+	PAR CATÉGORIE (CarClasses.luau) : le menu montre les réglages de la
+	voiture conduite (SetClass), sans ceux qui n'ont pas d'effet sur elle
+	(une traction n'a pas de différentiel central).
+]]
+
+local GuiService = game:GetService("GuiService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Theme = require(script.Parent.Theme)
+local Widgets = require(script.Parent.Widgets)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+
+local SetupMenu = {}
+SetupMenu.__index = SetupMenu
+
+export type SetupMenu = typeof(setmetatable({}, SetupMenu)) & {
+	ClassId: string,
+	Setup: CarSetup.Setup,
+	Title: TextLabel,
+	OnChange: (CarSetup.Setup, string) -> (), -- réglages, catégorie
+	Gui: ScreenGui,
+	Panel: Frame,
+	Body: ScrollingFrame,
+	ContentHeight: number,
+	Scale: UIScale,
+	ValueLabels: { [string]: TextLabel },
+	HintLabel: TextLabel?,
+	FirstButton: GuiButton?,
+	TouchLayout: boolean,
+}
+
+local PANEL_WIDTH = 470
+local HEADER_HEIGHT = 42
+local ROW_HEIGHT = 26
+local GROUP_HEIGHT = 24
+local SCREEN_PADDING = 24 -- marge haute + basse quand le menu est limité par l'écran
+local TOUCH_SCALE = 1.15 -- sur mobile : boutons plus gros, le contenu défile
+
+local COLOR_TEXT = Theme.TEXT
+local COLOR_DIM = Theme.DIM
+local COLOR_ACCENT = Theme.ACCENT
+
+local function makeLabel(parent: Instance, position: UDim2, size: UDim2, text: string, textSize: number, font: Enum.Font, color: Color3, alignment: Enum.TextXAlignment): TextLabel
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Position = position
+	label.Size = size
+	label.Text = text
+	label.TextSize = textSize
+	label.Font = font
+	label.TextColor3 = color
+	label.TextXAlignment = alignment
+	label.Parent = parent
+	return label
+end
+
+-- Bouton du jeu (Widgets) : survol, sélection à la manette, appui. L'action
+-- est branchée par l'appelant (Activated).
+local function makeButton(parent: Instance, position: UDim2, size: UDim2, text: string): TextButton
+	local button = Widgets.Button(parent, text, function() end)
+	button.Position = position
+	button.Size = size
+	button.TextSize = 15
+	return button
+end
+
+local function formatValue(field: CarSetup.Field, value: number): string
+	return string.format(field.Format, value * field.Scale)
+end
+
+function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup, string) -> ()): SetupMenu
+	local self = (setmetatable({}, SetupMenu) :: any) :: SetupMenu
+	self.ClassId = CarClasses.DEFAULT
+	self.Setup = CarSetup.Default(self.ClassId)
+	self.OnChange = onChange
+	self.ValueLabels = {}
+	self.HintLabel = nil
+	self.TouchLayout = false
+	self.ContentHeight = 0
+
+	local gui = Instance.new("ScreenGui")
+	gui.Name = "SetupMenu"
+	gui.ResetOnSpawn = false
+	gui.Enabled = false
+	gui.DisplayOrder = 10
+	self.Gui = gui
+
+	local panel = Instance.new("Frame")
+	panel.AnchorPoint = Vector2.new(0, 0.5)
+	panel.Position = UDim2.new(0, 24, 0.5, 0)
+	Theme.Card(panel, 0.1)
+	-- Filet rose sous l'en-tête.
+	local rule = Instance.new("Frame")
+	rule.BorderSizePixel = 0
+	rule.BackgroundColor3 = Theme.ACCENT
+	rule.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 4)
+	rule.Size = UDim2.new(1, 0, 0, 2)
+	rule.Parent = panel
+	local scale = Instance.new("UIScale")
+	scale.Parent = panel
+	panel.Parent = gui
+	self.Panel = panel
+	self.Scale = scale
+
+	-- En-tête fixe
+	self.Title = makeLabel(panel, UDim2.fromOffset(14, 10), UDim2.new(1, -60, 0, 22), "", 16, Enum.Font.GothamBlack, COLOR_TEXT, Enum.TextXAlignment.Left)
+	local close = makeButton(panel, UDim2.new(1, -40, 0, 8), UDim2.fromOffset(30, 26), "X")
+	close.Activated:Connect(function()
+		self:SetOpen(false)
+	end)
+
+	-- Contenu défilant
+	local body = Instance.new("ScrollingFrame")
+	body.Position = UDim2.fromOffset(0, HEADER_HEIGHT)
+	body.Size = UDim2.new(1, 0, 1, -HEADER_HEIGHT)
+	body.BackgroundTransparency = 1
+	body.BorderSizePixel = 0
+	body.ScrollBarThickness = 4
+	body.ScrollingDirection = Enum.ScrollingDirection.Y
+	body.Parent = panel
+	self.Body = body
+
+	gui.Parent = playerGui
+	self:_build()
+	return self
+end
+
+-- Contenu : préréglages, puis les réglages de la catégorie, par groupe.
+function SetupMenu:_build()
+	local body = self.Body
+	for _, child in ipairs(body:GetChildren()) do
+		child:Destroy()
+	end
+	self.ValueLabels = {}
+	self.FirstButton = nil
+	self.Title.Text = "RÉGLAGES · " .. Format.Upper(CarClasses.Get(self.ClassId).Name)
+	local fields = CarSetup.FieldsFor(self.ClassId)
+
+	local groups: { string } = {}
+	local seen: { [string]: boolean } = {}
+	for _, field in ipairs(fields) do
+		if not seen[field.Group] then
+			seen[field.Group] = true
+			table.insert(groups, field.Group)
+		end
+	end
+
+	-- Préréglages
+	local y = 0
+	local presetWidth = (PANEL_WIDTH - 28 - (#CarSetup.PRESETS - 1) * 8) / #CarSetup.PRESETS
+	for i, preset in ipairs(CarSetup.PRESETS) do
+		local button = makeButton(body, UDim2.fromOffset(14 + (i - 1) * (presetWidth + 8), y), UDim2.fromOffset(presetWidth, 28), Format.Upper(preset.Name))
+		button.TextSize = 13
+		button.Activated:Connect(function()
+			self:_set(CarSetup.WithPreset(preset.Name, self.ClassId), "Préréglage « " .. preset.Name .. " » appliqué.")
+		end)
+		if i == 1 then
+			self.FirstButton = button
+		end
+	end
+	y += 40
+
+	-- Réglages, par groupe
+	for _, group in ipairs(groups) do
+		makeLabel(body, UDim2.fromOffset(14, y), UDim2.new(1, -28, 0, GROUP_HEIGHT), Format.Upper(group), 12, Enum.Font.GothamBold, COLOR_ACCENT, Enum.TextXAlignment.Left)
+		y += GROUP_HEIGHT
+		for _, field in ipairs(fields) do
+			if field.Group == group then
+				makeLabel(body, UDim2.fromOffset(22, y), UDim2.fromOffset(220, ROW_HEIGHT), field.Label, 14, Enum.Font.GothamMedium, COLOR_TEXT, Enum.TextXAlignment.Left)
+				local minus = makeButton(body, UDim2.fromOffset(PANEL_WIDTH - 190, y + 2), UDim2.fromOffset(32, ROW_HEIGHT - 4), "−")
+				local value = makeLabel(body, UDim2.fromOffset(PANEL_WIDTH - 152, y), UDim2.fromOffset(100, ROW_HEIGHT), "", 14, Enum.Font.RobotoMono, COLOR_TEXT, Enum.TextXAlignment.Center)
+				local plus = makeButton(body, UDim2.fromOffset(PANEL_WIDTH - 46, y + 2), UDim2.fromOffset(32, ROW_HEIGHT - 4), "+")
+				self.ValueLabels[field.Key] = value
+				minus.Activated:Connect(function()
+					self:_set(CarSetup.Step(self.Setup, field.Key, -1), field.Hint)
+				end)
+				plus.Activated:Connect(function()
+					self:_set(CarSetup.Step(self.Setup, field.Key, 1), field.Hint)
+				end)
+				y += ROW_HEIGHT
+			end
+		end
+	end
+
+	local hint = makeLabel(body, UDim2.fromOffset(14, y + 8), UDim2.new(1, -28, 0, 44), "", 13, Enum.Font.GothamMedium, COLOR_DIM, Enum.TextXAlignment.Left)
+	hint.TextWrapped = true
+	hint.TextYAlignment = Enum.TextYAlignment.Top
+	hint.Text = "Les changements s'appliquent tout de suite et sont sauvegardés, pour cette voiture."
+	self.HintLabel = hint
+
+	self.ContentHeight = y + 60
+	body.CanvasSize = UDim2.fromOffset(0, self.ContentHeight)
+	self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + self.ContentHeight)
+	self:_refresh()
+end
+
+function SetupMenu:_refresh()
+	for _, field in ipairs(CarSetup.FIELDS) do
+		local label = self.ValueLabels[field.Key]
+		if label then
+			label.Text = formatValue(field, self.Setup[field.Key] or field.Default)
+		end
+	end
+end
+
+function SetupMenu:_set(setup: CarSetup.Setup, hint: string)
+	self.Setup = setup
+	local label = self.HintLabel
+	if label then
+		label.Text = hint
+	end
+	self:_refresh()
+	self.OnChange(setup, self.ClassId)
+end
+
+-- Réglages venus de la sauvegarde : affichés, sans déclencher OnChange.
+function SetupMenu:SetSetup(setup: CarSetup.Setup)
+	self.Setup = CarSetup.Sanitize(setup, self.ClassId)
+	self:_refresh()
+end
+
+-- La voiture conduite change de catégorie : ses réglages à elle.
+function SetupMenu:SetClass(classId: string, setup: CarSetup.Setup)
+	local changed = classId ~= self.ClassId
+	self.ClassId = classId
+	self.Setup = CarSetup.Sanitize(setup, classId)
+	if changed then
+		self:_build()
+		if self.Gui.Enabled then
+			self:SetOpen(true) -- recale la hauteur
+		end
+	else
+		self:_refresh()
+	end
+end
+
+function SetupMenu:GetClass(): string
+	return self.ClassId
+end
+
+-- Mobile : affichage agrandi, hauteur limitée à l'écran, contenu défilant.
+function SetupMenu:SetTouchLayout(enabled: boolean)
+	self.TouchLayout = enabled
+end
+
+function SetupMenu:IsOpen(): boolean
+	return self.Gui.Enabled
+end
+
+function SetupMenu:SetOpen(open: boolean)
+	self.Gui.Enabled = open
+	if open then
+		local viewport = workspace.CurrentCamera.ViewportSize
+		local scale = if self.TouchLayout then TOUCH_SCALE else math.clamp(viewport.Y / 1080, 0.6, 1.2)
+		self.Scale.Scale = scale
+		-- Le menu ne dépasse jamais l'écran : au-delà, son contenu défile.
+		local available = (viewport.Y - SCREEN_PADDING) / scale
+		local height = math.min(HEADER_HEIGHT + self.ContentHeight, available)
+		self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, height)
+		-- À la manette, la sélection démarre sur le premier bouton.
+		if not self.TouchLayout then
+			GuiService.SelectedObject = self.FirstButton
+		end
+	elseif GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.Gui) then
+		GuiService.SelectedObject = nil
+	end
+end
+
+function SetupMenu:Toggle()
+	self:SetOpen(not self:IsOpen())
+end
+
+return SetupMenu

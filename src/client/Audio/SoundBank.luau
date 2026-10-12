@@ -4,7 +4,9 @@
 	Tous les identifiants audio du jeu, en un seul endroit. Changer de moteur,
 	c'est remplacer une liste ici : CarAudio.luau ne contient aucun ID.
 
-	MOTEUR : une série d'échantillons BOUCLÉS, chacun enregistré à régime
+	MOTEUR : des enregistrements (RECORDINGS) et des tonalités qui les
+	traitent (TONES, voir plus bas). Un enregistrement est une série
+	d'échantillons BOUCLÉS, chacun enregistré à régime
 	stabilisé, en deux familles :
 		OnLoad  : moteur qui pousse (accélérateur enfoncé) -- son plein, rauque ;
 		OffLoad : moteur entraîné (pied levé, frein moteur) -- son creux, qui pétille.
@@ -40,6 +42,27 @@ export type EngineProfile = {
 	Volume: number,
 }
 
+--[[
+	TONALITÉS : un enregistrement (EngineProfile) passé par un traitement --
+	transposition (PitchScale : plus aigu = un moteur plus petit qui tourne
+	plus vite), égaliseur (dB : graves, médiums, aigus) et distorsion
+	(0..1 : la rocaille d'un échappement libre). Chaque catégorie de voiture
+	a la sienne (CarClasses.luau : Engine), et les sons moteur à débloquer
+	(Items/Engines.luau) en sont d'autres.
+	Pour l'instant, toutes partent du même enregistrement de V8 : ce sont
+	des variations, pas de vrais moteurs. Un vrai enregistrement s'ajoute
+	dans RECORDINGS, et une tonalité le cite (Recording).
+]]
+export type EngineTone = {
+	Recording: string,
+	PitchScale: number,
+	Low: number,
+	Mid: number,
+	High: number,
+	Distortion: number,
+	Volume: number, -- multiplie le volume de l'enregistrement
+}
+
 local function id(assetId: number): string
 	return "rbxassetid://" .. tostring(assetId)
 end
@@ -51,7 +74,7 @@ end
 	valider toute la mécanique de mixage. À remplacer par une série de
 	4 cylindres dès qu'on en trouve une aussi complète.
 ]]
-SoundBank.Engine = {
+local LS3: EngineProfile = {
 	Name = "LS3 (V8, provisoire)",
 	Volume = 0.4,
 	OnLoad = {
@@ -75,7 +98,36 @@ SoundBank.Engine = {
 		{ Id = id(102002975670312), Rpm = 5806 },
 		{ Id = id(113687997502918), Rpm = 6260 },
 	},
-} :: EngineProfile
+}
+
+SoundBank.RECORDINGS = {
+	LS3 = LS3,
+} :: { [string]: EngineProfile }
+
+local function tone(pitch: number, low: number, mid: number, high: number, distortion: number, volume: number?): EngineTone
+	return { Recording = "LS3", PitchScale = pitch, Low = low, Mid = mid, High = high, Distortion = distortion, Volume = volume or 1 }
+end
+
+SoundBank.TONES = {
+	-- Catégories de voitures (son de série).
+	Rally2 = tone(1.18, -3, 0, 2, 0.08),
+	Rally4 = tone(1.32, -5, 1, 3, 0.05, 0.9),
+	GroupB = tone(1.08, 2, 0, 1, 0.25, 1.1),
+	-- Sons moteur à débloquer (Items/Engines.luau).
+	V8 = tone(1, 0, 0, 0, 0),
+	Open = tone(1.12, 3, -1, 2, 0.35, 1.1),
+	Sport = tone(1.25, -2, 1, 4, 0.1),
+	Turbo = tone(1.2, -4, 2, 5, 0.15),
+	Screamer = tone(1.45, -6, 0, 6, 0.05),
+	Vintage = tone(0.95, 4, 2, -4, 0.45, 1.1),
+	Legend = tone(1.1, 3, 1, 3, 0.3, 1.15),
+} :: { [string]: EngineTone }
+
+SoundBank.DEFAULT_TONE = "Rally2"
+
+function SoundBank.Tone(toneId: string?): EngineTone
+	return SoundBank.TONES[toneId or SoundBank.DEFAULT_TONE] or SoundBank.TONES[SoundBank.DEFAULT_TONE]
+end
 
 -- Crissement de pneu sur surface dure (boucle). Joué une fois PAR ROUE.
 SoundBank.TireScreech = id(109487442763183) -- "Tire Squealing Screeching Loop"

@@ -1,428 +1,303 @@
 --!strict
 --[[
 	RecordService.luau
-	Profils sauvegardés : temps officiels de la spéciale, fantômes, réglages,
-	records du tour des circuits de rallycross et statistiques de course.
+	Les records : meilleur temps de la spéciale (et son classement), meilleurs
+	tours des circuits de rallycross (et leurs classements), statistiques de
+	carrière.
 
-	CHRONO OFFICIEL DE LA SPÉCIALE, MESURÉ PAR LE SERVEUR : on ne croit jamais un
-	temps envoyé par un client (n'importe qui peut envoyer "0:12.00"). Le serveur
-	suit lui-même chaque voiture le long du tracé, 10 fois par seconde
-	(StageTrack.Locate, le même calcul que le chrono du client), et détecte
-	départ, arrivée et raccourcis. Le passage des lignes est interpolé entre deux
-	mesures : la précision est de l'ordre du centième, et le délai réseau,
-	identique au départ et à l'arrivée, s'annule.
-	Limite honnête : la physique tourne chez le client (il possède sa voiture).
-	Un tricheur déterminé peut donc rouler "trop vite" ; le serveur rejette tout
-	ce qui dépasse une vitesse plausible, tout bond le long du tracé (raccourci,
-	téléportation) et tout temps trop court pour la distance.
-	Les voitures engagées dans une course de rallycross (attribut RaceId) ne sont
-	pas chronométrées ici : RaceService s'en charge.
+	Les temps arrivent déjà validés : par StageService pour la spéciale
+	(chronométrée par le serveur), par RaceService pour les tours. Ici, on ne
+	fait que les garder : profil (ProfileStore) et classements sauvegardés
+	(OrderedDataStore, un par tracé), complétés par la session (Boards.luau).
 
-	SAUVEGARDE (DataStore) : un profil par joueur -- meilleur temps et fantôme par
-	spéciale, réglages, meilleurs tours par circuit, statistiques -- plus un
-	classement par spéciale et par circuit (OrderedDataStore).
-	Écritures rares par construction : un record perso, un fantôme, une fin de
-	course, des réglages regroupés toutes les 30 s et au départ du joueur. Bien
-	en deçà des limites de Roblox (~60 + 10 x joueurs écritures par minute).
-	Dans Studio, les DataStores exigent "Activer l'accès Studio aux services
-	d'API" (Paramètres du jeu > Sécurité). Sans ça, tout fonctionne quand même,
-	en mémoire, pour la session.
+	PAR SPÉCIALE ET PAR CATÉGORIE DE VOITURE (Stages.luau, CarClasses.luau) :
+	chaque spéciale a ses records et ses classements dans chaque catégorie --
+	une Rally4 ne se mesure pas à un Groupe B. La forêt en Rally2 garde les
+	clés d'avant les catégories et les spéciales.
 
-	IDENTITÉ D'UN TRACÉ : dérivée de sa longueur. Si le tracé change, les temps
-	repartent de zéro au lieu de mélanger deux parcours différents.
+	Un temps qui prend la tête d'un classement s'annonce à tout le serveur
+	(AnnounceService), une fois ce classement lu au moins une fois.
+
+	C'est aussi ce service qui envoie au joueur son profil à l'arrivée
+	(ProfileLoaded : records et fantômes par spéciale et par catégorie,
+	réglages, livrée, statistiques).
 ]]
 
-local DataStoreService = game:GetService("DataStoreService")
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
-local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
-local CarSetup = require(ReplicatedStorage.Shared.Constants.CarSetup)
-local Livery = require(ReplicatedStorage.Shared.Constants.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
+local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
+local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
+local Stores = require(script.Parent.Parent.Data.Stores)
+local Boards = require(script.Parent.Parent.Data.Boards)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+local ProgressService = require(script.Parent.ProgressService)
+local AnnounceService = require(script.Parent.AnnounceService)
 
 local RecordService = {}
 
-local STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
-local PROFILE_STORE_NAME = "RallyProfiles_v1"
-local LEADERBOARD_STORE_NAME = "RallyBest_" .. STAGE_ID
+local LEADERBOARD_STORE_PREFIX = "RallyBest_"
 local LAP_STORE_PREFIX = "RallyLap_"
 
-local SAMPLE_INTERVAL = 0.1 -- secondes entre deux mesures de position
-local MAX_PLAUSIBLE_SPEED = 250 -- studs/s (~250 km/h) : au-delà, ce n'est pas de la conduite
-local JUMP_MARGIN = 25 -- studs de tolérance (à-coup réseau, remise en piste)
-local RESTART_BACKWARD = 150 -- recul le long du tracé qui signifie "retour au départ"
-local START_LATERAL_TOLERANCE = StageTrack.ROAD_WIDTH / 2 + 8
-
+--[[
+	Lectures des classements sauvegardés : Roblox en permet ~5 + 2 x joueurs
+	par minute (GetSortedAsync). Avec une catégorie de plus, on ne relit plus
+	tout d'un coup : une catégorie à chaque fois, à tour de rôle (une relecture
+	complète toutes les 90 s pour la spéciale, 6 min pour les circuits), plus
+	la catégorie où un record vient de tomber.
+]]
 local LEADERBOARD_SIZE = 10
-local LEADERBOARD_REFRESH = 60 -- secondes
+local LEADERBOARD_ROTATE = 30 -- secondes entre deux catégories relues
 local LAP_BOARD_SIZE = 5
-local LAP_BOARD_REFRESH = 120
-local SETUP_FLUSH_INTERVAL = 30
-local GHOST_WINDOW = 60 -- secondes pour envoyer le fantôme après un record
-local GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
-local GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
+local LAP_BOARD_ROTATE = 120
 
-type Ghost = { Rate: number, Frames: { number } }
-type StageRecord = { Ms: number, Ghost: Ghost? }
-export type Stats = { Races: number, Wins: number, Podiums: number, Points: number }
-type Profile = {
-	Records: { [string]: StageRecord },
-	Setup: CarSetup.Setup,
-	Livery: Livery.Livery,
-	Laps: { [string]: number }, -- meilleur tour (ms) par circuit (Circuit.Key)
-	Stats: Stats,
-}
+-- Session : UserId -> meilleur temps, par clé de classement.
+type Session = { [string]: { [number]: number } }
 
-type Run = {
-	Running: boolean,
-	StartTime: number,
-	LastProgress: number?,
-	LastTime: number,
-}
-
---------------------------------------------------------------------------------
--- DataStores (avec repli en mémoire)
---------------------------------------------------------------------------------
-
-local storesAvailable = true
-local profileStore: DataStore? = nil
-local leaderboardStore: OrderedDataStore? = nil
-local lapStores: { [string]: OrderedDataStore } = {}
-local warnedStores = false
-
-local function storeFailed(context: string, err: any)
-	local message = tostring(err)
-	-- Accès aux API refusé (Studio) : inutile d'insister, on passe en mémoire.
-	if string.find(message, "Studio", 1, true) or string.find(message, "403", 1, true) then
-		storesAvailable = false
+-- Ce temps prend-il la tête de ce classement ? Pas tant qu'il n'a pas été
+-- lu (au démarrage du serveur, il est vide).
+local function beatsFirst(entries: { Boards.Entry }?, ms: number): boolean
+	if not entries then
+		return false
 	end
-	if not warnedStores then
-		warnedStores = true
-		warn(string.format(
-			"[RecordService] DataStore indisponible (%s : %s). Temps gardés en mémoire pour la session. "
-				.. "Dans Studio : Paramètres du jeu > Sécurité > Activer l'accès Studio aux services d'API.",
-			context,
-			message
-		))
-	end
+	local first = entries[1]
+	return first == nil or ms < first.Ms
 end
 
-local function lapStore(key: string): OrderedDataStore?
-	if not storesAvailable then
-		return nil
-	end
-	local existing = lapStores[key]
-	if existing then
-		return existing
-	end
-	local ok, result = pcall(function()
-		return DataStoreService:GetOrderedDataStore(LAP_STORE_PREFIX .. key)
-	end)
-	if not ok then
-		storeFailed("records du tour", result)
-		return nil
-	end
-	lapStores[key] = result
-	return result
-end
-
-local function profileKey(userId: number): string
-	return "u_" .. tostring(userId)
-end
-
---------------------------------------------------------------------------------
--- Profils
---------------------------------------------------------------------------------
-
-local function emptyStats(): Stats
-	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
-end
-
-local function sanitizeGhost(input: any): Ghost?
-	if type(input) ~= "table" or type(input.Rate) ~= "number" or type(input.Frames) ~= "table" then
-		return nil
-	end
-	local rate = input.Rate
-	if rate < 1 or rate > 30 then
-		return nil
-	end
-	local count = #input.Frames
-	if count < GHOST_VALUES_PER_FRAME * 2
-		or count % GHOST_VALUES_PER_FRAME ~= 0
-		or count > GHOST_MAX_FRAMES * GHOST_VALUES_PER_FRAME then
-		return nil
-	end
-	local frames = table.create(count)
-	for i = 1, count do
-		local value = input.Frames[i]
-		if type(value) ~= "number" or value ~= value or math.abs(value) > 1e6 then
-			return nil
-		end
-		-- Deux décimales suffisent largement : moins de place dans le DataStore.
-		frames[i] = math.floor(value * 100 + 0.5) / 100
-	end
-	return { Rate = rate, Frames = frames }
-end
-
-local function count(value: any): number
-	return if type(value) == "number" and value == value and value >= 0 then math.floor(value) else 0
-end
-
-local function sanitizeProfile(data: any, userId: number): Profile
-	local profile: Profile = {
-		Records = {},
-		Setup = CarSetup.Default(),
-		Livery = Livery.Default(userId),
-		Laps = {},
-		Stats = emptyStats(),
-	}
-	if type(data) ~= "table" then
-		return profile
-	end
-	profile.Livery = Livery.Sanitize(data.Livery, userId)
-	if type(data.Records) == "table" then
-		for stageId, record in pairs(data.Records) do
-			if type(stageId) == "string" and type(record) == "table" and type(record.Ms) == "number" then
-				profile.Records[stageId] = { Ms = record.Ms, Ghost = sanitizeGhost(record.Ghost) }
-			end
-		end
-	end
-	profile.Setup = CarSetup.Sanitize(data.Setup)
-	if type(data.Laps) == "table" then
-		for key, ms in pairs(data.Laps) do
-			if type(key) == "string" and type(ms) == "number" and ms > 0 then
-				profile.Laps[key] = ms
-			end
-		end
-	end
-	if type(data.Stats) == "table" then
-		profile.Stats = {
-			Races = count(data.Stats.Races),
-			Wins = count(data.Stats.Wins),
-			Podiums = count(data.Stats.Podiums),
-			Points = count(data.Stats.Points),
-		}
-	end
-	return profile
-end
-
-local profiles: { [Player]: Profile } = {}
-local setupDirty: { [Player]: boolean } = {}
-
--- Modifie le profil sauvegardé de façon atomique (UpdateAsync) : un autre
--- serveur a pu écrire entre-temps. `change` renvoie false pour annuler.
-local function updateStoredProfile(userId: number, context: string, change: (Profile) -> boolean)
-	local store = profileStore
-	if not storesAvailable or not store then
-		return
-	end
-	task.spawn(function()
-		local ok, err = pcall(function()
-			store:UpdateAsync(profileKey(userId), function(old: any)
-				local profile = sanitizeProfile(old, userId)
-				if not change(profile) then
-					return nil -- rien à écrire
-				end
-				return profile
-			end)
-		end)
-		if not ok then
-			storeFailed(context, err)
-		end
-	end)
-end
-
-local function pushProfile(player: Player)
-	local profile = profiles[player]
-	if profile and player.Parent then
-		Remotes.ProfileUpdated:FireClient(player, profile.Stats, profile.Laps)
-	end
-end
-
---------------------------------------------------------------------------------
--- Noms
---------------------------------------------------------------------------------
-
-type Entry = { UserId: number, Name: string, Ms: number }
-
-local nameCache: { [number]: string } = {}
-local function nameOf(userId: number): string
-	local cached = nameCache[userId]
-	if cached then
-		return cached
-	end
-	local player = Players:GetPlayerByUserId(userId)
-	if player then
-		nameCache[userId] = player.DisplayName
-		return player.DisplayName
-	end
-	local ok, name = pcall(function()
-		return Players:GetNameFromUserIdAsync(userId)
-	end)
-	local resolved = if ok and type(name) == "string" then name else ("Pilote " .. tostring(userId))
-	nameCache[userId] = resolved
-	return resolved
-end
-
--- Classement trié et tronqué : sauvegardé, complété des records de la session.
-local function mergeBoard(store: OrderedDataStore?, session: { [number]: number }, size: number, context: string): { Entry }
-	local entries: { Entry } = {}
-	local byUser: { [number]: Entry } = {}
-	if storesAvailable and store then
-		local ok, err = pcall(function()
-			local pages = store:GetSortedAsync(true, size)
-			for _, item in ipairs(pages:GetCurrentPage()) do
-				local userId = tonumber(item.key)
-				if userId then
-					local entry = { UserId = userId, Name = nameOf(userId), Ms = item.value }
-					table.insert(entries, entry)
-					byUser[userId] = entry
-				end
-			end
-		end)
-		if not ok then
-			storeFailed(context, err)
-		end
-	end
-	for userId, ms in pairs(session) do
-		local existing = byUser[userId]
-		if existing then
-			existing.Ms = math.min(existing.Ms, ms)
-		else
-			table.insert(entries, { UserId = userId, Name = nameOf(userId), Ms = ms })
-		end
-	end
-	table.sort(entries, function(a, b)
-		return a.Ms < b.Ms
-	end)
-	while #entries > size do
-		table.remove(entries)
+local function sessionOf(session: Session, key: string): { [number]: number }
+	local entries = session[key]
+	if not entries then
+		entries = {}
+		session[key] = entries
 	end
 	return entries
 end
 
 --------------------------------------------------------------------------------
--- Classement de la spéciale
+-- Classements des spéciales (un par spéciale et par catégorie)
 --------------------------------------------------------------------------------
 
--- Meilleurs temps de la session : sert de classement quand le DataStore manque,
--- et complète le classement sauvegardé avec les records tout juste battus.
-local sessionBest: { [number]: number } = {}
-local leaderboard: { Entry } = {}
+local sessionBest: Session = {} -- par Stages.BoardKey
+-- Par spéciale, puis par catégorie (ce que reçoit le client).
+local leaderboards: { [string]: { [string]: { Boards.Entry } } } = {}
 
-local function refreshLeaderboard()
-	leaderboard = mergeBoard(leaderboardStore, sessionBest, LEADERBOARD_SIZE, "classement")
-	Remotes.Leaderboard:FireAllClients(leaderboard)
+local function leaderboardStore(classId: string, stageId: string): OrderedDataStore?
+	return Stores.Ordered(LEADERBOARD_STORE_PREFIX .. ProfileSchema.StageKey(classId, stageId))
 end
 
-local refreshScheduled = false
-local function scheduleLeaderboardRefresh()
-	if refreshScheduled then
-		return
+local function boardsOf(stageId: string): { [string]: { Boards.Entry } }
+	local boards = leaderboards[stageId]
+	if not boards then
+		boards = {}
+		leaderboards[stageId] = boards
 	end
-	refreshScheduled = true
-	task.delay(2, function()
-		refreshScheduled = false
-		refreshLeaderboard()
-	end)
+	return boards
 end
 
---------------------------------------------------------------------------------
--- Records du tour (rallycross)
---------------------------------------------------------------------------------
+local function refreshLeaderboard(classId: string, stageId: string)
+	local session = sessionOf(sessionBest, Stages.BoardKey(stageId, classId))
+	boardsOf(stageId)[classId] = Boards.Merge(leaderboardStore(classId, stageId), session, LEADERBOARD_SIZE, "classement")
+	Remotes.Leaderboard:FireAllClients(leaderboards)
+end
 
-type TrackBoard = { Key: string, Entries: { Entry } }
+-- Classements où un record vient de tomber : relus ensemble, un peu après.
+local dirtyStage: { [string]: { Stage: string, Class: string } } = {}
+local refreshDirtyStage = Boards.Debounced(2, function()
+	local boards = dirtyStage
+	dirtyStage = {}
+	for _, board in pairs(boards) do
+		refreshLeaderboard(board.Class, board.Stage)
+	end
+end)
 
-local sessionLaps: { [string]: { [number]: number } } = {}
-local lapBoards: { [string]: TrackBoard } = {}
+-- Classement d'une spéciale tel qu'affiché (top 10), dans une catégorie.
+function RecordService.GetLeaderboard(classId: string, stageId: string): { Boards.Entry }
+	return boardsOf(stageId)[classId] or {}
+end
 
-local function refreshLapBoards()
-	for _, id in ipairs(Tracks.List()) do
-		local circuit = Tracks.Get(id)
-		if circuit then
-			local key = circuit.Key
-			lapBoards[id] = {
-				Key = key,
-				Entries = mergeBoard(lapStore(key), sessionLaps[key] or {}, LAP_BOARD_SIZE, "records du tour"),
-			}
+-- Meilleurs temps d'une spéciale connus dans la session (UserId -> ms).
+function RecordService.GetSessionBest(classId: string, stageId: string): { [number]: number }
+	return sessionOf(sessionBest, Stages.BoardKey(stageId, classId))
+end
+
+-- Temps de la spéciale du classement sauvegardé, à partir de `belowMs` en
+-- descendant (les rivaux juste devant un pilote hors du top 10).
+function RecordService.GetTimesBelow(classId: string, belowMs: number, count: number, stageId: string): { { UserId: number, Ms: number } }
+	local list = {}
+	local store = leaderboardStore(classId, stageId)
+	if not store then
+		return list
+	end
+	local ok, err = pcall(function()
+		local pages = store:GetSortedAsync(false, count, nil, belowMs)
+		for _, item in ipairs(pages:GetCurrentPage()) do
+			local userId = tonumber(item.key)
+			if userId then
+				table.insert(list, { UserId = userId, Ms = item.value })
+			end
 		end
+	end)
+	if not ok then
+		Stores.Failed("rival", err)
 	end
-	Remotes.TrackRecords:FireAllClients(lapBoards)
-	RecordService.TrackRecordsChanged(lapBoards)
+	return list
+end
+
+-- Record d'une spéciale d'un joueur connecté, dans une catégorie.
+function RecordService.GetStageRecord(player: Player, classId: string, stageId: string): ProfileSchema.StageRecord?
+	local profile = ProfileStore.Get(player)
+	return if profile then profile.Records[ProfileSchema.StageKey(classId, stageId)] else nil
+end
+
+export type StageResult = { IsBest: boolean, PreviousMs: number? }
+
+-- Temps validé d'une spéciale : record perso et classement de la catégorie.
+function RecordService.StageFinish(player: Player, ms: number, classId: string, stageId: string): StageResult?
+	local profile = ProfileStore.Get(player)
+	if not profile then
+		return nil
+	end
+	local key = ProfileSchema.StageKey(classId, stageId)
+	local previous = profile.Records[key]
+	local isBest = previous == nil or ms < previous.Ms
+	if isBest then
+		if beatsFirst(boardsOf(stageId)[classId], ms) then
+			AnnounceService.Send("Record", player.DisplayName, string.format(
+				"bat le record de la spéciale %s en %s : %s",
+				Stages.Get(stageId).Name,
+				CarClasses.Get(classId).Name,
+				Format.Ms(ms)
+			))
+		end
+		profile.Records[key] = { Ms = ms, Ghost = nil } -- le fantôme suit (GhostService)
+		sessionOf(sessionBest, Stages.BoardKey(stageId, classId))[player.UserId] = ms
+		ProfileStore.Update(player.UserId, "record", function(stored)
+			local current = stored.Records[key]
+			if current and current.Ms <= ms then
+				return false -- déjà mieux ailleurs (autre serveur)
+			end
+			stored.Records[key] = { Ms = ms, Ghost = nil }
+			return true
+		end)
+		Boards.Set(leaderboardStore(classId, stageId), player.UserId, ms, "classement")
+		dirtyStage[Stages.BoardKey(stageId, classId)] = { Stage = stageId, Class = classId }
+		refreshDirtyStage()
+	end
+	return { IsBest = isBest, PreviousMs = if previous then previous.Ms else nil }
+end
+
+--------------------------------------------------------------------------------
+-- Records du tour (rallycross), par circuit et par catégorie
+--------------------------------------------------------------------------------
+
+type TrackBoard = { Key: string, Entries: { Boards.Entry } }
+
+local sessionLaps: Session = {} -- par clé de tour (LapKey)
+-- Par catégorie, puis par circuit.
+local lapBoards: { [string]: { [string]: TrackBoard } } = {}
+
+local function lapStore(lapKey: string): OrderedDataStore?
+	return Stores.Ordered(LAP_STORE_PREFIX .. lapKey)
 end
 
 -- Appelée à chaque mise à jour des records du tour (panneaux du paddock).
 RecordService.TrackRecordsChanged = function(_boards: any) end
 
-local lapRefreshScheduled = false
-local function scheduleLapRefresh()
-	if lapRefreshScheduled then
-		return
+-- Relit les records du tour d'une catégorie, sur tous les circuits.
+local function refreshLapBoards(classId: string)
+	local boards: { [string]: TrackBoard } = {}
+	for _, id in ipairs(Tracks.List()) do
+		local circuit = Tracks.Get(id)
+		if circuit then
+			local key = ProfileSchema.LapKey(circuit.Key, classId)
+			boards[id] = {
+				Key = key,
+				Entries = Boards.Merge(lapStore(key), sessionOf(sessionLaps, key), LAP_BOARD_SIZE, "records du tour"),
+			}
+		end
 	end
-	lapRefreshScheduled = true
-	task.delay(3, function()
-		lapRefreshScheduled = false
-		refreshLapBoards()
-	end)
+	lapBoards[classId] = boards
+	Remotes.TrackRecords:FireAllClients(lapBoards)
+	RecordService.TrackRecordsChanged(lapBoards)
 end
 
--- Tour bouclé en course. Renvoie true si c'est le meilleur tour du joueur sur ce circuit.
-function RecordService.SubmitLap(player: Player, trackKey: string, ms: number): boolean
-	local profile = profiles[player]
+local dirtyLaps: { [string]: boolean } = {}
+local refreshDirtyLaps = Boards.Debounced(3, function()
+	local classes = dirtyLaps
+	dirtyLaps = {}
+	for classId in pairs(classes) do
+		refreshLapBoards(classId)
+	end
+end)
+
+-- Statistiques et records envoyés au menu, puis la progression qui en découle.
+local function pushProfile(player: Player)
+	local profile = ProfileStore.Get(player)
+	if profile and player.Parent then
+		Remotes.ProfileUpdated:FireClient(player, profile.Stats, profile.Laps)
+		ProgressService.Push(player, true)
+	end
+end
+
+-- Tour bouclé en course. Renvoie true si c'est le meilleur tour du joueur
+-- sur ce circuit, dans cette catégorie.
+function RecordService.SubmitLap(player: Player, trackKey: string, classId: string, ms: number): boolean
+	local profile = ProfileStore.Get(player)
 	if not profile or ms <= 0 then
 		return false
 	end
-	local previous = profile.Laps[trackKey]
+	local key = ProfileSchema.LapKey(trackKey, classId)
+	local previous = profile.Laps[key]
 	if previous and previous <= ms then
 		return false
 	end
-	profile.Laps[trackKey] = ms
-	local session = sessionLaps[trackKey]
-	if not session then
-		session = {}
-		sessionLaps[trackKey] = session
+	for id, board in pairs(lapBoards[classId] or {}) do
+		local circuit = Tracks.Get(id)
+		if board.Key == key and circuit and beatsFirst(board.Entries, ms) then
+			AnnounceService.Send("Record", player.DisplayName, string.format(
+				"bat le record du tour de %s en %s : %s",
+				circuit.Name,
+				CarClasses.Get(classId).Name,
+				Format.Ms(ms)
+			))
+		end
 	end
-	session[player.UserId] = ms
-
-	updateStoredProfile(player.UserId, "record du tour", function(stored)
-		local current = stored.Laps[trackKey]
+	profile.Laps[key] = ms
+	sessionOf(sessionLaps, key)[player.UserId] = ms
+	ProfileStore.Update(player.UserId, "record du tour", function(stored)
+		local current = stored.Laps[key]
 		if current and current <= ms then
 			return false
 		end
-		stored.Laps[trackKey] = ms
+		stored.Laps[key] = ms
 		return true
 	end)
-	local store = lapStore(trackKey)
-	if store then
-		task.spawn(function()
-			local ok, err = pcall(function()
-				store:UpdateAsync(tostring(player.UserId), function(old: any)
-					if type(old) == "number" and old <= ms then
-						return nil
-					end
-					return ms
-				end)
-			end)
-			if not ok then
-				storeFailed("records du tour", err)
-			end
-		end)
-	end
-	scheduleLapRefresh()
+	Boards.SubmitLowest(lapStore(key), player.UserId, ms, "records du tour")
+	dirtyLaps[classId] = true
+	refreshDirtyLaps()
 	pushProfile(player)
 	return true
 end
 
+function RecordService.GetLapBest(player: Player, trackKey: string, classId: string): number?
+	local profile = ProfileStore.Get(player)
+	return if profile then profile.Laps[ProfileSchema.LapKey(trackKey, classId)] else nil
+end
+
+--------------------------------------------------------------------------------
+-- Carrière
+--------------------------------------------------------------------------------
+
 -- Fin de course (dernière manche) : statistiques de carrière.
 function RecordService.AddRaceResult(player: Player, position: number, points: number)
-	local profile = profiles[player]
+	local profile = ProfileStore.Get(player)
 	if not profile then
 		return
 	end
-	local function apply(stats: Stats)
+	local function apply(stats: ProfileSchema.Stats)
 		stats.Races += 1
 		stats.Points += points
 		if position == 1 then
@@ -433,165 +308,11 @@ function RecordService.AddRaceResult(player: Player, position: number, points: n
 		end
 	end
 	apply(profile.Stats)
-	updateStoredProfile(player.UserId, "statistiques", function(stored)
+	ProfileStore.Update(player.UserId, "statistiques", function(stored)
 		apply(stored.Stats)
 		return true
 	end)
 	pushProfile(player)
-end
-
-function RecordService.GetLapBest(player: Player, trackKey: string): number?
-	local profile = profiles[player]
-	return if profile then profile.Laps[trackKey] else nil
-end
-
---------------------------------------------------------------------------------
--- Arrivée de la spéciale et fantômes
---------------------------------------------------------------------------------
-
-local pendingGhost: { [Player]: { Ms: number, Expires: number } } = {}
-
-local function onFinish(player: Player, ms: number)
-	local profile = profiles[player]
-	if not profile then
-		return
-	end
-	local previous = profile.Records[STAGE_ID]
-	local isBest = previous == nil or ms < previous.Ms
-
-	if isBest then
-		profile.Records[STAGE_ID] = { Ms = ms, Ghost = nil } -- le fantôme suit (SubmitGhost)
-		sessionBest[player.UserId] = ms
-		pendingGhost[player] = { Ms = ms, Expires = os.clock() + GHOST_WINDOW }
-
-		updateStoredProfile(player.UserId, "record", function(stored)
-			local current = stored.Records[STAGE_ID]
-			if current and current.Ms <= ms then
-				return false -- déjà mieux ailleurs (autre serveur)
-			end
-			stored.Records[STAGE_ID] = { Ms = ms, Ghost = nil }
-			return true
-		end)
-		local store = leaderboardStore
-		if storesAvailable and store then
-			task.spawn(function()
-				local ok, err = pcall(function()
-					store:SetAsync(tostring(player.UserId), ms)
-				end)
-				if not ok then
-					storeFailed("classement", err)
-				end
-			end)
-		end
-		scheduleLeaderboardRefresh()
-	end
-
-	Remotes.RunValidated:FireClient(player, {
-		Valid = true,
-		Ms = ms,
-		PersonalBest = isBest,
-		PreviousMs = if previous then previous.Ms else nil,
-	})
-end
-
-local function onInvalid(player: Player, reason: string)
-	Remotes.RunValidated:FireClient(player, { Valid = false, Reason = reason })
-end
-
---------------------------------------------------------------------------------
--- Réglages
---------------------------------------------------------------------------------
-
-local lastSetupAt: { [Player]: number } = {}
-
--- Réglages et livrée : écrits ensemble, regroupés (toutes les 30 s, au départ).
-local function flushSetup(player: Player)
-	local profile = profiles[player]
-	if not profile or not setupDirty[player] then
-		return
-	end
-	setupDirty[player] = nil
-	local setup = profile.Setup
-	local livery = profile.Livery
-	updateStoredProfile(player.UserId, "réglages", function(stored)
-		stored.Setup = setup
-		stored.Livery = livery
-		return true
-	end)
-end
-
-function RecordService.GetLivery(player: Player): Livery.Livery
-	local profile = profiles[player]
-	return if profile then profile.Livery else Livery.Default(player.UserId)
-end
-
--- Appelée quand la livrée d'un joueur change (ou au chargement du profil) :
--- branchée par Main.server.luau sur CarService, qui repeint la voiture.
-RecordService.LiveryChanged = function(_player: Player) end
-
---------------------------------------------------------------------------------
--- Joueurs
---------------------------------------------------------------------------------
-
-local runs: { [Player]: Run } = {}
-
-local function onPlayerAdded(player: Player)
-	local data: any = nil
-	local store = profileStore
-	if storesAvailable and store then
-		local ok, result = pcall(function()
-			return store:GetAsync(profileKey(player.UserId))
-		end)
-		if ok then
-			data = result
-		else
-			storeFailed("chargement du profil", result)
-		end
-	end
-	if not player.Parent then
-		return -- parti pendant le chargement
-	end
-	local profile = sanitizeProfile(data, player.UserId)
-	profiles[player] = profile
-	runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0 }
-	nameCache[player.UserId] = player.DisplayName
-
-	local record = profile.Records[STAGE_ID]
-	if record then
-		sessionBest[player.UserId] = record.Ms
-	end
-	for key, ms in pairs(profile.Laps) do
-		local session = sessionLaps[key]
-		if not session then
-			session = {}
-			sessionLaps[key] = session
-		end
-		session[player.UserId] = ms
-	end
-	Remotes.ProfileLoaded:FireClient(player, {
-		StageId = STAGE_ID,
-		BestMs = if record then record.Ms else nil,
-		Ghost = if record then record.Ghost else nil,
-		Setup = profile.Setup,
-		Livery = profile.Livery,
-		Stats = profile.Stats,
-		Laps = profile.Laps,
-	})
-	RecordService.LiveryChanged(player)
-	Remotes.Leaderboard:FireClient(player, leaderboard)
-	Remotes.TrackRecords:FireClient(player, lapBoards)
-end
-
-local function carChassisOf(player: Player): BasePart?
-	local car = workspace:FindFirstChild("Car_" .. player.UserId)
-	if not car or car:GetAttribute("RaceId") ~= nil then
-		return nil -- en course de rallycross : pas de chrono de spéciale
-	end
-	local chassis = car:FindFirstChild("Chassis")
-	if chassis and chassis:IsA("BasePart") and chassis:GetAttribute("Driven") == true then
-		return chassis
-	end
-	return nil
 end
 
 --------------------------------------------------------------------------------
@@ -599,193 +320,67 @@ end
 --------------------------------------------------------------------------------
 
 function RecordService.Start()
-	do
-		local ok, err = pcall(function()
-			profileStore = DataStoreService:GetDataStore(PROFILE_STORE_NAME)
-			leaderboardStore = DataStoreService:GetOrderedDataStore(LEADERBOARD_STORE_NAME)
-		end)
-		storesAvailable = ok
-		if not ok then
-			-- Typiquement : place jamais publiée sur Roblox.
-			warnedStores = true
-			warn("[RecordService] DataStore indisponible (" .. tostring(err) .. "). Temps gardés en mémoire pour la session.")
-		end
-	end
-
-	Remotes.SubmitGhost.OnServerEvent:Connect(function(player: Player, input: any)
-		local pending = pendingGhost[player]
-		local profile = profiles[player]
-		if not pending or not profile or os.clock() > pending.Expires then
-			return
-		end
-		local ghost = sanitizeGhost(input)
-		if not ghost then
-			return
-		end
-		-- La durée du fantôme doit correspondre au temps validé par le serveur.
-		local frameCount = #ghost.Frames / GHOST_VALUES_PER_FRAME
-		local duration = (frameCount - 1) / ghost.Rate
-		if math.abs(duration - pending.Ms / 1000) > 2 then
-			return
-		end
-		pendingGhost[player] = nil
-
-		local record = profile.Records[STAGE_ID]
-		if record and record.Ms == pending.Ms then
-			record.Ghost = ghost
-		end
-		local ms = pending.Ms
-		updateStoredProfile(player.UserId, "fantôme", function(stored)
-			local current = stored.Records[STAGE_ID]
-			if not current or current.Ms ~= ms then
-				return false -- un meilleur temps est arrivé entre-temps
-			end
-			current.Ghost = ghost
-			return true
-		end)
-	end)
-
-	Remotes.SaveSetup.OnServerEvent:Connect(function(player: Player, input: any)
-		local profile = profiles[player]
-		if not profile then
-			return
-		end
-		local now = os.clock()
-		if now - (lastSetupAt[player] or 0) < 0.5 then
-			return
-		end
-		lastSetupAt[player] = now
-		profile.Setup = CarSetup.Sanitize(input)
-		setupDirty[player] = true
-	end)
-
-	local lastLiveryAt: { [Player]: number } = {}
-	Remotes.SaveLivery.OnServerEvent:Connect(function(player: Player, input: any)
-		local profile = profiles[player]
-		if not profile then
-			return
-		end
-		local now = os.clock()
-		if now - (lastLiveryAt[player] or 0) < 0.5 then
-			return
-		end
-		lastLiveryAt[player] = now
-		profile.Livery = Livery.Sanitize(input, player.UserId)
-		setupDirty[player] = true
-		RecordService.LiveryChanged(player)
-	end)
-	Players.PlayerRemoving:Connect(function(player: Player)
-		lastLiveryAt[player] = nil
-	end)
-
-	task.spawn(function()
-		while true do
-			task.wait(SETUP_FLUSH_INTERVAL)
-			for player in pairs(setupDirty) do
-				flushSetup(player)
-			end
-		end
-	end)
-
-	for _, player in ipairs(Players:GetPlayers()) do
-		task.spawn(onPlayerAdded, player)
-	end
-	Players.PlayerAdded:Connect(onPlayerAdded)
-
-	Players.PlayerRemoving:Connect(function(player: Player)
-		flushSetup(player)
-		profiles[player] = nil
-		runs[player] = nil
-		pendingGhost[player] = nil
-		lastSetupAt[player] = nil
-	end)
-
-	game:BindToClose(function()
-		for player in pairs(setupDirty) do
-			flushSetup(player)
-		end
-		task.wait(2) -- laisse partir les écritures lancées en tâche de fond
-	end)
-
-	task.spawn(function()
-		refreshLeaderboard()
-		while true do
-			task.wait(LEADERBOARD_REFRESH)
-			refreshLeaderboard()
-		end
-	end)
-	task.spawn(function()
-		refreshLapBoards()
-		while true do
-			task.wait(LAP_BOARD_REFRESH)
-			refreshLapBoards()
-		end
-	end)
-
-	-- Chronométrage officiel de la spéciale
-	local finishDistance = StageTrack.GetFinishDistance()
-	local startDistance = StageTrack.START_DISTANCE
-
-	local accumulator = 0
-	RunService.Heartbeat:Connect(function(dt: number)
-		accumulator += dt
-		if accumulator < SAMPLE_INTERVAL then
-			return
-		end
-		accumulator = 0
-		local now = os.clock()
-
-		for player, run in pairs(runs) do
-			local chassis = carChassisOf(player)
-			if not chassis then
-				-- Hors de la voiture : pas de chrono (et la reprise repart de zéro).
-				run.Running = false
-				run.LastProgress = nil
-				continue
-			end
-
-			local _, progress, lateral = StageTrack.Locate(chassis.Position)
-			local last = run.LastProgress
-			local elapsed = now - run.LastTime
-			run.LastProgress = progress
-			run.LastTime = now
-			if last == nil or elapsed <= 0 then
-				continue
-			end
-
-			local delta = progress - last
-			local maxStep = MAX_PLAUSIBLE_SPEED * elapsed + JUMP_MARGIN
-			-- Instant (interpolé) où l'abscisse a franchi `line` entre les deux mesures.
-			local function crossingTime(line: number): number
-				return (now - elapsed) + elapsed * math.clamp((line - last) / delta, 0, 1)
-			end
-
-			if run.Running then
-				if delta > maxStep then
-					run.Running = false
-					onInvalid(player, "raccourci")
-				elseif delta < -RESTART_BACKWARD then
-					run.Running = false -- retour au départ : rien à signaler
-				elseif last < finishDistance and progress >= finishDistance then
-					run.Running = false
-					local ms = math.floor((crossingTime(finishDistance) - run.StartTime) * 1000 + 0.5)
-					-- Garde-fou ultime : impossible de couvrir la distance plus vite que ça.
-					local minimumMs = (finishDistance - startDistance) / MAX_PLAUSIBLE_SPEED * 1000
-					if ms < minimumMs then
-						onInvalid(player, "temps impossible")
-					else
-						onFinish(player, ms)
-					end
+	ProfileStore.OnLoaded(function(player, profile)
+		Boards.RememberName(player)
+		-- Records par spéciale, puis par catégorie.
+		local stage = {}
+		for _, stageId in ipairs(Stages.List()) do
+			local records = {}
+			for _, class in ipairs(CarClasses.LIST) do
+				local record = profile.Records[ProfileSchema.StageKey(class.Id, stageId)]
+				if record then
+					sessionOf(sessionBest, Stages.BoardKey(stageId, class.Id))[player.UserId] = record.Ms
+					records[class.Id] = { Ms = record.Ms, Ghost = record.Ghost }
 				end
-			elseif last < startDistance
-				and progress >= startDistance
-				and delta <= maxStep
-				and math.abs(lateral) <= START_LATERAL_TOLERANCE then
-				run.Running = true
-				run.StartTime = crossingTime(startDistance)
+			end
+			stage[stageId] = records
+		end
+		for key, ms in pairs(profile.Laps) do
+			sessionOf(sessionLaps, key)[player.UserId] = ms
+		end
+		Remotes.ProfileLoaded:FireClient(player, {
+			Stage = stage,
+			Setups = profile.Setups,
+			Livery = profile.Livery,
+			Stats = profile.Stats,
+			Laps = profile.Laps,
+		})
+		Remotes.Leaderboard:FireClient(player, leaderboards)
+		Remotes.TrackRecords:FireClient(player, lapBoards)
+	end)
+
+	-- Une catégorie à la fois, à tour de rôle ; le premier tour plus vite
+	-- (classements vides au démarrage), sans tout lire d'un coup.
+	local function rotate(refresh: (string) -> (), firstWait: number, interval: number)
+		task.spawn(function()
+			local index = 0
+			local firstPass = #CarClasses.LIST
+			while true do
+				index = index % #CarClasses.LIST + 1
+				refresh(CarClasses.LIST[index].Id)
+				firstPass -= 1
+				task.wait(if firstPass > 0 then firstWait else interval)
+			end
+		end)
+	end
+	-- Classements des spéciales : chaque spéciale dans chaque catégorie, à tour de rôle.
+	task.spawn(function()
+		local boards = {}
+		for _, stageId in ipairs(Stages.List()) do
+			for _, class in ipairs(CarClasses.LIST) do
+				table.insert(boards, { Stage = stageId, Class = class.Id })
 			end
 		end
+		local index = 0
+		local firstPass = #boards
+		while true do
+			index = index % #boards + 1
+			refreshLeaderboard(boards[index].Class, boards[index].Stage)
+			firstPass -= 1
+			task.wait(if firstPass > 0 then 5 else LEADERBOARD_ROTATE)
+		end
 	end)
+	rotate(refreshLapBoards, 20, LAP_BOARD_ROTATE)
 end
 
 return RecordService

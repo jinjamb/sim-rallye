@@ -1,7 +1,7 @@
 --[[
 	build-test-track.luau
 	À COLLER DANS LA BARRE DE COMMANDES DE ROBLOX STUDIO (View > Command Bar).
-	Ce fichier n'est PAS synchronisé par Rojo : c'est un outil d'édition.
+	Rojo le range dans ServerStorage.Tools (jamais exécuté en jeu) : c'est un outil d'édition.
 	Rojo doit tourner (rojo serve) : le script lit Surfaces.luau dans ReplicatedStorage.
 
 	Construit une piste d'essai sur la Baseplate : une bande par surface, côte à
@@ -19,7 +19,7 @@
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Surfaces = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Constants"):WaitForChild("Surfaces"))
+local Surfaces = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Vehicle"):WaitForChild("Surfaces"))
 
 local MATERIALS = {
 	Enum.Material.Asphalt,

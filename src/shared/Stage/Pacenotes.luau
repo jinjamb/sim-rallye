@@ -1,7 +1,8 @@
 --!strict
 --[[
 	Pacenotes.luau
-	Les notes du copilote, déduites du tracé (StageTrack.GetSegments) : rien
+	Les notes du copilote, déduites du tracé d'une spéciale (Stages.luau,
+	track.GetSegments) : rien
 	n'est saisi à la main. Modifier le tracé met les notes à jour.
 
 	SÉVÉRITÉ DES VIRAGES, convention des jeux de rallye : 1 = le plus serré,
@@ -22,11 +23,16 @@
 	ENCHAÎNEMENTS ET DISTANCES : après chaque note, la distance jusqu'à la
 	suivante, en mètres. Si la suivante arrive tout de suite, pas de distance :
 	elle est liée par "dans" (moins de 15 m) ou "et" (moins de 30 m).
+
+	À DIRE : chaque note donne aussi ses mots, dans l'ordre où le copilote les
+	prononce ("dans", "gauche", "3", "longue", "150") : la voix du copilote
+	(CopilotVoice.luau) les enchaîne ou en fait une phrase.
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Units = require(ReplicatedStorage.Shared.Constants.Units)
+local Units = require(ReplicatedStorage.Shared.Util.Units)
 local StageTrack = require(script.Parent.StageTrack)
+local Stages = require(script.Parent.Stages)
 
 local Pacenotes = {}
 
@@ -35,6 +41,7 @@ export type Note = {
 	EndDistance: number, -- fin (sortie du virage, fin du danger)
 	Main: string, -- ce qui s'affiche en grand : "GAUCHE 3", "SAUT"...
 	Detail: string, -- précisions : "longue · 70"
+	Words: { string }, -- à dire, en minuscules : { "gauche", "3", "longue", "70" }
 	IsCorner: boolean,
 }
 
@@ -54,6 +61,7 @@ type RawNote = {
 	Distance: number,
 	EndDistance: number,
 	Main: string,
+	Spoken: { string }, -- les mots de Main, à dire
 	Modifiers: { string },
 	Kind: NoteKind,
 	Link: string?,
@@ -85,6 +93,11 @@ local SURFACE_NAMES: { [Enum.Material]: string } = {
 	[Enum.Material.Ice] = "VERGLAS",
 	[Enum.Material.Glacier] = "GLACE",
 }
+
+-- Minuscules, accents compris (string.lower ignore les lettres accentuées).
+local function lower(text: string): string
+	return (string.gsub(string.gsub(string.lower(text), "É", "é"), "È", "è"))
+end
 
 local function severityOf(radiusStuds: number): string
 	local radiusMeters = radiusStuds * Units.METERS_PER_STUD
@@ -122,17 +135,18 @@ local function cornerNote(segment: StageTrack.SegmentInfo): RawNote
 		Distance = segment.StartDistance,
 		EndDistance = segment.EndDistance,
 		Main = main,
+		Spoken = if severity == "ÉPINGLE" then { "épingle", lower(direction) } else { lower(direction), lower(severity) },
 		Modifiers = modifiers,
 		Kind = "Corner",
 	}
 end
 
 local function hazardNote(distance: number, endDistance: number, main: string, kind: NoteKind): RawNote
-	return { Distance = distance, EndDistance = endDistance, Main = main, Modifiers = {}, Kind = kind }
+	return { Distance = distance, EndDistance = endDistance, Main = main, Spoken = { lower(main) }, Modifiers = {}, Kind = kind }
 end
 
-local function collectRaw(): { RawNote }
-	local segments = StageTrack.GetSegments()
+local function collectRaw(track: StageTrack.Track): { RawNote }
+	local segments = track.GetSegments()
 	local raw: { RawNote } = {}
 
 	for i, segment in ipairs(segments) do
@@ -184,13 +198,13 @@ local function collectRaw(): { RawNote }
 		end
 	end
 
-	local finish = StageTrack.GetFinishDistance()
+	local finish = track.GetFinishDistance()
 	table.insert(raw, hazardNote(finish, finish, "ARRIVÉE", "Finish"))
 
 	-- Rien avant la ligne de départ ni après l'arrivée.
 	local kept = {}
 	for _, note in ipairs(raw) do
-		if note.Distance >= StageTrack.START_DISTANCE and note.Distance <= finish then
+		if note.Distance >= track.START_DISTANCE and note.Distance <= finish then
 			table.insert(kept, note)
 		end
 	end
@@ -211,7 +225,7 @@ local function merge(raw: { RawNote }): { RawNote }
 		local last = merged[#merged]
 		if last and math.abs(note.Distance - last.Distance) <= MERGE_DISTANCE then
 			-- Après la description du virage ("longue"), avant la distance.
-			table.insert(last.Modifiers, string.lower(note.Main))
+			table.insert(last.Modifiers, lower(note.Main))
 			last.EndDistance = math.max(last.EndDistance, note.EndDistance)
 		else
 			table.insert(merged, note)
@@ -220,13 +234,16 @@ local function merge(raw: { RawNote }): { RawNote }
 	return merged
 end
 
-local cachedNotes: { Note }? = nil
+local cachedNotes: { [string]: { Note } } = {}
 
-function Pacenotes.Generate(): { Note }
-	if cachedNotes then
-		return cachedNotes
+-- Les notes d'une spéciale (`stageId` : Stages.luau ; la spéciale par défaut sans argument).
+function Pacenotes.Generate(stageId: string?): { Note }
+	local track = Stages.Get(stageId)
+	local cached = cachedNotes[track.Id]
+	if cached then
+		return cached
 	end
-	local raw = merge(collectRaw())
+	local raw = merge(collectRaw(track))
 
 	--[[
 		Liens et distances, pour chaque virage ou danger : mesurés de sa SORTIE à
@@ -258,15 +275,22 @@ function Pacenotes.Generate(): { Note }
 
 	local notes: { Note } = {}
 	for _, note in ipairs(raw) do
+		local words = {}
+		if note.Link then
+			table.insert(words, lower(note.Link))
+		end
+		table.move(note.Spoken, 1, #note.Spoken, #words + 1, words)
+		table.move(note.Modifiers, 1, #note.Modifiers, #words + 1, words)
 		table.insert(notes, {
 			Distance = note.Distance,
 			EndDistance = note.EndDistance,
 			Main = if note.Link then note.Link .. " " .. note.Main else note.Main,
 			Detail = table.concat(note.Modifiers, " · "),
+			Words = words,
 			IsCorner = note.Kind == "Corner",
 		})
 	end
-	cachedNotes = notes
+	cachedNotes[track.Id] = notes
 	return notes
 end
 

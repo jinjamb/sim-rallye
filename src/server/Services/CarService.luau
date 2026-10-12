@@ -46,8 +46,14 @@ local RunService = game:GetService("RunService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
-local RecordService = require(script.Parent.RecordService)
-local LiveryPainter = require(script.Parent.LiveryPainter)
+local GarageService = require(script.Parent.GarageService)
+local ProgressService = require(script.Parent.ProgressService)
+local EconomyService = require(script.Parent.EconomyService)
+local TeamService = require(script.Parent.TeamService)
+local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 
 local CarService = {}
 
@@ -76,6 +82,12 @@ export type SpawnOptions = {
 	RaceId: string?,
 	Contacts: boolean?,
 	Held: boolean?,
+	-- Attributs posés sur la voiture (défi de la semaine : Weekly, Modifier ;
+	-- école de pilotage : Lesson). Le client les lit à la création de sa session.
+	Attributes: { [string]: any }?,
+	-- Catégorie imposée (course, défi, école) ; sinon la voiture choisie par
+	-- le joueur. Une catégorie qu'il ne possède pas lui est prêtée.
+	CarClass: string?,
 }
 
 --------------------------------------------------------------------------------
@@ -341,6 +353,44 @@ local function streamAround(player: Player, position: Vector3)
 	end
 end
 
+-- Niveau et licence du pilote, affichés au-dessus de sa voiture chez les
+-- autres (RemoteCars.luau). Progression.luau.
+local function tagProgress(car: Model, player: Player)
+	local snapshot = ProgressService.Get(player)
+	if snapshot then
+		car:SetAttribute("Level", snapshot.Level)
+		car:SetAttribute("Licence", snapshot.Licence)
+	end
+end
+
+-- La livrée peinte : celle du joueur, aux couleurs de son écurie s'il les porte.
+local function liveryOf(player: Player)
+	return TeamService.LiveryOf(player, GarageService.GetLivery(player))
+end
+
+-- Sigle et couleur de son écurie, affichés devant son nom (RemoteCars.luau).
+local function tagTeam(car: Model, player: Player)
+	local team = TeamService.Get(player)
+	car:SetAttribute("TeamTag", if team then team.Tag else nil)
+	car:SetAttribute("TeamColor", if team then team.Color else nil)
+end
+
+-- Le joueur possède-t-il la voiture de cette catégorie ?
+local function ownsClass(player: Player, classId: string): boolean
+	local item = Catalog.CarItem(classId)
+	return item ~= nil and EconomyService.Owns(player, item.Id)
+end
+
+-- Objets portés que les autres voient ou entendent (Catalog.luau) : un
+-- attribut par sorte sur la voiture, lu par chaque client (RemoteCars).
+local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine" }
+local function tagEquipped(car: Model, player: Player)
+	for _, kind in ipairs(VISIBLE_KINDS) do
+		local item = EconomyService.Equipped(player, kind :: any)
+		car:SetAttribute("Equipped" .. kind, if item then item.Id else nil)
+	end
+end
+
 --[[
 	(Re)crée la voiture du joueur. frame nil = au paddock. Le joueur en reprend
 	aussitôt le volant s'il est en vie (son personnage est soudé au châssis, il
@@ -370,9 +420,21 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	car.Name = "Car_" .. player.UserId
 	car:SetAttribute("OwnerUserId", player.UserId)
 	car:SetAttribute("OwnerName", player.DisplayName)
+	tagProgress(car, player)
+	tagEquipped(car, player)
+	tagTeam(car, player)
+	-- Catégorie : moteur, boîte, pneus (client), records et carrosserie.
+	local chosen = EconomyService.Equipped(player, "Car")
+	local class = CarClasses.Get(opts.CarClass or (if chosen then chosen.CarClass else nil))
+	car:SetAttribute("CarClass", class.Id)
+	car:SetAttribute("Loaned", opts.CarClass ~= nil and not ownsClass(player, class.Id))
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
+	for name, value in pairs(opts.Attributes or {}) do
+		car:SetAttribute(name, value)
+	end
 	car:PivotTo(target)
+	BodyKits.Apply(car, class.Body)
 
 	local chassis = chassisOf(car)
 	if not chassis then
@@ -392,9 +454,14 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	end)
 
 	car.Parent = workspace
+	-- Masse attendue de la voiture complète : le client attend de l'avoir
+	-- reçue en entier avant de calibrer sa suspension (sinon, lest pas encore
+	-- arrivé, il la calibre pour une voiture trop légère : elle s'écrase de
+	-- travers et n'avance pas).
+	car:SetAttribute("SpawnMass", chassis.AssemblyMass)
 	-- Couleur et numéro du joueur (les rayons qui placent les numéros exigent
 	-- une voiture dans le monde).
-	LiveryPainter.Apply(car, RecordService.GetLivery(player))
+	LiveryPainter.Apply(car, liveryOf(player))
 	-- Sans ça, Roblox réattribue la propriété tout seul selon la proximité des joueurs.
 	chassis:SetNetworkOwnershipAuto(false)
 	chassis:SetNetworkOwner(nil)
@@ -436,11 +503,57 @@ function CarService.ReturnToPaddock(player: Player)
 	end
 end
 
+-- Niveau gagné : l'étiquette de la voiture suit.
+function CarService.RefreshProgress(player: Player, _snapshot: any)
+	local car = carByPlayer[player]
+	if car then
+		tagProgress(car, player)
+	end
+end
+
+--[[
+	Objet porté changé (garage, achat) : la voiture le montre aussitôt. Une
+	autre voiture choisie remplace la sienne, sur place -- sauf en course, au
+	défi ou à l'école, où la catégorie est imposée (elle servira la fois
+	suivante).
+]]
+function CarService.RefreshEquipped(player: Player)
+	local car = carByPlayer[player]
+	if not car then
+		return
+	end
+	tagEquipped(car, player)
+	local chosen = EconomyService.Equipped(player, "Car")
+	local classId = CarClasses.Get(if chosen then chosen.CarClass else nil).Id
+	local imposed = car:GetAttribute("RaceId") ~= nil or car:GetAttribute("Weekly") ~= nil or car:GetAttribute("Lesson") ~= nil
+	if imposed or car:GetAttribute("CarClass") == classId then
+		return
+	end
+	local chassis = chassisOf(car)
+	if chassis then
+		local position = chassis.Position + Vector3.new(0, 3, 0)
+		local look = chassis.CFrame.LookVector * Vector3.new(1, 0, 1)
+		if look.Magnitude < 0.1 then
+			look = Vector3.new(0, 0, -1)
+		end
+		task.spawn(CarService.Spawn, player, CFrame.lookAt(position, position + look.Unit), nil)
+	end
+end
+
+-- Écurie rejointe, quittée, ou ses couleurs changées : sigle et livrée suivent.
+function CarService.RefreshTeam(player: Player)
+	local car = carByPlayer[player]
+	if car then
+		tagTeam(car, player)
+		LiveryPainter.Apply(car, liveryOf(player))
+	end
+end
+
 -- Livrée modifiée (menu) : la voiture actuelle est repeinte aussitôt.
 function CarService.RefreshLivery(player: Player)
 	local car = carByPlayer[player]
 	if car then
-		LiveryPainter.Apply(car, RecordService.GetLivery(player))
+		LiveryPainter.Apply(car, liveryOf(player))
 	end
 end
 

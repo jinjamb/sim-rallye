@@ -15,7 +15,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local PhysicsService = game:GetService("PhysicsService")
-local Surfaces = require(ReplicatedStorage.Shared.Constants.Surfaces)
+local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 
 local CAR_COLLISION_GROUP = "Cars" -- voir CarService.server.luau
 
@@ -27,6 +27,7 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	Chassis: BasePart,
 	IsFront: boolean,
 	IsLeft: boolean,
+	TireGrip: number, -- adhérence des pneus de la catégorie (CarClasses.luau)
 
 	-- Réglages
 	SuspensionLength: number,
@@ -100,6 +101,28 @@ export type Wheel = typeof(setmetatable({}, Wheel)) & {
 	en Euler explicite exigerait une inertie ~100x trop grande pour rester stable.
 ]]
 local WHEEL_MASS_RATIO = 0.06 -- masse d'une roue + transmission ramenée à la roue, en fraction du véhicule
+
+--[[
+	ADHÉRENCE EN COURBE RAPIDE (choix de jouabilité).
+	Avec le seul cercle de friction, une voiture qui tourne vite ne dispose
+	que de mu x charge, plus un peu d'appui aéro : en courbe rapide elle
+	glisse tôt et on a l'impression de rouler sur des savonnettes. On donne
+	donc au pneu un supplément d'adhérence LATÉRALE qui monte avec la vitesse
+	(nul au ralenti, plein à HIGH_SPEED_GRIP_FULL), comme si le pneu et
+	l'aéro travaillaient mieux à haute vitesse.
+	Il ne s'applique qu'à la part latérale du budget : freinage, motricité,
+	patinage et blocage de roue restent ceux du cercle de friction (un frein
+	à main tiré décroche toujours l'arrière).
+]]
+-- Supplément à pleine vitesse, plus fort à l'avant : c'est l'avant qui
+-- sature le premier en courbe (sous-virage, « la voiture ne tourne pas »).
+local HIGH_SPEED_GRIP_BONUS_FRONT = 0.45
+local HIGH_SPEED_GRIP_BONUS_REAR = 0.30
+-- Petit supplément latéral de l'avant à toute vitesse : la voiture s'inscrit
+-- mieux dans les épingles, l'arrière garde sa mobilité.
+local FRONT_LATERAL_BONUS = 0.12
+local HIGH_SPEED_GRIP_START = 40 -- studs/s (~40 km/h) : en dessous, aucun supplément
+local HIGH_SPEED_GRIP_FULL = 120 -- studs/s (~120 km/h) : supplément complet
 local SLIP_REFERENCE_SPEED = 4 -- studs/s : plancher au dénominateur des glissements
 
 --[[
@@ -151,6 +174,7 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	self.Chassis = chassis
 	self.IsFront = isFront
 	self.IsLeft = isLeft
+	self.TireGrip = 1
 
 	self.SuspensionLength = 1.6
 
@@ -323,7 +347,12 @@ end
 function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.SteerAngle = steerAngle
 
+	-- La fumée de glisse est faite par TireSmoke.luau (colorée, vue par tous) :
+	-- l'émetteur "Smoke" du gabarit reste éteint.
 	local smoke = self.Attachment:FindFirstChild("Smoke") :: ParticleEmitter?
+	if smoke and smoke.Enabled then
+		smoke.Enabled = false
+	end
 
 	if not self.IsGrounded then
 		self.NormalForce = 0
@@ -333,9 +362,6 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 		self.LongSlipNorm = 0
 		self.LatSlipNorm = 0
 		self:_applyResistiveTorque(dt, brakeForce * self.Radius)
-		if smoke then
-			smoke.Enabled = false
-		end
 		return
 	end
 
@@ -361,7 +387,7 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongitudinalVelocity = longitudinalVelocity
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
-	local mu = self.Surface.Grip
+	local mu = self.Surface.Grip * Surfaces.GripScale * self.TireGrip
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 
@@ -381,8 +407,18 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongSlipNorm = normalizedLong
 	self.LatSlipNorm = normalizedLat
 
-	-- c) Le budget d'adhérence, unique et partagé.
-	local frictionBudget = normalForce * mu * combinedGrip(combinedSlip, tire) * dt
+	-- c) Le budget d'adhérence, unique et partagé ; plus large en courbe rapide
+	-- (voir ADHÉRENCE EN COURBE RAPIDE), au prorata de sa part latérale.
+	local speedFactor = math.clamp(
+		(math.abs(longitudinalVelocity) - HIGH_SPEED_GRIP_START) / (HIGH_SPEED_GRIP_FULL - HIGH_SPEED_GRIP_START),
+		0,
+		1
+	)
+	local lateralShare = if combinedSlip > 1e-6 then math.abs(normalizedLat) / combinedSlip else 0
+	local speedBonus = if self.IsFront then HIGH_SPEED_GRIP_BONUS_FRONT else HIGH_SPEED_GRIP_BONUS_REAR
+	local baseBonus = if self.IsFront then FRONT_LATERAL_BONUS else 0
+	local cornerBonus = 1 + (baseBonus + speedBonus * speedFactor) * lateralShare
+	local frictionBudget = normalForce * mu * cornerBonus * combinedGrip(combinedSlip, tire) * dt
 
 	--[[
 		d) Les impulsions DÉSIRÉES : celles qui annuleraient exactement chaque
@@ -437,19 +473,6 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	-- f) Frein et résistance au roulement, en dernier (voir _applyResistiveTorque).
 	local resistiveTorque = (brakeForce + normalForce * self.Surface.RollingResistance) * self.Radius
 	self:_applyResistiveTorque(dt, resistiveTorque)
-
-	-- Roue bloquée : le frein l'a arrêtée alors que la voiture avance encore.
-	local isLocked = brakeForce > 0
-		and math.abs(self.AngularVelocity) < 0.5
-		and math.abs(longitudinalVelocity) > 2
-
-	-- 5. EFFETS VISUELS (Patinage / Drift)
-	if smoke then
-		-- Le pneu sature : il glisse, peu importe dans quelle direction.
-		local isSliding = self.FrictionUsage >= 1 and math.abs(combinedSlip) > 1
-		smoke.Enabled = isSliding or isLocked
-		smoke.Color = ColorSequence.new(self.Surface.DustColor)
-	end
 end
 
 -- Phase 4 : la jante suit le débattement, le braquage et la rotation.
