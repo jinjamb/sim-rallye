@@ -8,7 +8,8 @@
 	depuis une session privée, l'invitation porte son code (LaunchData), et
 	ce service l'y emmène dès son arrivée.
 
-	SESSION PRIVÉE : un serveur réservé (TeleportService:ReserveServerAsync),
+	SESSION PRIVÉE (création réservée au pass Premium ; la rejoindre avec un
+	code, ou par invitation, reste ouvert à tous) : un serveur réservé (TeleportService:ReserveServerAsync),
 	où n'entrent que ceux qui ont son code. Le créateur y est téléporté ; le
 	code (6 caractères, sans lettres ambiguës) s'affiche dans le menu, à
 	donner aux amis ou à envoyer avec l'invitation. Tout y fonctionne comme
@@ -30,6 +31,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local Perks = require(script.Parent.Perks)
 
 local SessionService = {}
 
@@ -65,6 +67,7 @@ local function sendState(player: Player, message: string?, isError: boolean?)
 		Players = #Players:GetPlayers(),
 		MaxPlayers = Players.MaxPlayers,
 		Studio = RunService:IsStudio(),
+		CanCreate = Perks.HasPremiumPass(player), -- créer une session : pass Premium
 	}, if message then { Message = message, Error = isError == true } else nil)
 end
 
@@ -130,6 +133,10 @@ local function lookup(code: string): SessionInfo?
 end
 
 local function create(player: Player)
+	if not Perks.HasPremiumPass(player) then
+		sendState(player, "Créer une session privée est réservé au Premium Sim Rallye (boutique). Rejoindre celle d'un ami reste gratuit.", true)
+		return
+	end
 	local now = os.clock()
 	if now - (lastCreateAt[player.UserId] or -math.huge) < CREATE_COOLDOWN then
 		sendState(player, "Une session par minute : patiente un peu.", true)
@@ -256,6 +263,11 @@ local function onPlayerAdded(player: Player)
 		end)
 	end
 	sendAll()
+end
+
+-- Avantages changés (pass Premium acheté, ou vérifié à l'arrivée) : le menu suit.
+function SessionService.Refresh(player: Player)
+	sendState(player)
 end
 
 function SessionService.Start()

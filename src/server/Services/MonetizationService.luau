@@ -39,6 +39,8 @@ local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Perks = require(script.Parent.Perks)
 local EconomyService = require(script.Parent.EconomyService)
 local ProgressService = require(script.Parent.ProgressService)
+local PassService = require(script.Parent.PassService)
+local SessionService = require(script.Parent.SessionService)
 
 local MonetizationService = {}
 
@@ -170,7 +172,15 @@ end
 --------------------------------------------------------------------------------
 
 local function applyVipTag(player: Player)
-	player:SetAttribute("Vip", Perks.HasPass(player, "vip"))
+	player:SetAttribute("Vip", Perks.Has(player, "vip"))
+end
+
+-- Pass Premium : la voie premium du Rallye Pass, et le droit de créer une session privée.
+local function applyPremiumPass(player: Player)
+	if Perks.HasPremiumPass(player) then
+		PassService.EnsurePremium(player)
+	end
+	SessionService.Refresh(player)
 end
 
 local function checkPlayer(player: Player)
@@ -189,6 +199,7 @@ local function checkPlayer(player: Player)
 	end)
 	Perks.SetRandomRestricted(player, not ok or type(policy) ~= "table" or policy.ArePaidRandomItemsRestricted == true)
 	applyVipTag(player)
+	applyPremiumPass(player)
 	if player.Parent then
 		EconomyService.SendWallet(player)
 	end
@@ -225,6 +236,7 @@ function MonetizationService.Start()
 		end
 		Perks.SetPass(player, pass.Key, true)
 		applyVipTag(player)
+		applyPremiumPass(player)
 		EconomyService.SendWallet(player, { PassBought = pass.Key })
 	end)
 	Players.PlayerMembershipChanged:Connect(function(player: Player)

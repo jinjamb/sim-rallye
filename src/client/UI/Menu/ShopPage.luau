@@ -236,10 +236,13 @@ function ShopPage.Offers(ctx: Context, b: Builder)
 	end
 
 	for _, pass in ipairs(Products.PASSES) do
-		local active = passes[pass.Key] == true
-		offerRow(b, (if pass.Key == "vip" then "👑 " else "💰 ") .. "PASS " .. Format.Upper(pass.Name), pass.Description, if active then Widgets.COLOR_GREEN else Theme.ACCENT, function(row)
+		-- Le Premium contient les autres pass : avec lui, ils sont « inclus ».
+		local included = pass.Key ~= "premium" and passes.premium == true
+		local active = passes[pass.Key] == true or included
+		local icon = if pass.Key == "premium" then "⭐ " elseif pass.Key == "vip" then "👑 " else "💰 "
+		offerRow(b, icon .. "PASS " .. Format.Upper(pass.Name), pass.Description, if active then Widgets.COLOR_GREEN else Theme.ACCENT, function(row)
 			if active then
-				local state = Widgets.Label(row, "ACTIF ✓", 14, Enum.Font.GothamBlack, Widgets.COLOR_GREEN)
+				local state = Widgets.Label(row, if included and passes[pass.Key] ~= true then "INCLUS ✓" else "ACTIF ✓", 14, Enum.Font.GothamBlack, Widgets.COLOR_GREEN)
 				state.Position = UDim2.fromOffset(MenuKit.CONTENT_WIDTH - BUTTON_WIDTH, 0)
 				state.Size = UDim2.fromOffset(BUTTON_WIDTH, 40)
 				state.TextXAlignment = Enum.TextXAlignment.Center

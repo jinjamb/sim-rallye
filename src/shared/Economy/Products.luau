@@ -14,7 +14,7 @@
 		  donne la chose à la réception du paiement. Cinq produits suffisent
 		  pour tout le catalogue, présent et futur ;
 		- pack de démarrage (une fois), boost d'XP, tirages.
-	PASS DE JEU (achat unique, permanent) : Crédits ×2, VIP.
+	PASS DE JEU (achat unique, permanent) : Premium (tout d'un coup), Crédits ×2, VIP.
 
 	À FAIRE SUR ROBLOX (une fois) : créer chaque produit dans le Creator
 	Dashboard (Expérience > Monétisation > Produits de développeur ; et Pass
@@ -118,6 +118,16 @@ Products.LIST = {
 } :: { Product }
 
 Products.PASSES = {
+	{
+		-- Tout d'un coup : les deux pass ci-dessous, les sessions privées et
+		-- la voie premium du Rallye Pass à chaque saison (Perks.luau). Les
+		-- voitures et les cosmétiques restent à gagner en jouant.
+		Key = "premium",
+		GamePassId = 0,
+		Name = "Premium Sim Rallye",
+		Description = "Tout d'un coup, pour toujours : VIP (XP +25 %, badge doré), crédits ×2, sessions privées entre amis, et la voie premium du Rallye Pass à chaque saison.",
+		SuggestedRobux = 799,
+	},
 	{
 		Key = "credits_x2",
 		GamePassId = 0,

@@ -50,9 +50,19 @@ function SessionPage.Friends(ctx: Context, b: Builder)
 		ctx.Action("Session", { Action = "Invite" })
 	end)
 	Widgets.Primary(invite)
-	ctx.Button(row, "SESSION PRIVÉE", half + 8, half, function()
-		ctx.Action("Session", { Action = "Create" })
+	-- Créer une session : pass Premium (sinon, le bouton ouvre son achat).
+	local canCreate = state ~= nil and state.CanCreate == true
+	local create = ctx.Button(row, if canCreate then "SESSION PRIVÉE" else "SESSION PRIVÉE · PREMIUM", half + 8, half, function()
+		if canCreate then
+			ctx.Action("Session", { Action = "Create" })
+		else
+			ctx.Action("BuyPass", "premium")
+		end
 	end)
+	if not canCreate then
+		create.TextColor3 = Theme.ACCENT
+		b:Text("Créer une session privée : réservé au Premium Sim Rallye. Rejoindre celle d'un ami avec son code est gratuit.", 12, Widgets.COLOR_DIM)
+	end
 	MenuKit.TextField(ctx, b, "Code d'un ami", "SessionCode", "ex. K7P2QX", CODE_LENGTH)
 	local joinRow = b:Row(36)
 	ctx.Button(joinRow, "REJOINDRE SA SESSION", 0, width, function()
