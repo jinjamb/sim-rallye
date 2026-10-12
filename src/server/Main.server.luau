@@ -49,6 +49,7 @@ local HornService = require(Services.HornService)
 local RollService = require(Services.RollService)
 local PassService = require(Services.PassService)
 local TeamService = require(Services.TeamService)
+local SessionService = require(Services.SessionService)
 local PaddockService = require(Services.PaddockService)
 
 -- Crochets entre services (sans dépendance circulaire entre modules).
@@ -77,6 +78,7 @@ HornService.Start()
 RollService.Start()
 PassService.Start()
 TeamService.Start()
+SessionService.Start()
 AchievementService.Start()
 
 ProfileStore.Start()

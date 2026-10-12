@@ -33,6 +33,7 @@ local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MainMenu = require(script.Parent.Parent.UI.Menu.MainMenu)
 local MenuKit = require(script.Parent.Parent.UI.Menu.MenuKit)
 local Toast = require(script.Parent.Parent.UI.Toast)
+local FriendInvite = require(script.Parent.Parent.Core.FriendInvite)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local RaceHud = require(script.Parent.RaceHud)
 local Minimap = require(script.Parent.Minimap)
@@ -75,6 +76,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Pass: any, -- Rallye Pass (PassService)
 	Drift: any, -- Roi du drift (ChallengeService)
 	Team: any, -- écurie (TeamService)
+	Session: any, -- session : publique ou privée, son code (SessionService)
 	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
@@ -111,6 +113,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Pass = nil
 	self.Drift = nil
 	self.Team = nil
+	self.Session = nil
 	self.Achievements = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
@@ -134,6 +137,20 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Team" then
 			if type(payload) == "table" then
 				Remotes.TeamAction:FireServer(payload.Action, payload)
+			end
+		elseif action == "Session" then
+			-- Inviter : l'invitation de Roblox, côté client ; le reste : SessionService.
+			if type(payload) == "table" and payload.Action == "Invite" then
+				local session = self.Session
+				local code = if session and session.Private and type(session.Code) == "string" then session.Code else nil
+				task.spawn(function()
+					local problem = FriendInvite.Prompt(code)
+					if problem then
+						Toast.Show(problem, Theme.RED)
+					end
+				end)
+			elseif type(payload) == "table" then
+				Remotes.SessionAction:FireServer(payload.Action, payload.Code)
 			end
 		elseif action == "Roll" then
 			Remotes.RequestRoll:FireServer()
@@ -243,6 +260,7 @@ function RaceClient:_refreshMenu()
 		Pass = self.Pass,
 		Drift = self.Drift,
 		Team = self.Team,
+		Session = self.Session,
 		Achievements = self.Achievements,
 	})
 end
@@ -549,6 +567,18 @@ function RaceClient:SetAchievements(earned: any, news: any)
 				Banner.Show("TROPHÉE", achievement.Name .. "  ·  " .. achievement.Description, Theme.ACCENT, 4.5, true)
 			end
 		end
+	end
+end
+
+-- Session : publique ou privée, son code ; un message s'affiche.
+function RaceClient:SetSession(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Session = state
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
 	end
 end
 

@@ -115,6 +115,12 @@ export type Remotes = {
 	-- Serveur -> Clients : (announce) annonce à tout le serveur { Kind, Name, Text } :
 	-- record battu, platine, roi du drift, grand trophée (AnnounceService)
 	Announce: RemoteEvent,
+
+	-- SESSIONS ENTRE AMIS (SessionService)
+	-- Client -> Serveur : (action: "Create" | "Join" | "Leave" | "State", code?)
+	SessionAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) { Private, Code, Players, MaxPlayers, Studio } ; news : message
+	SessionState: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -157,6 +163,8 @@ local RELIABLE = {
 	"TeamState",
 	"Achievements",
 	"Announce",
+	"SessionAction",
+	"SessionState",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

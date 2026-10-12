@@ -718,6 +718,11 @@ Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)
 	raceClient:SetAchievements(earned, news)
 end)
 
+-- Session (publique ou privée, son code) : rubrique « Jouer entre amis ».
+Remotes.SessionState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetSession(state, news)
+end)
+
 -- Écurie : son état (menu, onglet ÉCURIE), ses invitations, le classement.
 Remotes.TeamState.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetTeam(state, news)

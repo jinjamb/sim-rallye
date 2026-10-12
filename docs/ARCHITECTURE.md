@@ -73,6 +73,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `TeamService`      | Écuries : fondation, invitations, couleurs communes, classement de la saison.         |
 | `AchievementService` | Trophées : les décerne et donne leur badge Roblox (BadgeService).                 |
 | `AnnounceService`  | Annonces à tout le serveur : records battus, platine, roi du drift, grands trophées. |
+| `SessionService`   | Jouer entre amis : sessions privées (serveur réservé, code à 6 caractères), arrivée par invitation, retour aux serveurs publics. |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
 | `PaddockService`   | Le paddock : zones, panneaux, podium, choix du mode de jeu.                           |
@@ -86,7 +87,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | Dossier    | Contenu                                                                                                       |
 |------------|---------------------------------------------------------------------------------------------------------------|
 | `Main.client.luau` | Point d'entrée. Il crée ce qui dure toute la partie et relie les modules entre eux.                   |
-| `Core/`    | Commandes (`InputManager`, `TouchControls`), avatar à pied (`CharacterControls`), journal console (`DebugLog`). |
+| `Core/`    | Commandes (`InputManager`, `TouchControls`), avatar à pied (`CharacterControls`), journal console (`DebugLog`), invitation d'amis (`FriendInvite`). |
 | `Physics/` | La voiture : roues, moteur, boîte, différentiels, aérodynamique.                                              |
 | `Audio/`   | Son des voitures (`CarAudio`), identifiants audio (`SoundBank`) et voix du copilote (`CopilotVoice` : mots enregistrés, sinon synthèse vocale). |
 | `Camera/`  | Caméra de poursuite et caméra de spectateur.                                                                  |

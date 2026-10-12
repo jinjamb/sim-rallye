@@ -45,6 +45,7 @@ export type Data = {
 	Pass: any, -- Rallye Pass { Key, Name, EndsAt, Xp, Premium } (PassService)
 	Drift: any, -- Roi du drift { Key, EndsAt, Entries = { UserId, Name, Score }, Mine } (ChallengeService)
 	Team: any, -- écurie { Team, UseColors, Invite, Board, Rank, Season } (TeamService)
+	Session: any, -- session { Private, Code, Players, MaxPlayers, Studio } (SessionService)
 	Achievements: { [string]: number }?, -- trophées obtenus : id -> date (AchievementService)
 }
 
@@ -180,6 +181,38 @@ end
 -- Format d'une course de rallycross ("Sprint" ou "Event"), en clair.
 function MenuKit.RaceFormatName(format: string): string
 	return if format == "Event" then "Qualif + finale" else "Course simple"
+end
+
+-- Champ de saisie sur une ligne ; le texte va dans ctx.View[key].
+function MenuKit.TextField(ctx: Context, b: Builder, label: string, key: string, placeholder: string, maxLength: number): TextBox
+	local row = b:Row(34)
+	local text = Widgets.Label(row, label, 14)
+	text.Size = UDim2.new(0, 120, 1, 0)
+	local box = Instance.new("TextBox")
+	box.Position = UDim2.fromOffset(130, 2)
+	box.Size = UDim2.new(1, -130, 1, -4)
+	box.BackgroundColor3 = Theme.PANEL_2
+	box.BorderSizePixel = 0
+	box.ClearTextOnFocus = false
+	box.TextXAlignment = Enum.TextXAlignment.Left
+	box.FontFace = Theme.BODY_BOLD
+	box.TextSize = 16
+	box.TextColor3 = Theme.TEXT
+	box.PlaceholderColor3 = Theme.DIM
+	box.PlaceholderText = placeholder
+	box.Text = ctx.View[key] or ""
+	Theme.Corner(box)
+	local padding = Instance.new("UIPadding")
+	padding.PaddingLeft = UDim.new(0, 8)
+	padding.Parent = box
+	box:GetPropertyChangedSignal("Text"):Connect(function()
+		if utf8.len(box.Text) and (utf8.len(box.Text) :: number) > maxLength then
+			box.Text = string.sub(box.Text, 1, (utf8.offset(box.Text, maxLength + 1) :: number) - 1)
+		end
+		ctx.View[key] = box.Text
+	end)
+	box.Parent = row
+	return box
 end
 
 -- Ligne "libellé  [◀] valeur [▶]". Renvoie l'étiquette de la valeur.
