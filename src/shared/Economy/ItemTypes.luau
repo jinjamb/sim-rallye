@@ -18,6 +18,7 @@ export type Item = {
 	-- Sources (une ou plusieurs) : voir Catalog.luau.
 	Free: boolean?,
 	Credits: number?,
+	Robux: number?, -- prix en Robux imposé (Products.ForItem) ; sinon, d'après la rareté
 	Pass: boolean?,
 	Starter: boolean?, -- exclusif au pack de démarrage (Products.luau)
 	Roll: boolean?,

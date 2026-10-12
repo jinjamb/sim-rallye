@@ -209,11 +209,9 @@ function Products.ForItem(itemId: string): Product?
 	if not item or item.Free or item.Starter then
 		return nil
 	end
-	local robux = RARITY_ROBUX[item.Rarity] or 99
-	-- Une voiture vaut plus qu'un cosmétique de même rareté.
-	if item.Kind == "Car" then
-		robux = math.max(robux, 199)
-	end
+	-- Prix imposé par l'objet (les voitures : voir Items/Cars.luau), sinon
+	-- d'après sa rareté.
+	local robux = item.Robux or RARITY_ROBUX[item.Rarity] or 99
 	return Products.TierFor(robux)
 end
 
