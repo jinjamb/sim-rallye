@@ -8,14 +8,18 @@
 		  saison d'achat (PassService) ;
 		- abonné Roblox Premium ;
 		- boost d'XP acheté (profil, XpBoostUntil) ;
-		- objets aléatoires payants interdits dans son pays (PolicyService).
+		- objets aléatoires payants interdits dans son pays (PolicyService) ;
+		- l'événement éclair « Pluie de crédits » (FlashEvents.luau).
 
 	Tenu à jour par MonetizationService ; volontairement sans dépendance vers
 	les services, pour qu'EconomyService et ProgressService puissent le lire
 	sans boucle de require.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 
 local Perks = {}
 
@@ -87,7 +91,7 @@ function Perks.CreditMultiplier(player: Player): number
 	if Perks.IsPremium(player) then
 		multiplier += Perks.PREMIUM_CREDIT_BONUS
 	end
-	return multiplier
+	return multiplier * FlashEvents.CreditMultiplier(os.time())
 end
 
 -- Multiplicateur de l'XP gagnée (en plus des événements double XP).

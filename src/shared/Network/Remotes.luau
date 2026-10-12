@@ -59,8 +59,9 @@ export type Remotes = {
 	LessonResult: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
-	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
-	-- menu principal : lancer une spéciale, des essais libres, une course de rallycross
+	-- Client -> Serveur : (mode: "Stage" | "EventCar" | "Practice" | "Rallycross" | ..., trackId?, weather?)
+	-- choix du menu principal : lancer une spéciale (EventCar : avec la voiture rare de
+	-- l'événement éclair), des essais libres, une course de rallycross
 	PlayMode: RemoteEvent,
 
 	-- RALLYCROSS (RaceService)

@@ -30,6 +30,7 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -187,7 +188,8 @@ function ShopPage.Rolls(ctx: Context, b: Builder)
 		ctx.Rebuild()
 	end)
 	if ctx.View.ShowOdds then
-		for _, entry in ipairs(Rolls.Odds(false)) do
+		-- Événement éclair « Tirages boostés » : les probabilités affichées suivent.
+		for _, entry in ipairs(Rolls.Odds(false, FlashEvents.RollBoost(workspace:GetServerTimeNow()))) do
 			local info = Rarity.Get(entry.Rarity)
 			local names = {}
 			for _, item in ipairs(entry.Items) do
@@ -331,9 +333,12 @@ local function cardAction(ctx: Context, holder: Frame, item: Catalog.Item, owned
 		if item.Credits then
 			-- Crédits à gauche, Robux à droite.
 			local half = (CARD_WIDTH - 6) / 2
-			local price = item.Credits :: number
+			-- Événement éclair « Voiture rare » : sa voiture est moins chère.
+			local listed = item.Credits :: number
+			local price = FlashEvents.CreditPrice(listed, if item.Kind == "Car" then item.CarClass else nil, workspace:GetServerTimeNow())
 			local affordable = wallet ~= nil and wallet.Credits >= price
-			local button = ctx.Button(holder, Credits.Format(price), 0, if tier then half else CARD_WIDTH, function()
+			local label = if price < listed then "⚡ " .. Credits.Format(price) else Credits.Format(price)
+			local button = ctx.Button(holder, label, 0, if tier then half else CARD_WIDTH, function()
 				ctx.Action("Buy", item.Id)
 			end)
 			if affordable then

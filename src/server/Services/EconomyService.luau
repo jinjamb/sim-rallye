@@ -42,6 +42,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
 local Perks = require(script.Parent.Perks)
@@ -161,10 +162,12 @@ local function buyItem(player: Player, itemId: any)
 	if not profile or not item then
 		return
 	end
-	local price = item.Credits
-	if not price or not Catalog.IsAvailable(item) or Catalog.Owns(profile.Owned, item.Id) then
+	local listed = item.Credits
+	if not listed or not Catalog.IsAvailable(item) or Catalog.Owns(profile.Owned, item.Id) then
 		return
 	end
+	-- Événement éclair « Voiture rare » : sa voiture est moins chère.
+	local price = FlashEvents.CreditPrice(listed, if item.Kind == "Car" then item.CarClass else nil, os.time())
 	if profile.Credits < price then
 		sendWallet(player, { Error = "Pas assez de crédits : il en manque " .. Credits.Format(price - profile.Credits) .. "." })
 		return

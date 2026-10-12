@@ -32,7 +32,7 @@ local Horn = require(script.Parent.Driving.Horn)
 local RollReveal = require(script.Parent.UI.RollReveal)
 local Toast = require(script.Parent.UI.Toast)
 local Announcer = require(script.Parent.UI.Announcer)
-local XpEventNotice = require(script.Parent.UI.XpEventNotice)
+local EventNotice = require(script.Parent.UI.EventNotice)
 local CopilotVoice = require(script.Parent.Audio.CopilotVoice)
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
@@ -745,9 +745,10 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 end)
 
 -- Annonces à tout le serveur (records, platine, roi du drift, grands
--- trophées), et l'événement double XP en cours, dans le bandeau du haut.
+-- trophées), et l'événement en cours (double XP, événement éclair), dans le
+-- bandeau du haut.
 Remotes.Announce.OnClientEvent:Connect(Announcer.FromServer)
-XpEventNotice.Start()
+EventNotice.Start()
 
 -- Voix du copilote : les phrases de la spéciale se préparent dès l'arrivée.
 task.defer(CopilotVoice.Prepare, Pacenotes.Generate(), 1)

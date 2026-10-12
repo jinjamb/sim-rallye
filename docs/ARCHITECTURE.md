@@ -155,6 +155,10 @@ Sponsors : un autocollant de marque imaginaire par emplacement (capot, portière
 - Appui aéro : chaque catégorie a sa plage (`CarClasses.DownforceRange`), appliquée par `CarSetup` (menu, sauvegarde) ; les préréglages en donnent une part (`Relative`).
 - Médailles : les vitesses des tracés sont celles de la Rally2 ; `CarClasses.MedalScale` les adapte par surface (asphalte, terre, neige, mixte) et pour les circuits. Dans Studio, `_G.MedalReport()` (`MedalCalibration`) donne, d'après les passages de la session, les vitesses suggérées de chaque tracé et les `MedalScale` mesurés.
 
+## Événements éclair
+
+`Shared/Events/FlashEvents.luau` : au début de chaque quart d'heure, un événement de 5 minutes, le même sur tous les serveurs (déduit de l'heure), annoncé une minute avant : tirages boostés (raretés Usine et plus ×3), tirage offert (première spéciale ou course terminée), pluie de crédits (×2), XP éclair (×2, sans cumul avec le double XP du week-end), voiture rare (WRC ou Groupe B prêtée sur les spéciales, -30 % en crédits). Les effets sont lus là où ils s'appliquent (`RollService`, `Perks`, `ProgressService`, `EconomyService`, `PaddockService`, `FlashEventService`) ; l'affichage est dans `UI/EventNotice.luau` et le menu JOUER.
+
 ## Sons moteur
 
 Chaque moteur est un enregistrement du Creator Store (`Audio/SoundBank.luau`, `RECORDINGS`) : des boucles à régime stabilisé, à charge et pied levé, que `CarAudio` fond l'une dans l'autre selon le régime. Les types de moteur (3, 4 et 5 cylindres turbo, 4 cylindres anti-lag, boxer, V6, 6 à plat, rotatif) ont chacun leur série à remplir (`STORE`) ; une série vide est remplacée par le V8. Une tonalité (`TONES`) choisit l'enregistrement et le traite (égaliseur, distorsion) : une par catégorie de voiture, une par son moteur à débloquer (`Items/Engines.luau`).

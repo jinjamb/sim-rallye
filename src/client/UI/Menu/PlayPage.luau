@@ -14,10 +14,12 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
+local Theme = require(script.Parent.Parent.Theme)
 local CopilotVoice = require(script.Parent.Parent.Parent.Audio.CopilotVoice)
 local Widgets = require(script.Parent.Parent.Widgets)
 
@@ -90,6 +92,43 @@ function PlayPage.XpEvent(_ctx: Context, b: Builder)
 	if upcoming then
 		b:Text(string.format("Prochain XP ×%d : %s, dans %s.", upcoming.Multiplier, upcoming.Name, Format.Remaining(upcoming.StartsAt - now)), 12, Widgets.COLOR_DIM)
 	end
+end
+
+--[[
+	Événement éclair (FlashEvents.luau) : celui en cours, son effet et le
+	temps qui reste ; pendant « Voiture rare », de quoi la prendre tout de
+	suite sur une spéciale. Sinon, le prochain et dans combien de temps.
+]]
+function PlayPage.FlashEvent(ctx: Context, b: Builder)
+	local now = workspace:GetServerTimeNow()
+	local active = FlashEvents.Active(now)
+	if active then
+		local car = if active.CarClass then CarClasses.Get(active.CarClass) else nil
+		b:Text(string.format(
+			"%s ÉVÉNEMENT ÉCLAIR · %s%s · %s Encore %s.",
+			active.Kind.Icon,
+			Format.Upper(active.Kind.Name),
+			if car then " : " .. Format.Upper(car.Name) else "",
+			active.Kind.Description,
+			Format.Remaining(active.EndsAt - now)
+		), 14, Theme.CYAN)
+		if car then
+			local row = b:Row(38)
+			local weather = Weather.Sanitize(ctx.View.StageWeather)
+			local button = ctx.Button(row, "PILOTER LA " .. Format.Upper(car.Name) .. " (PRÊTÉE)", 0, MenuKit.CONTENT_WIDTH, function()
+				ctx.Action("Play", { Mode = "EventCar", TrackId = Stages.DEFAULT, Weather = weather })
+			end)
+			Widgets.Primary(button)
+		end
+		return
+	end
+	local upcoming = FlashEvents.Next(now)
+	b:Text(string.format(
+		"Prochain événement éclair dans %s : %s %s.",
+		Format.Remaining(upcoming.StartsAt - now),
+		upcoming.Kind.Icon,
+		upcoming.Kind.Name
+	), 12, Widgets.COLOR_DIM)
 end
 
 local SURFACE_ICONS = { Tarmac = "🛣 ", Snow = "❄ ", Gravel = "🌲 ", Mixed = "🔀 " }

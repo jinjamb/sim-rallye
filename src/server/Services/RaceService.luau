@@ -79,6 +79,7 @@ local ChallengeService = require(script.Parent.ChallengeService)
 local EconomyService = require(script.Parent.EconomyService)
 local ReferralService = require(script.Parent.ReferralService)
 local MedalCalibration = require(script.Parent.MedalCalibration)
+local FlashEventService = require(script.Parent.FlashEventService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
@@ -581,6 +582,7 @@ local function finishRunner(race: Race, runner: Runner, crossing: number)
 	if runner.Player.Parent then
 		ChallengeService.DailyEvent(runner.Player, "RaceFinished", 1)
 		ReferralService.Qualify(runner.Player) -- un filleul qui prend le volant
+		FlashEventService.Finished(runner.Player) -- événement éclair « Tirage offert »
 	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then

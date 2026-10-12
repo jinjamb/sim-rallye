@@ -18,6 +18,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Theme = require(script.Parent.Theme)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local ItemArt = require(script.Parent.ItemArt)
@@ -217,7 +218,7 @@ function RollReveal:Show(result: any)
 		child:Destroy()
 	end
 	-- Des cartes au hasard parmi ce qui peut sortir, pondérées comme le vrai tirage.
-	local odds = Rolls.Odds(false)
+	local odds = Rolls.Odds(false, FlashEvents.RollBoost(workspace:GetServerTimeNow()))
 	local filler = Random.new()
 	for index = 1, CARD_COUNT do
 		local shown: Catalog.Item = item

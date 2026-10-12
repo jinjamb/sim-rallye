@@ -47,6 +47,7 @@ local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local TutorialService = require(script.Parent.TutorialService)
 local MedalCalibration = require(script.Parent.MedalCalibration)
+local FlashEventService = require(script.Parent.FlashEventService)
 
 local StageService = {}
 
@@ -122,6 +123,8 @@ local function stageFinished(player: Player, clean: boolean, weekly: boolean)
 	end
 	-- La première : fin du tutoriel express (et du parrainage d'un filleul).
 	TutorialService.StageFinished(player)
+	-- Événement éclair « Tirage offert ».
+	FlashEventService.Finished(player)
 end
 
 local function onWeeklyFinish(player: Player, ms: number, key: string, clean: boolean)

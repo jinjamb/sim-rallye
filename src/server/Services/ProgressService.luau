@@ -27,6 +27,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
@@ -136,8 +137,10 @@ function ProgressService.Push(player: Player, announce: boolean)
 	end
 	local snapshot = ProgressService.SnapshotOf(profile)
 	local previous = lastProgress[player]
-	-- Double XP, VIP, boost : le surplus de ce qui vient d'être gagné.
-	local multiplier = XpEvents.Multiplier(os.time()) * Perks.XpMultiplier(player)
+	-- Double XP (week-end ou événement éclair : le plus fort), VIP, boost :
+	-- le surplus de ce qui vient d'être gagné.
+	local now = os.time()
+	local multiplier = math.max(XpEvents.Multiplier(now), FlashEvents.XpMultiplier(now)) * Perks.XpMultiplier(player)
 	if announce and previous and multiplier > 1 and snapshot.Xp > previous.Xp then
 		local bonus = math.floor((snapshot.Xp - previous.Xp) * (multiplier - 1))
 		if bonus > 0 then

@@ -47,6 +47,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -408,9 +409,14 @@ local function onPlayMode(player: Player, mode: any, trackId: any, weather: any)
 		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
 			return
 		end
-	elseif mode == "Stage" then
+	elseif mode == "Stage" or mode == "EventCar" then
 		-- trackId : la spéciale choisie (Stages.luau) ; la spéciale par défaut sinon.
 		if trackId ~= nil and not Stages.Exists(trackId) then
+			return
+		end
+		-- La voiture rare de l'événement éclair : seulement pendant l'événement.
+		if mode == "EventCar" and not FlashEvents.RareCar(os.time()) then
+			refuse(player, "L'événement « Voiture rare » est terminé : rendez-vous au prochain !")
 			return
 		end
 	elseif mode ~= "Practice" and mode ~= "Weekly" then
@@ -423,10 +429,14 @@ local function onPlayMode(player: Player, mode: any, trackId: any, weather: any)
 	end
 	lastPlayAt[player] = now
 
-	if mode == "Stage" then
+	if mode == "Stage" or mode == "EventCar" then
 		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
 		local forecast = Weather.New(weather, workspace:GetServerTimeNow())
-		CarService.Spawn(player, track.StartFrame(), { Attributes = Weather.ToAttributes(forecast, { Stage = track.Id }) })
+		CarService.Spawn(player, track.StartFrame(), {
+			Attributes = Weather.ToAttributes(forecast, { Stage = track.Id }),
+			-- Événement éclair : la voiture rare, prêtée (CarService : Loaned).
+			CarClass = if mode == "EventCar" then FlashEvents.RareCar(os.time()) else nil,
+		})
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
 		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
