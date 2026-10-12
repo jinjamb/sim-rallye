@@ -30,6 +30,8 @@
 	Sur surface meuble : un roulement de cailloux qui enfle quand ça glisse.
 	Sur le dur : un roulement de pneus. Sur glace : rien.
 	VENT : seulement pour sa propre voiture (il siffle autour de la caméra).
+	ÉCHAPPEMENT : retours de flamme et crépitements d'anti-lag (Exhaust.luau),
+	pilotés par le même état.
 
 	Tous les sons passent par un SoundGroup commun : SoundBank.MasterVolume règle tout.
 ]]
@@ -44,6 +46,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local WheelClass = require(script.Parent.Parent.Physics.Wheel)
+local Exhaust = require(script.Parent.Parent.Driving.Exhaust)
 
 local CarAudio = {}
 CarAudio.__index = CarAudio
@@ -78,6 +81,7 @@ export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 	Tone: SoundBank.EngineTone,
 	Recording: SoundBank.EngineProfile,
 	PitchScale: number, -- transposition de la tonalité (ou de son remplaçant)
+	Exhaust: Exhaust.Exhaust, -- retours de flamme et anti-lag
 	Connections: { RBXScriptConnection },
 	OnLoad: { Voice },
 	OffLoad: { Voice },
@@ -159,14 +163,6 @@ local function makeVoices(samples: { SoundBank.EngineSample }, prefix: string, p
 	local voices = {}
 	for i, sample in ipairs(samples) do
 		local sound = makeSound(string.format("%s_%d", prefix, sample.Rpm), sample.Id, parent)
-		-- Planche (SoundBank.luau) : l'échantillon est une région du fichier, bouclée.
-		local start, length = sample.Start, sample.Length
-		if start and length then
-			local region = NumberRange.new(start, start + length)
-			sound.PlaybackRegionsEnabled = true
-			sound.PlaybackRegion = region
-			sound.LoopRegion = region
-		end
 		voices[i] = { Sample = sample, Sound = sound, LastAudible = -math.huge }
 	end
 	return voices
@@ -242,6 +238,7 @@ function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLoc
 			end))
 		end
 	end
+	self.Exhaust = Exhaust.new(chassis, model)
 	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, chassis)
 	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, chassis)
 	-- Le vent n'a pas de source : parent SoundService = son non spatialisé.
@@ -288,7 +285,7 @@ function CarAudio:_setTone(toneId: string)
 	local tone = SoundBank.Tone(toneId)
 	local available = SoundBank.RECORDINGS[tone.Recording]
 	local recording = available or SoundBank.RECORDINGS.LS3
-	-- Enregistrement pas encore importé : le V8, transposé.
+	-- Enregistrement pas encore branché : le V8, transposé.
 	self.PitchScale = if available then tone.PitchScale else tone.FallbackPitch
 	if recording ~= self.Recording then
 		for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
@@ -351,6 +348,8 @@ function CarAudio:SetActive(active: boolean)
 	self.Active = active
 	if not active then
 		stopAll(self)
+		local exhaust: Exhaust.Exhaust = self.Exhaust
+		exhaust:Reset()
 	end
 end
 
@@ -358,6 +357,8 @@ function CarAudio:Destroy()
 	for _, connection in ipairs(self.Connections) do
 		connection:Disconnect()
 	end
+	local exhaust: Exhaust.Exhaust = self.Exhaust
+	exhaust:Destroy()
 	for _, sound in ipairs(allSounds(self)) do
 		sound:Destroy()
 	end
@@ -478,6 +479,9 @@ function CarAudio:Update(dt: number, state: AudioState)
 	local rpm = state.Rpm * self.PitchScale
 	updateLayer(self.OnLoad, rpm, master * math.sqrt(self.Load), now)
 	updateLayer(self.OffLoad, rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
+	-- Échappement : la charge brute (un lever de pied franc fait détoner).
+	local exhaust: Exhaust.Exhaust = self.Exhaust
+	exhaust:Update(dt, state.Rpm, state.Load)
 
 	-- Crissement, roue par roue
 	for i, tire in ipairs(self.Screeches) do

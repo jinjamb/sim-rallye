@@ -11,12 +11,14 @@
 	transmission (traction ou 4 roues motrices), les pneus et l'aérodynamique.
 
 	LA GAMME, dans l'ordre de la carrière (Items/Cars.luau) :
-		Rally4    la voiture de série : traction, ~210 ch. Agile, facile,
+		Rally4    la voiture de série : traction, ~210 ch, petit turbo sans
+		          anti-lag. Agile, facile,
 		          mais il faut la placer avant le virage (pas de motricité
 		          arrière pour pivoter).
-		Rally2    la référence : 4 roues motrices, ~290 ch.
+		Rally2    la référence : 4 roues motrices, ~290 ch, anti-lag.
 		WRC       la voiture d'usine : 4 roues motrices, ~380 ch, anti-lag
-		          (réponse immédiate), boîte courte, gros appui aéro. Très
+		          complet (le turbo ne retombe jamais), boîte courte, gros
+		          appui aéro. Très
 		          rapide partout, exigeante à haute vitesse.
 		Groupe B  la légende des années 80 : 4 roues motrices, ~500 ch, un
 		          turbo qui met du temps à souffler, des pneus moins
@@ -64,6 +66,10 @@ export type Class = {
 	-- TurboLag secondes (0 : réponse immédiate, anti-lag moderne).
 	TurboLag: number,
 	TurboShare: number,
+	-- Anti-lag (0..1) : pression du turbo gardée pied levé (au-dessus de
+	-- 3 000 tr/min). 0 : le turbo retombe, il faut attendre qu'il reparte.
+	-- L'échappement crépite et crache des flammes (Driving/Exhaust.luau).
+	AntiLag: number,
 	TireGrip: number, -- adhérence des pneus (1 = Rally2)
 	DragRatio: number, -- traînée à 100 km/h, en fraction du poids (Aerodynamics.luau)
 	AeroBalance: number, -- part de l'appui sur l'arrière (0.5 : neutre ; plus : stable)
@@ -101,8 +107,9 @@ local LIST: { Class } = {
 		ReverseRatio = 3.5,
 		UpshiftRPM = 6300,
 		DownshiftRPM = 3000,
-		TurboLag = 0,
-		TurboShare = 0,
+		TurboLag = 0.3, -- petit turbo : un léger temps de réponse
+		TurboShare = 0.3,
+		AntiLag = 0, -- pas d'anti-lag en Rally4
 		TireGrip = 0.97,
 		DragRatio = 0.028, -- petite voiture, simple becquet
 		AeroBalance = 0.55,
@@ -115,7 +122,7 @@ local LIST: { Class } = {
 	{
 		Id = "Rally2",
 		Name = "Rally2",
-		Description = "4 roues motrices, 290 ch. La référence, équilibrée.",
+		Description = "4 roues motrices, 290 ch, anti-lag. La référence, équilibrée.",
 		Drive = "AWD",
 		PowerToWeight = 150,
 		TorqueCurve = {
@@ -135,8 +142,9 @@ local LIST: { Class } = {
 		ReverseRatio = 3.80,
 		UpshiftRPM = 6800,
 		DownshiftRPM = 3500,
-		TurboLag = 0,
-		TurboShare = 0,
+		TurboLag = 0.35,
+		TurboShare = 0.3,
+		AntiLag = 0.85,
 		TireGrip = 1,
 		DragRatio = 0.03,
 		AeroBalance = 0.6,
@@ -170,8 +178,9 @@ local LIST: { Class } = {
 		ReverseRatio = 3.80,
 		UpshiftRPM = 7300,
 		DownshiftRPM = 4000,
-		TurboLag = 0,
-		TurboShare = 0,
+		TurboLag = 0.35,
+		TurboShare = 0.35,
+		AntiLag = 1, -- anti-lag complet : le turbo ne retombe jamais
 		TireGrip = 1.03,
 		DragRatio = 0.036, -- grands ailerons, lame avant, ailes ouvertes : l'appui se paie
 		AeroBalance = 0.55, -- lame et canards à l'avant : l'avant mord à haute vitesse
@@ -208,6 +217,7 @@ local LIST: { Class } = {
 		DownshiftRPM = 4300,
 		TurboLag = 0.6,
 		TurboShare = 0.45,
+		AntiLag = 0.5, -- un anti-lag des débuts : il aide, sans effacer le retard
 		TireGrip = 0.95,
 		DragRatio = 0.033, -- aileron double étage, mais carrosserie des années 80
 		AeroBalance = 0.65, -- appui surtout à l'arrière : l'avant se déleste à haute vitesse

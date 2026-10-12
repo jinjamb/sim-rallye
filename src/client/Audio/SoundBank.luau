@@ -18,15 +18,9 @@
 	Rpm DOIT être le régime auquel l'échantillon a été enregistré : sur les séries
 	du Creator Store, c'est en général le nombre à la fin du nom.
 
-	PLANCHES : un moteur peut tenir dans UN seul fichier audio, qui enchaîne
-	ses boucles ; chaque échantillon y est alors une région (Start, Length,
-	en secondes), lue et bouclée par Sound.PlaybackRegion / LoopRegion. Les
-	moteurs synthétisés (assets/engines/, generate.py) sont faits ainsi :
-	un import par moteur au lieu de dix-sept.
-
-	Le V8 (LS3) vient du Creator Store (relevé le 2026-10-03). Pour en tester
-	d'autres : create.roblox.com/store/audio, chercher "engacc", "engdec",
-	"eng on", "eng off", ou un nom de moteur.
+	Tous les sons viennent du Creator Store (le V8 LS3 : relevé le
+	2026-10-03). Pour en tester d'autres : create.roblox.com/store/audio,
+	chercher "engacc", "engdec", "eng on", "eng off", ou un nom de moteur.
 ]]
 
 local SoundBank = {}
@@ -39,9 +33,6 @@ SoundBank.MasterVolume = 0.5
 export type EngineSample = {
 	Id: string,
 	Rpm: number,
-	-- Planche : la boucle est la région [Start, Start + Length] du fichier (s).
-	Start: number?,
-	Length: number?,
 }
 
 export type EngineProfile = {
@@ -59,8 +50,8 @@ export type EngineProfile = {
 	a la sienne (CarClasses.luau : Engine), et les sons moteur à débloquer
 	(Items/Engines.luau) en sont d'autres.
 	Chaque tonalité cite son enregistrement (Recording). Un enregistrement
-	dont la planche n'est pas encore importée (identifiant 0) est remplacé
-	par le V8 (LS3), transposé de FallbackPitch.
+	pas encore branché (série vide, voir STORE) est remplacé par le V8
+	(LS3), transposé de FallbackPitch.
 ]]
 export type EngineTone = {
 	Recording: string,
@@ -111,64 +102,37 @@ local LS3: EngineProfile = {
 }
 
 --[[
-	MOTEURS SYNTHÉTISÉS (assets/engines/generate.py) : un fichier par moteur,
-	tous sur la même planche (REGIONS : mêmes régimes, mêmes positions).
-	Chaque fichier .ogg s'importe dans Studio (Asset Manager) ; son
-	identifiant va dans SHEETS. Tant qu'il vaut 0, le moteur est remplacé
-	par le V8 (voir FallbackPitch).
+	MOTEURS À BRANCHER (Creator Store) : une série par type de moteur, à
+	remplir comme LS3 ci-dessus : pour chaque échantillon, son identifiant
+	et le régime auquel il a été enregistré (le nombre à la fin du nom, en
+	général). Au moins deux échantillons par famille ; plus ils sont serrés,
+	plus le son est naturel. Une série vide est remplacée par le V8,
+	transposé (FallbackPitch de la tonalité).
+	Où chercher : create.roblox.com/store/audio, « engacc » / « engdec »,
+	« eng on » / « eng off », ou le nom d'un moteur (« 4 cylinder »,
+	« boxer », « rotary », « inline 5 »...).
 ]]
-local REGIONS = {
-	OnLoad = {
-		{ Rpm = 1000, Start = 0.050000, Length = 1.200000 },
-		{ Rpm = 1800, Start = 1.350000, Length = 1.200000 },
-		{ Rpm = 2600, Start = 2.650000, Length = 1.199773 },
-		{ Rpm = 3401, Start = 3.949773, Length = 1.199637 },
-		{ Rpm = 4200, Start = 5.249410, Length = 1.200000 },
-		{ Rpm = 5002, Start = 6.549410, Length = 1.199546 },
-		{ Rpm = 5803, Start = 7.848957, Length = 1.199456 },
-		{ Rpm = 6599, Start = 9.148413, Length = 1.200272 },
-		{ Rpm = 7401, Start = 10.448685, Length = 1.199773 },
-		{ Rpm = 8205, Start = 11.748458, Length = 1.199320 },
-	},
-	OffLoad = {
-		{ Rpm = 900, Start = 13.047778, Length = 1.200000 },
-		{ Rpm = 2000, Start = 14.347778, Length = 1.200000 },
-		{ Rpm = 3200, Start = 15.647778, Length = 1.200181 },
-		{ Rpm = 4399, Start = 16.947959, Length = 1.200272 },
-		{ Rpm = 5600, Start = 18.248231, Length = 1.200000 },
-		{ Rpm = 6802, Start = 19.548231, Length = 1.199637 },
-		{ Rpm = 7994, Start = 20.847868, Length = 1.200907 },
-	},
-}
-
-local SHEETS: { [string]: { Name: string, Id: number, Volume: number } } = {
-	I3 = { Name = "3 cylindres turbo", Id = 0, Volume = 0.5 }, -- assets/engines/I3.ogg
-	I4 = { Name = "4 cylindres turbo", Id = 0, Volume = 0.5 }, -- I4.ogg
-	I4R = { Name = "4 cylindres anti-lag", Id = 0, Volume = 0.5 }, -- I4R.ogg
-	I5 = { Name = "5 cylindres turbo", Id = 0, Volume = 0.5 }, -- I5.ogg
-	Boxer4 = { Name = "4 cylindres à plat", Id = 0, Volume = 0.5 }, -- Boxer4.ogg
-	V6 = { Name = "V6", Id = 0, Volume = 0.5 }, -- V6.ogg
-	Flat6 = { Name = "6 cylindres à plat", Id = 0, Volume = 0.5 }, -- Flat6.ogg
-	Rotary = { Name = "Rotatif", Id = 0, Volume = 0.45 }, -- Rotary.ogg
-}
-
-local function sheet(spec: { Name: string, Id: number, Volume: number }): EngineProfile
-	local function samples(list: { { Rpm: number, Start: number, Length: number } }): { EngineSample }
-		local result = {}
-		for _, region in ipairs(list) do
-			table.insert(result, { Id = id(spec.Id), Rpm = region.Rpm, Start = region.Start, Length = region.Length })
-		end
-		return result
-	end
-	return { Name = spec.Name, Volume = spec.Volume, OnLoad = samples(REGIONS.OnLoad), OffLoad = samples(REGIONS.OffLoad) }
+local function series(name: string, volume: number, onLoad: { EngineSample }, offLoad: { EngineSample }): EngineProfile
+	return { Name = name, Volume = volume, OnLoad = onLoad, OffLoad = offLoad }
 end
+
+local STORE: { [string]: EngineProfile } = {
+	I3 = series("3 cylindres turbo (Rally4)", 0.4, {}, {}),
+	I4 = series("4 cylindres turbo (Rally2)", 0.4, {}, {}),
+	I4R = series("4 cylindres anti-lag (WRC)", 0.4, {}, {}),
+	I5 = series("5 cylindres turbo (Groupe B)", 0.4, {}, {}),
+	Boxer4 = series("4 cylindres à plat (boxer)", 0.4, {}, {}),
+	V6 = series("V6", 0.4, {}, {}),
+	Flat6 = series("6 cylindres à plat", 0.4, {}, {}),
+	Rotary = series("Rotatif", 0.4, {}, {}),
+}
 
 SoundBank.RECORDINGS = {
 	LS3 = LS3,
 } :: { [string]: EngineProfile }
-for key, spec in pairs(SHEETS) do
-	if spec.Id ~= 0 then
-		SoundBank.RECORDINGS[key] = sheet(spec)
+for key, profile in pairs(STORE) do
+	if #profile.OnLoad >= 2 and #profile.OffLoad >= 2 then
+		SoundBank.RECORDINGS[key] = profile
 	end
 end
 
@@ -208,6 +172,18 @@ SoundBank.DEFAULT_TONE = "Rally2"
 function SoundBank.Tone(toneId: string?): EngineTone
 	return SoundBank.TONES[toneId or SoundBank.DEFAULT_TONE] or SoundBank.TONES[SoundBank.DEFAULT_TONE]
 end
+
+--[[
+	ÉCHAPPEMENT (Driving/Exhaust.luau), sons courts joués une fois :
+		Backfire     retour de flamme (lever de pied franc, passage de
+		             rapport, rupteur) : une grosse détonation ;
+		AntiLagPops  crépitements de l'anti-lag, pied levé.
+	Plusieurs identifiants par liste : l'un d'eux au hasard, transposé un peu
+	(moins répétitif). Listes vides : les flammes sans le son. À chercher dans
+	le Creator Store : « backfire », « exhaust pop », « anti lag », « crackle ».
+]]
+SoundBank.Backfire = {} :: { string }
+SoundBank.AntiLagPops = {} :: { string }
 
 -- Crissement de pneu sur surface dure (boucle). Joué une fois PAR ROUE.
 SoundBank.TireScreech = id(109487442763183) -- "Tire Squealing Screeching Loop"

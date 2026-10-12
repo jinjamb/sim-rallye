@@ -150,7 +150,9 @@ La livrée (`Livery.luau`) porte, en plus de la couleur principale, une couleur 
 
 ## Sons moteur
 
-Chaque moteur est un enregistrement (`Audio/SoundBank.luau`, `RECORDINGS`) : des boucles à régime stabilisé, à charge et pied levé, que `CarAudio` fond l'une dans l'autre selon le régime. Les moteurs du jeu (3, 4 et 5 cylindres turbo, 4 cylindres anti-lag, boxer, V6, 6 à plat, rotatif) sont synthétisés par `assets/engines/generate.py` : un fichier `.ogg` par moteur, qui enchaîne toutes ses boucles (une « planche ») ; chaque boucle est une région du fichier (`PlaybackRegion`, `LoopRegion`). Chaque planche s'importe sur Roblox, et son identifiant va dans `SHEETS`. Tant qu'il vaut 0, le moteur est remplacé par le V8 du Creator Store. Une tonalité (`TONES`) choisit l'enregistrement et le traite (égaliseur, distorsion) : une par catégorie de voiture, une par son moteur à débloquer (`Items/Engines.luau`).
+Chaque moteur est un enregistrement du Creator Store (`Audio/SoundBank.luau`, `RECORDINGS`) : des boucles à régime stabilisé, à charge et pied levé, que `CarAudio` fond l'une dans l'autre selon le régime. Les types de moteur (3, 4 et 5 cylindres turbo, 4 cylindres anti-lag, boxer, V6, 6 à plat, rotatif) ont chacun leur série à remplir (`STORE`) ; une série vide est remplacée par le V8. Une tonalité (`TONES`) choisit l'enregistrement et le traite (égaliseur, distorsion) : une par catégorie de voiture, une par son moteur à débloquer (`Items/Engines.luau`).
+
+Anti-lag et retours de flamme : `Driving/Exhaust.luau`, piloté par le même état que le son (régime, charge) pour toutes les voitures. Un lever de pied franc à haut régime fait un retour de flamme ; pied levé, l'anti-lag (`CarClasses.AntiLag`) fait crépiter l'échappement et garde la pression du turbo (`Powertrain`).
 
 ## Conventions
 

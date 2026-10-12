@@ -793,6 +793,8 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	local m = body.Mounts
 	car:SetAttribute("FlankY", if m then (m.BeltY + m.BottomY) / 2 + 0.1 else nil)
 	car:SetAttribute("FlankPanel", if m then math.min(3.2, m.BeltY - m.BottomY - 0.15) else nil)
+	-- Sortie d'échappement (Exhaust.luau) : sous le pare-chocs arrière du modèle.
+	car:SetAttribute("ExhaustZ", if m then m.TailZ + 0.1 else nil)
 
 	local old = car:FindFirstChild(FOLDER)
 	if old then

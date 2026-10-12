@@ -6,9 +6,9 @@
 	« D'origine » garde celle de la catégorie de la voiture.
 
 	Trois sons de base sont donnés d'office ; les autres sortent du Rallye
-	Pass ou des tirages. Chacun est un vrai moteur (3, 4, 5 cylindres,
-	boxer, V6, 6 à plat, rotatif, V8 : SoundBank.luau), avec son
-	traitement.
+	Pass ou des tirages. Chacun a son type de moteur (3, 4, 5 cylindres,
+	boxer, V6, 6 à plat, rotatif, V8 : séries du Creator Store dans
+	SoundBank.luau), avec son traitement.
 ]]
 
 local ItemTypes = require(script.Parent.Parent.ItemTypes)
