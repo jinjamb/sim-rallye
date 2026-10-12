@@ -27,6 +27,7 @@
 
 local GuiService = game:GetService("GuiService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 local Circuit = require(ReplicatedStorage.Shared.Tracks.Circuit)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
@@ -35,6 +36,7 @@ local RaceTypes = require(script.Parent.RaceTypes)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Minimap = require(script.Parent.Minimap)
+local SoundBank = require(script.Parent.Parent.Audio.SoundBank)
 
 local RaceHud = {}
 RaceHud.__index = RaceHud
@@ -79,6 +81,9 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 	LightDots: { Frame },
 	GantryLights: { BasePart },
 	GantryTrack: string?,
+	LightsLit: number, -- feux rouges déjà annoncés par un bip
+	LightsGreen: boolean, -- départ déjà annoncé
+	LightSounds: { [string]: Sound },
 
 	Message: TextLabel,
 	MessageUntil: number,
@@ -131,6 +136,9 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.MessageUntil = 0
 	self.PodiumUntil = 0
 	self.GantryLights = {}
+	self.LightsLit = 0
+	self.LightsGreen = false
+	self.LightSounds = {}
 	self.Race = nil
 	self.Live = nil
 
@@ -627,6 +635,27 @@ function RaceHud:_myRow(): RaceTypes.LiveRow?
 	return nil
 end
 
+-- Bip des feux de départ (SoundBank.StartLights) : sans spatialisation, chacun
+-- n'entend que ceux de sa course.
+function RaceHud:_lightSound(kind: string)
+	local spec = SoundBank.StartLights[kind]
+	if not spec or spec.Id == "" then
+		return
+	end
+	local sound = self.LightSounds[kind]
+	if not sound then
+		sound = Instance.new("Sound")
+		sound.Name = "StartLight" .. kind
+		sound.SoundId = spec.Id
+		sound.Volume = spec.Volume
+		sound.PlaybackSpeed = spec.Pitch
+		sound.Parent = SoundService
+		self.LightSounds[kind] = sound
+	end
+	sound.TimePosition = 0
+	sound:Play()
+end
+
 function RaceHud:_updateLights(race: RaceTypes.RaceSnapshot, serverNow: number)
 	local lit = 0
 	local green = false
@@ -639,6 +668,23 @@ function RaceHud:_updateLights(race: RaceTypes.RaceSnapshot, serverNow: number)
 		green = true
 	end
 	self.Lights.Visible = visible
+	-- Un bip par feu rouge qui s'allume, le signal du départ au vert. Hors du
+	-- décompte et du vert, tout est réarmé pour la course suivante.
+	if green then
+		if not self.LightsGreen then
+			self.LightsGreen = true
+			self:_lightSound("Green")
+		end
+	elseif visible then
+		if lit > self.LightsLit then
+			self:_lightSound("Red")
+		end
+		self.LightsLit = lit
+		self.LightsGreen = false
+	else
+		self.LightsLit = 0
+		self.LightsGreen = false
+	end
 	for i, dot in ipairs(self.LightDots) do
 		dot.BackgroundColor3 = if green then COLOR_LIGHT_GREEN elseif i <= lit then COLOR_LIGHT_RED else COLOR_LIGHT_OFF
 	end

@@ -205,4 +205,17 @@ SoundBank.Wind = id(5813077875) -- "wind"
 -- la sonothèque Roblox (Creator Store > Audio, « rain loop »).
 SoundBank.Rain = ""
 
+--[[
+	FEUX DE DÉPART du rallycross (Race/RaceHud.luau) : un bip à chaque feu
+	rouge qui s'allume, puis le signal du départ quand ils passent au vert.
+	Par défaut, le « ping » électronique livré avec Roblox (rbxasset://, rien à
+	télécharger) : grave pour les rouges, aigu et plus long pour le vert
+	(Pitch). Pour un vrai son de feux, Creator Store > Audio : « start beep »,
+	« race countdown », « start lights », « countdown beep ».
+]]
+SoundBank.StartLights = {
+	Red = { Id = "rbxasset://sounds/electronicpingshort.wav", Pitch = 0.8, Volume = 0.7 },
+	Green = { Id = "rbxasset://sounds/electronicpingshort.wav", Pitch = 1.6, Volume = 0.9 },
+}
+
 return SoundBank
