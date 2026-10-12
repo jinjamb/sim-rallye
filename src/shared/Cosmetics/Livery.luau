@@ -25,6 +25,17 @@
 	Roblox : son identifiant va dans PATTERNS (Image). Tant qu'il vaut 0, le
 	motif se choisit mais ne s'affiche pas.
 
+	COULEURS SUR MESURE (Custom) : un code hexadécimal (« #FF8800 ») à la
+	place d'une couleur de la palette, pour la carrosserie (Color), les
+	bandes (StripeColor), le motif (PatternColor) ou une pièce
+	(« Zone:<zone> »). Il l'emporte sur la palette tant qu'il est là.
+
+	FINITIONS (Finish, TrimFinish) : la matière de la peinture, à la manière
+	des jeux de voitures : standard, brillant, mat, satiné, métallisé,
+	nacré, chromé, froissé, néon ; et celle des garnitures noires (boucliers,
+	bas de caisse, rétroviseurs...) : noir brillant, chromé, carbone, ou
+	couleur caisse. Appliquées par LiveryPainter (matériau, reflets).
+
 	SPONSORS (SponsorHood, SponsorDoors, SponsorRoof) : un autocollant de
 	marque (fictive) par emplacement : le capot, les deux portières, le
 	toit (Livery.SPONSORS ; 1 = aucun). Dessinés en texte par
@@ -77,6 +88,10 @@ export type Livery = {
 	Paints: { [string]: number },
 	Pattern: number, -- Livery.PATTERNS (1 = aucun)
 	PatternColor: number, -- Livery.COLORS
+	-- Couleurs sur mesure : "Color", "StripeColor", "PatternColor" ou "Zone:<zone>" -> "#RRGGBB".
+	Custom: { [string]: string },
+	Finish: number, -- Livery.FINISHES (1 = standard)
+	TrimFinish: number, -- Livery.TRIM_FINISHES (1 = noir d'origine)
 	-- Sponsors (Livery.SPONSORS, 1 = aucun), par emplacement.
 	SponsorHood: number,
 	SponsorDoors: number,
@@ -84,6 +99,9 @@ export type Livery = {
 }
 -- Un sponsor : son texte (nil : le sigle de l'écurie), ses couleurs (fond
 -- nil : le texte seul, cerné), sa police.
+-- Une finition : le matériau Roblox et les reflets (nil : ceux d'origine).
+-- Body : la garniture prend la couleur de la carrosserie ; Color : une teinte propre.
+export type Finish = { Name: string, Material: Enum.Material?, Reflectance: number?, Body: boolean?, Color: Color3? }
 export type SponsorStyle = { Name: string, Text: string?, Ink: Color3, Background: Color3?, Font: Enum.Font }
 export type Swatch = { Name: string, Color: Color3 }
 -- Une bande : décalage latéral de son axe et largeur (studs, repère du châssis).
@@ -142,6 +160,67 @@ Livery.PATTERNS = {
 
 local INK = Color3.fromRGB(16, 16, 20)
 local WHITE = Color3.new(1, 1, 1)
+
+-- Finitions de la peinture ; ajouter à la FIN seulement (indice sauvegardé).
+Livery.FINISHES = {
+	{ Name = "Standard" },
+	{ Name = "Brillant", Material = Enum.Material.SmoothPlastic, Reflectance = 0.14 },
+	{ Name = "Mat", Material = Enum.Material.Plastic, Reflectance = 0 },
+	{ Name = "Satiné", Material = Enum.Material.SmoothPlastic, Reflectance = 0.05 },
+	{ Name = "Métallisé", Material = Enum.Material.Metal, Reflectance = 0.12 },
+	{ Name = "Nacré", Material = Enum.Material.Glass, Reflectance = 0.22 },
+	{ Name = "Chromé", Material = Enum.Material.SmoothPlastic, Reflectance = 0.6 },
+	{ Name = "Froissé", Material = Enum.Material.Foil, Reflectance = 0.18 },
+	{ Name = "Néon", Material = Enum.Material.Neon, Reflectance = 0 },
+} :: { Finish }
+
+-- Finitions des garnitures noires (boucliers, bas de caisse, rétroviseurs...).
+Livery.TRIM_FINISHES = {
+	{ Name = "Noir d'origine" },
+	{ Name = "Noir brillant", Material = Enum.Material.SmoothPlastic, Reflectance = 0.18 },
+	{ Name = "Chromé", Material = Enum.Material.SmoothPlastic, Reflectance = 0.55, Color = Color3.fromRGB(205, 210, 220) },
+	{ Name = "Carbone", Material = Enum.Material.Fabric, Reflectance = 0.05, Color = Color3.fromRGB(34, 34, 38) },
+	{ Name = "Couleur caisse", Body = true },
+} :: { Finish }
+
+-- "#ff8800", "FF8800", "#f80" -> Color3 (nil si ce n'est pas un code valide).
+function Livery.ParseHex(text: any): Color3?
+	if type(text) ~= "string" then
+		return nil
+	end
+	local hex = string.upper((string.gsub(text, "[%s#]", "")))
+	if #hex == 3 and string.match(hex, "^%x%x%x$") then
+		hex = string.rep(string.sub(hex, 1, 1), 2) .. string.rep(string.sub(hex, 2, 2), 2) .. string.rep(string.sub(hex, 3, 3), 2)
+	end
+	if #hex ~= 6 or not string.match(hex, "^%x%x%x%x%x%x$") then
+		return nil
+	end
+	return Color3.fromRGB(tonumber(string.sub(hex, 1, 2), 16) :: number, tonumber(string.sub(hex, 3, 4), 16) :: number, tonumber(string.sub(hex, 5, 6), 16) :: number)
+end
+
+-- Color3 -> "#RRGGBB".
+function Livery.HexOf(color: Color3): string
+	return string.format("#%02X%02X%02X", math.floor(color.R * 255 + 0.5), math.floor(color.G * 255 + 0.5), math.floor(color.B * 255 + 0.5))
+end
+
+-- Les clés de couleur sur mesure permises.
+local CUSTOM_FIELDS = { Color = true, StripeColor = true, PatternColor = true }
+function Livery.CustomKeyValid(key: any): boolean
+	if type(key) ~= "string" then
+		return false
+	end
+	if CUSTOM_FIELDS[key] then
+		return true
+	end
+	local zone = string.match(key, "^Zone:(.+)$")
+	return zone ~= nil and CarBodies.ZoneExists(zone)
+end
+
+-- La couleur sur mesure d'une clé, ou nil.
+function Livery.CustomColor(livery: Livery, key: string): Color3?
+	local custom = livery.Custom
+	return if custom then Livery.ParseHex(custom[key]) else nil
+end
 
 -- Les emplacements des sponsors : le champ de la livrée et son nom.
 Livery.SPONSOR_SLOTS = {
@@ -211,6 +290,9 @@ function Livery.Default(userId: number): Livery
 		SponsorHood = 1,
 		SponsorDoors = 1,
 		SponsorRoof = 1,
+		Custom = {},
+		Finish = 1,
+		TrimFinish = 1,
 	}
 end
 
@@ -249,6 +331,16 @@ function Livery.Sanitize(input: any, userId: number): Livery
 	for _, slot in ipairs(Livery.SPONSOR_SLOTS) do
 		(result :: any)[slot.Field] = index(input[slot.Field], #Livery.SPONSORS) or 1
 	end
+	if type(input.Custom) == "table" then
+		for key, hex in pairs(input.Custom) do
+			local color = Livery.ParseHex(hex)
+			if color and Livery.CustomKeyValid(key) then
+				result.Custom[key] = Livery.HexOf(color)
+			end
+		end
+	end
+	result.Finish = index(input.Finish, #Livery.FINISHES) or 1
+	result.TrimFinish = index(input.TrimFinish, #Livery.TRIM_FINISHES) or 1
 	result.PatternColor = index(input.PatternColor, #Livery.COLORS) or result.PatternColor
 	return result
 end
@@ -270,23 +362,28 @@ function Livery.WithDesign(livery: Livery, design: { Body: number, Wing: number,
 end
 
 function Livery.ColorOf(livery: Livery): Color3
-	return (Livery.COLORS[livery.Color] or Livery.COLORS[1]).Color
+	return Livery.CustomColor(livery, "Color") or (Livery.COLORS[livery.Color] or Livery.COLORS[1]).Color
 end
 
 function Livery.NameOf(livery: Livery): string
-	return (Livery.COLORS[livery.Color] or Livery.COLORS[1]).Name
+	local custom = livery.Custom and livery.Custom.Color
+	return custom or (Livery.COLORS[livery.Color] or Livery.COLORS[1]).Name
 end
 
 function Livery.StripeColorOf(livery: Livery): Color3
-	return (Livery.COLORS[livery.StripeColor] or Livery.COLORS[3]).Color
+	return Livery.CustomColor(livery, "StripeColor") or (Livery.COLORS[livery.StripeColor] or Livery.COLORS[3]).Color
 end
 
 function Livery.PatternColorOf(livery: Livery): Color3
-	return (Livery.COLORS[livery.PatternColor] or Livery.COLORS[4]).Color
+	return Livery.CustomColor(livery, "PatternColor") or (Livery.COLORS[livery.PatternColor] or Livery.COLORS[4]).Color
 end
 
 -- La couleur choisie pour une zone (nil : peinture d'origine).
 function Livery.ZoneColorOf(livery: Livery, zone: string): Color3?
+	local custom = Livery.CustomColor(livery, "Zone:" .. zone)
+	if custom then
+		return custom
+	end
 	local paints = livery.Paints
 	local chosen = if paints then paints[zone] else nil
 	local swatch = if chosen then Livery.COLORS[chosen] else nil
@@ -311,6 +408,14 @@ function Livery.ItemName(kind: string, index: number): string
 	elseif kind == "Pattern" then
 		local pattern = Livery.PATTERNS[index]
 		return "Motif " .. (if pattern then pattern.Name else "?")
+	elseif kind == "Finish" then
+		local finish = Livery.FINISHES[index]
+		return "Finition " .. (if finish then finish.Name else "?")
+	elseif kind == "TrimFinish" then
+		local finish = Livery.TRIM_FINISHES[index]
+		return "Garnitures " .. (if finish then finish.Name else "?")
+	elseif kind == "Custom" then
+		return "Couleurs sur mesure (code hexa)"
 	elseif kind == "Sponsor" then
 		local sponsor = Livery.SPONSORS[index]
 		return "Sponsor " .. (if sponsor then sponsor.Name else "?")
@@ -328,6 +433,16 @@ function Livery.ItemName(kind: string, index: number): string
 	return "?"
 end
 
+-- Les couleurs sur mesure, dans un ordre stable.
+local function customKey(livery: Livery): string
+	local parts = {}
+	for key, hex in pairs(livery.Custom or {}) do
+		table.insert(parts, key .. "=" .. hex)
+	end
+	table.sort(parts)
+	return table.concat(parts, ",")
+end
+
 -- Clé courte de la livrée (repeindre seulement si elle change).
 function Livery.Key(livery: Livery): string
 	local paints = {}
@@ -342,7 +457,7 @@ function Livery.Key(livery: Livery): string
 		end
 	end
 	return string.format(
-		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s|%d/%d/%d|%s",
+		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s|%d/%d/%d|%s|%d/%d|%s",
 		livery.Color,
 		livery.Number,
 		livery.Stripes,
@@ -360,7 +475,10 @@ function Livery.Key(livery: Livery): string
 		livery.SponsorHood or 1,
 		livery.SponsorDoors or 1,
 		livery.SponsorRoof or 1,
-		table.concat(accessories, "/")
+		table.concat(accessories, "/"),
+		livery.Finish or 1,
+		livery.TrimFinish or 1,
+		customKey(livery)
 	)
 end
 

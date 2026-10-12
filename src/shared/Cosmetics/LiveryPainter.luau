@@ -31,6 +31,10 @@
 	choisis dans la livrée. Numéros et bandes dépendent de la forme : leurs
 	emplacements sont gardés PAR FORME (CarBodies.ShapeKey).
 
+	FINITIONS (Livery.FINISHES, TRIM_FINISHES) : matériau et reflets de la
+	peinture, et des garnitures noires d'une zone ; « Standard » rend le
+	matériau d'origine (retenu sur la pièce avant la première finition).
+
 	PEINTURE PAR PIÈCE : une pièce d'un modèle du jeu porte sa zone (attribut
 	PaintZone) ; si la livrée donne une couleur à cette zone (Livery.Paints),
 	la pièce la prend, sinon elle garde sa peinture d'origine (la couleur de
@@ -504,6 +508,31 @@ function LiveryPainter.Prepare(car: Model)
 	end
 end
 
+-- Matériau et reflets d'origine d'une pièce, retenus avant la première finition.
+local ORIGINAL_MATERIAL = "OriginalMaterial"
+local ORIGINAL_REFLECTANCE = "OriginalReflectance"
+local function applyFinish(part: BasePart, finish: Livery.Finish?)
+	local savedMaterial = part:GetAttribute(ORIGINAL_MATERIAL)
+	if savedMaterial == nil then
+		part:SetAttribute(ORIGINAL_MATERIAL, part.Material.Name)
+		part:SetAttribute(ORIGINAL_REFLECTANCE, part.Reflectance)
+	end
+	local material = finish and finish.Material
+	if material then
+		part.Material = material
+		part.Reflectance = finish and finish.Reflectance or 0
+		return
+	end
+	-- Standard : le matériau d'origine.
+	local name = part:GetAttribute(ORIGINAL_MATERIAL)
+	local original = if type(name) == "string" then (Enum.Material :: any)[name] else nil
+	if original then
+		part.Material = original
+	end
+	local reflectance = part:GetAttribute(ORIGINAL_REFLECTANCE)
+	part.Reflectance = if type(reflectance) == "number" then reflectance else 0
+end
+
 -- Le motif sur une pièce : une image répétée par face visible.
 local function addPattern(part: BasePart, style: Livery.PatternStyle, color: Color3)
 	for _, face in ipairs(PATTERN_FACES) do
@@ -544,6 +573,9 @@ function LiveryPainter.Apply(car: Model, wanted: Livery.Livery)
 	local style = Livery.PATTERNS[livery.Pattern or 1]
 	local pattern: Livery.PatternStyle? = if style and style.Image ~= 0 then style else nil
 	local patternColor = Livery.PatternColorOf(livery)
+	-- Finitions : la peinture, et les garnitures noires.
+	local finish = Livery.FINISHES[livery.Finish or 1]
+	local trimFinish = Livery.TRIM_FINISHES[livery.TrimFinish or 1]
 	for _, item in ipairs(car:GetDescendants()) do
 		if item.Name == PANEL_NAME or item.Name == STRIPE_NAME or item.Name == PATTERN_NAME or item.Name == SPONSOR_NAME then
 			item:Destroy()
@@ -554,12 +586,26 @@ function LiveryPainter.Apply(car: Model, wanted: Livery.Livery)
 			local painted = item:GetAttribute(PAINT_ATTRIBUTE) == true
 			if zoneColor then
 				item.Color = zoneColor
+				applyFinish(item, finish)
 			elseif painted then
 				item.Color = color
+				applyFinish(item, finish)
 			else
 				local base = item:GetAttribute(BASE_COLOR_ATTRIBUTE)
 				if typeof(base) == "Color3" then
 					item.Color = base
+				end
+				-- Garniture d'une zone (boucliers, bas de caisse, rétroviseurs...) : sa finition.
+				if type(zone) == "string" and trimFinish then
+					if trimFinish.Body then
+						item.Color = color
+						applyFinish(item, finish)
+					else
+						if trimFinish.Color then
+							item.Color = trimFinish.Color
+						end
+						applyFinish(item, trimFinish)
+					end
 				end
 			end
 			if pattern and painted and not zoneColor and item.Transparency < 1 then

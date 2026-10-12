@@ -23,6 +23,8 @@ local items: { ItemTypes.Item } = {
 	{ Id = "part_exhaust_cannon", Kind = "Part", Name = "Échappement canon", Description = "un seul gros embout, au centre", Rarity = "Pro", Roll = true, Slot = "Exhaust", Option = 3 },
 	{ Id = "part_exhaust_titanium", Kind = "Part", Name = "Échappement titane", Description = "embout bleui par la chaleur", Rarity = "Usine", Roll = true, Slot = "Exhaust", Option = 7 },
 	{ Id = "part_moustache_double", Kind = "Part", Name = "Moustache double", Description = "deux traits retroussés sous la calandre", Rarity = "Pro", Roll = true, Slot = "Moustache", Option = 5 },
+	{ Id = "part_finish_chrome", Kind = "Part", Name = "Peinture chromée", Description = "la carrosserie comme un miroir", Rarity = "Prototype", Roll = true, Slot = "Finish", Option = 7 },
+	{ Id = "part_finish_neon", Kind = "Part", Name = "Peinture néon", Description = "la carrosserie qui brille dans la nuit", Rarity = "Legende", Roll = true, Slot = "Finish", Option = 9 },
 	{ Id = "part_rims_neon", Kind = "Part", Name = "Jantes néon", Description = "cyan lumineux, même la nuit", Rarity = "Legende", Roll = true, Slot = "Rims", Option = 6 },
 }
 

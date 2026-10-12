@@ -183,7 +183,7 @@ export type Requirement = {
 -- Objets possédés (identifiant -> true), pour les conditions Item.
 export type Owned = { [string]: boolean }
 
-export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Finish" | "TrimFinish" | "Custom" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
 	| "Mirrors" | "Roof" | "Skirts" | "Diffuser" | "Exhaust" | "Mudflaps"
 	| "Moustache" | "Grille" | "Canards" | "SunStrip" | "HoodPins" | "Tow" | "LightCovers" | "SideVents" | "WindowNet"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
@@ -215,6 +215,20 @@ Progression.ITEMS = {
 	{ Kind = "Pattern", Index = 7, Requirement = { AnyMedal = 3 } }, -- Zébrures
 	{ Kind = "Pattern", Index = 8, Requirement = { Item = "part_pattern_flames" } }, -- Flammes
 	{ Kind = "Pattern", Index = 9, Requirement = { Item = "part_pattern_sakura" } }, -- Sakura
+	-- Finitions (Livery.FINISHES, TRIM_FINISHES) et couleurs sur mesure.
+	{ Kind = "Finish", Index = 2, Requirement = { Level = 2 } }, -- Brillant
+	{ Kind = "Finish", Index = 3, Requirement = { Level = 3 } }, -- Mat
+	{ Kind = "Finish", Index = 4, Requirement = { Level = 4 } }, -- Satiné
+	{ Kind = "Finish", Index = 5, Requirement = { Level = 6 } }, -- Métallisé
+	{ Kind = "Finish", Index = 6, Requirement = { Level = 10 } }, -- Nacré
+	{ Kind = "Finish", Index = 7, Requirement = { Item = "part_finish_chrome" } }, -- Chromé
+	{ Kind = "Finish", Index = 8, Requirement = { Level = 13 } }, -- Froissé
+	{ Kind = "Finish", Index = 9, Requirement = { Item = "part_finish_neon" } }, -- Néon
+	{ Kind = "TrimFinish", Index = 2, Requirement = { Level = 3 } }, -- Noir brillant
+	{ Kind = "TrimFinish", Index = 3, Requirement = { Level = 9 } }, -- Chromé
+	{ Kind = "TrimFinish", Index = 4, Requirement = { Level = 7 } }, -- Carbone
+	{ Kind = "TrimFinish", Index = 5, Requirement = { Level = 5 } }, -- Couleur caisse
+	{ Kind = "Custom", Index = 1, Requirement = { Level = 6 } }, -- Couleurs sur mesure (hexa)
 	-- Sponsors (Livery.SPONSORS) ; Sim Rallye (2) est libre. « Item » : aux tirages.
 	{ Kind = "Sponsor", Index = 3, Requirement = { Level = 2 } }, -- Kaze Oil
 	{ Kind = "Sponsor", Index = 4, Requirement = { Level = 3 } }, -- Sakura Tyres
@@ -421,6 +435,16 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 		if result[field] ~= nil then
 			keep(field, "Sponsor")
 		end
+	end
+	if result.Finish ~= nil then
+		keep("Finish", "Finish")
+	end
+	if result.TrimFinish ~= nil then
+		keep("TrimFinish", "TrimFinish")
+	end
+	-- Couleurs sur mesure : tout ou rien, selon le déblocage.
+	if type(result.Custom) == "table" and next(result.Custom) ~= nil and not Progression.IsUnlocked("Custom", 1, snapshot, owned) then
+		result.Custom = {}
 	end
 	if result.Pattern ~= nil then
 		keep("Pattern", "Pattern")

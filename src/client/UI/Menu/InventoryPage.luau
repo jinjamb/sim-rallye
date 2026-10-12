@@ -102,9 +102,14 @@ local function chips(ctx: Context, b: Builder, kind: string, names: { string }, 
 end
 
 -- Équipe une nouvelle livrée (modèle, pièce, couleur...) : sauvegardée par le serveur.
+-- Choisir une couleur de la palette retire la couleur sur mesure de ce champ.
 local function equip(ctx: Context, livery: Livery.Livery, field: string, value: number)
 	local changed: any = table.clone(livery)
 	changed[field] = value
+	if livery.Custom and livery.Custom[field] then
+		changed.Custom = table.clone(livery.Custom)
+		changed.Custom[field] = nil
+	end
 	ctx.Action("Livery", changed)
 end
 
@@ -236,6 +241,23 @@ function InventoryPage.Livery(ctx: Context, b: Builder)
 			equip(ctx, livery, "PatternColor", i)
 		end)
 	end
+	-- Finitions : la peinture, puis les garnitures noires.
+	b:Text("FINITION DE LA PEINTURE", 13, Theme.YELLOW)
+	chips(ctx, b, "Finish", names(Livery.FINISHES), livery.Finish or 1, function(i)
+		equip(ctx, livery, "Finish", i)
+	end)
+	b:Text("GARNITURES (boucliers, bas de caisse, rétroviseurs...)", 13, Theme.YELLOW)
+	chips(ctx, b, "TrimFinish", names(Livery.TRIM_FINISHES), livery.TrimFinish or 1, function(i)
+		equip(ctx, livery, "TrimFinish", i)
+	end)
+
+	-- Couleurs sur mesure : un code hexadécimal pour la carrosserie, les bandes, le motif.
+	InventoryPage.HexPicker(ctx, b, livery, {
+		{ Label = "CARROSSERIE", Key = "Color" },
+		{ Label = "BANDES", Key = "StripeColor" },
+		{ Label = "MOTIF", Key = "PatternColor" },
+	})
+
 	-- Sponsors : un par emplacement.
 	b:Text("SPONSORS", 13, Theme.YELLOW)
 	b:Text("Un autocollant sur le capot, les portières et le toit. « Écurie » affiche le sigle de ton écurie.", 12, Widgets.COLOR_DIM)
@@ -247,6 +269,83 @@ function InventoryPage.Livery(ctx: Context, b: Builder)
 		end)
 	end
 	b:Text("Numéro et couleur des bandes : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
+end
+
+--[[
+	COULEUR SUR MESURE : un code hexadécimal (« #FF8800 »), un aperçu, et un
+	bouton par cible (`targets` : clé de Livery.Custom). Verrouillé tant que
+	la condition n'est pas remplie (Progression : Custom). Une couleur sur
+	mesure déjà posée s'affiche, et se retire.
+]]
+type HexTarget = { Label: string, Key: string }
+function InventoryPage.HexPicker(ctx: Context, b: Builder, livery: Livery.Livery, targets: { HexTarget })
+	local unlocked = Progression.IsUnlocked("Custom", 1, ctx.Data.Progress, MenuKit.OwnedSet(ctx))
+	b:Text("COULEUR SUR MESURE (CODE HEXA)", 13, Theme.YELLOW)
+	if not unlocked then
+		local item = Progression.ItemFor("Custom", 1)
+		b:Text("🔒 Couleurs sur mesure : " .. (if item then Progression.Describe(item.Requirement) else "?") .. ".", 12, Theme.ORANGE)
+		local row = b:Row(CHIP_HEIGHT + 4)
+		ctx.Button(row, "COMMENT LES DÉBLOQUER", 0, MenuKit.CONTENT_WIDTH, function()
+			ctx.View.InventoryLocked = { Kind = "Custom", Index = 1, Text = Livery.ItemName("Custom", 1) .. " : " .. (if item then Progression.Describe(item.Requirement) else "?") } :: Locked
+			ctx.Rebuild()
+		end)
+		return
+	end
+	MenuKit.TextField(ctx, b, "Code", "HexInput", "#FF8800", 7)
+	local color = Livery.ParseHex(ctx.View.HexInput)
+	local preview = b:Row(24)
+	local swatch = Instance.new("Frame")
+	swatch.Size = UDim2.new(0, 60, 1, 0)
+	swatch.BorderSizePixel = 0
+	swatch.BackgroundColor3 = color or Theme.PANEL_2
+	Theme.Corner(swatch)
+	swatch.Parent = preview
+	local hint = Widgets.Label(preview, if color then Livery.HexOf(color) else "Tape un code comme #FF8800 (ou FF8800, #F80).", 12, Enum.Font.GothamBold, if color then Widgets.COLOR_TEXT else Widgets.COLOR_DIM)
+	hint.Position = UDim2.fromOffset(70, 0)
+	hint.Size = UDim2.new(1, -70, 1, 0)
+	local width = (MenuKit.CONTENT_WIDTH - CHIP_GAP * (#targets - 1)) / #targets
+	local row = b:Row(CHIP_HEIGHT + 4)
+	for index, target in ipairs(targets) do
+		local button = ctx.Button(row, "→ " .. target.Label, (index - 1) * (width + CHIP_GAP), width, function()
+			local parsed = Livery.ParseHex(ctx.View.HexInput)
+			if not parsed then
+				ctx.Rebuild()
+				return
+			end
+			local changed: any = table.clone(livery)
+			changed.Custom = table.clone(livery.Custom or {})
+			changed.Custom[target.Key] = Livery.HexOf(parsed)
+			ctx.Action("Livery", changed)
+		end)
+		button.Size = UDim2.new(0, width, 0, CHIP_HEIGHT)
+		button.TextSize = 12
+		if color then
+			Widgets.Primary(button)
+		end
+	end
+	-- Les couleurs sur mesure posées : une pastille chacune, pour la retirer.
+	local placed = {}
+	for _, target in ipairs(targets) do
+		local hex = livery.Custom and livery.Custom[target.Key]
+		if hex then
+			table.insert(placed, { Target = target, Hex = hex })
+		end
+	end
+	if #placed > 0 then
+		local clearRow = b:Row(CHIP_HEIGHT + 4)
+		local clearWidth = (MenuKit.CONTENT_WIDTH - CHIP_GAP * (#placed - 1)) / #placed
+		for index, entry in ipairs(placed) do
+			local button = ctx.Button(clearRow, "✕ " .. entry.Target.Label .. " " .. entry.Hex, (index - 1) * (clearWidth + CHIP_GAP), clearWidth, function()
+				local changed: any = table.clone(livery)
+				changed.Custom = table.clone(livery.Custom or {})
+				changed.Custom[entry.Target.Key] = nil
+				ctx.Action("Livery", changed)
+			end)
+			button.Size = UDim2.new(0, clearWidth, 0, CHIP_HEIGHT)
+			button.TextSize = 11
+			button.TextScaled = true
+		end
+	end
 end
 
 --[[
@@ -285,13 +384,18 @@ function InventoryPage.Paint(ctx: Context, b: Builder)
 		ctx.Rebuild()
 	end)
 	-- Sa couleur.
-	local chosen = paints[zone.Key]
+	local chosen = if livery.Custom and livery.Custom["Zone:" .. zone.Key] then -1 else paints[zone.Key]
 	b:Text("COULEUR · " .. Format.Upper(zone.Name), 13, Theme.YELLOW)
 	local function setZone(color: number?)
 		local changed: any = table.clone(livery)
 		local newPaints = table.clone(paints)
 		newPaints[zone.Key] = color
 		changed.Paints = newPaints
+		-- Une couleur de la palette (ou « d'origine ») retire la couleur sur mesure de la pièce.
+		if livery.Custom and livery.Custom["Zone:" .. zone.Key] then
+			changed.Custom = table.clone(livery.Custom)
+			changed.Custom["Zone:" .. zone.Key] = nil
+		end
 		ctx.Action("Livery", changed)
 	end
 	local row = b:Row(CHIP_HEIGHT + 4)
@@ -311,6 +415,8 @@ function InventoryPage.Paint(ctx: Context, b: Builder)
 	chips(ctx, b, "Color", colorNames, chosen or 0, function(i)
 		setZone(i)
 	end)
+	-- Ou un code hexadécimal, pour cette pièce.
+	InventoryPage.HexPicker(ctx, b, livery, { { Label = Format.Upper(zone.Name), Key = "Zone:" .. zone.Key } })
 	b:Text("Une pièce peinte à part reste unie : le motif couvre seulement la couleur principale.", 12, Widgets.COLOR_DIM)
 end
 
