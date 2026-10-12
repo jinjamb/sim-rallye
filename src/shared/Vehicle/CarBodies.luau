@@ -64,8 +64,11 @@
 		              (DETAIL_NAMES), budget de pièces (PART_BUDGET), tout
 		              sans masse ni collision.
 	ACCESSOIRES (emplacements Accessory) : rétroviseurs, toit, bas de caisse,
-	arrière, échappement, bavettes. Ils restent au choix du joueur même sur la
-	carrosserie de sa voiture.
+	arrière, échappement, bavettes, moustache, calandre, ailettes, bandeau de
+	pare-brise, goupilles de capot, remorquage, caches-phares, ouïes, filet
+	de vitre. Ils restent au choix du joueur même sur la carrosserie de sa
+	voiture ; calandre, moustache et caches-phares s'ajustent aux pièces du
+	modèle (named).
 
 	Les pièces sont sans masse, sans collision, soudées au
 	châssis. La peinture de la livrée se pose sur celles marquées
@@ -100,11 +103,12 @@ local HIDDEN_ATTRIBUTE = "BodyTransparency" -- transparence d'origine d'une piè
 local ZONE_ATTRIBUTE = "PaintZone" -- zone de peinture de la pièce (ZONES)
 local BASE_COLOR_ATTRIBUTE = "BaseColor" -- couleur d'origine d'une pièce non peinte (garnitures)
 local CAR_COLLISION_GROUP = "Cars" -- CarService : les rayons des autres voitures traversent
-local PART_BUDGET = 140 -- pièces par carrosserie au plus (alerte dans Studio au-delà)
+local PART_BUDGET = 190 -- pièces par carrosserie au plus (alerte dans Studio au-delà)
 
 type Paint = "Body" | "Trim" | "Glass" | "Head" | "Tail" | "Lamp" | "Chrome" | "Accent"
 type Shape = "Block" | "Wedge" | "Cylinder"
-export type Spec = { Name: string, Shape: Shape?, Size: Vector3, At: CFrame, Paint: Paint }
+-- Color : une teinte propre (sangles, filets, titane), à la place de celle de sa peinture.
+export type Spec = { Name: string, Shape: Shape?, Size: Vector3, At: CFrame, Paint: Paint, Color: Color3? }
 
 -- Repères d'un modèle, où se posent les pièces.
 export type Mounts = {
@@ -311,7 +315,7 @@ local function kaze(): Body
 		Name = "Kaze",
 		Description = "citadine WRC moderne à hayon",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -351,7 +355,7 @@ local function yama(): Body
 		Name = "Yama",
 		Description = "berline trois volumes, années 70",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -398,7 +402,7 @@ local function raijin(): Body
 		Name = "Raijin",
 		Description = "coupé en coin des années 80, ailes larges",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -437,7 +441,7 @@ local function hayate(): Body
 		Name = "Hayate",
 		Description = "berline de rallye, nez plongeant (façon Evo)",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -475,7 +479,7 @@ local function hoshi(): Body
 		Name = "Hoshi",
 		Description = "berline de rallye à phares ronds (façon Impreza)",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -509,7 +513,7 @@ local function tora(): Body
 		Name = "Tora",
 		Description = "citadine compacte moderne, porte-à-faux courts",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -550,7 +554,7 @@ local function kumo(): Body
 		Name = "Kumo",
 		Description = "bombe à moteur central des années 80",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -589,7 +593,7 @@ local function ryu(): Body
 		Name = "Ryu",
 		Description = "coupé long et bas des années 80, quatre phares ronds",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" },
 		Mounts = m,
 		Cabin = c,
 		Parts = list,
@@ -631,8 +635,17 @@ CarBodies.SLOTS = {
 	{ Key = "Roof", Name = "Toit", Accessory = true, Options = { { Name = "Lisse" }, { Name = "Écope" }, { Name = "Aileron de requin" }, { Name = "Antenne" } } },
 	{ Key = "Skirts", Name = "Bas de caisse", Accessory = true, Options = { { Name = "D'origine" }, { Name = "Jupes" }, { Name = "Lames" } } },
 	{ Key = "Diffuser", Name = "Arrière", Accessory = true, Options = { { Name = "D'origine" }, { Name = "Diffuseur" }, { Name = "Diffuseur course" } } },
-	{ Key = "Exhaust", Name = "Échappement", Accessory = true, Options = { { Name = "Simple" }, { Name = "Double" }, { Name = "Canon" } } },
+	{ Key = "Exhaust", Name = "Échappement", Accessory = true, Options = { { Name = "Simple" }, { Name = "Double" }, { Name = "Canon" }, { Name = "Quadruple" }, { Name = "Latéral" }, { Name = "Relevé" }, { Name = "Titane" } } },
 	{ Key = "Mudflaps", Name = "Bavettes", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Rallye" }, { Name = "Longues" } } },
+	{ Key = "Moustache", Name = "Moustache", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Fine" }, { Name = "Lame" }, { Name = "Chromée" }, { Name = "Double" } } },
+	{ Key = "Grille", Name = "Calandre", Accessory = true, Options = { { Name = "D'origine" }, { Name = "Nid d'abeille" }, { Name = "Barres chromées" }, { Name = "Grillage rallye" } } },
+	{ Key = "Canards", Name = "Ailettes", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Simples" }, { Name = "Doubles" } } },
+	{ Key = "SunStrip", Name = "Bandeau de pare-brise", Accessory = true, Options = { { Name = "Aucun" }, { Name = "Noir" }, { Name = "Blanc" }, { Name = "Couleur caisse" } } },
+	{ Key = "HoodPins", Name = "Goupilles de capot", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Chromées" }, { Name = "Noires" } } },
+	{ Key = "Tow", Name = "Remorquage", Accessory = true, Options = { { Name = "Anneaux rouges" }, { Name = "Sangles jaunes" }, { Name = "Sangles bleues" }, { Name = "Aucun" } } },
+	{ Key = "LightCovers", Name = "Caches-phares", Accessory = true, Options = { { Name = "Aucun" }, { Name = "Adhésif en croix" }, { Name = "Caches noirs" } } },
+	{ Key = "SideVents", Name = "Ouïes", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Ailes avant" }, { Name = "Prises arrière" } } },
+	{ Key = "WindowNet", Name = "Filet de vitre", Accessory = true, Options = { { Name = "Aucun" }, { Name = "Noir" }, { Name = "Rouge" } } },
 } :: { Slot }
 
 -- Couleurs des jantes : le cercle (Rim) et les branches (Spoke) des roues du gabarit.
@@ -793,20 +806,244 @@ local function diffuserParts(list: { Spec }, m: Mounts, option: number)
 	end
 end
 
--- Embouts d'échappement ; renvoie où sortent les flammes (Exhaust.luau) : X, Y.
-local function exhaustParts(list: { Spec }, m: Mounts, option: number): (number, number)
+local TITANIUM = Color3.fromRGB(125, 115, 205) -- titane bleui par la chaleur
+
+-- Embouts d'échappement ; renvoie où sortent les flammes (Exhaust.luau) : X, Y, Z.
+local function exhaustParts(list: { Spec }, m: Mounts, option: number): (number, number, number)
 	local z = m.TailZ + 0.15
+	local y = m.BottomY + 0.5
 	if option == 2 then
+		-- Double, au centre.
 		pair(list, function(s)
-			return disc("ExhaustTip", 0.34, 0.45, at(s * 0.45, m.BottomY + 0.45, z), "Chrome")
+			return disc("ExhaustTip", 0.34, 0.45, at(s * 0.45, y - 0.05, z), "Chrome")
 		end)
-		return 0.45, m.BottomY + 0.45
+		return 0.45, y - 0.05, z
 	elseif option == 3 then
-		add(list, disc("ExhaustTip", 0.62, 0.5, at(0, m.BottomY + 0.5, z), "Chrome"))
-		return 0, m.BottomY + 0.5
+		-- Canon : un seul gros embout, au centre.
+		add(list, disc("ExhaustTip", 0.62, 0.5, at(0, y, z), "Chrome"))
+		return 0, y, z
+	elseif option == 4 then
+		-- Quadruple : deux paires, aux coins.
+		for _, x in ipairs({ -1.75, -1.35, 1.35, 1.75 }) do
+			add(list, disc("ExhaustTip", 0.3, 0.45, at(x, y - 0.05, z), "Chrome"))
+		end
+		return 1.55, y - 0.05, z
+	elseif option == 5 then
+		-- Latéral : sortie sur le flanc, devant la roue arrière.
+		local x = m.HalfWidth + 0.12
+		add(list, { Name = "ExhaustTip", Shape = "Cylinder", Size = Vector3.new(0.45, 0.36, 0.36), At = at(x, m.BottomY + 0.25, WHEEL_Z - ARCH_HALF - 0.4), Paint = "Chrome" })
+		return x, m.BottomY + 0.25, WHEEL_Z - ARCH_HALF - 0.4
+	elseif option == 6 then
+		-- Relevé : l'embout pointe vers le haut, façon rallye d'autrefois.
+		add(list, disc("ExhaustTip", 0.38, 0.55, at(1.6, y + 0.1, z) * CFrame.fromAxisAngle(Vector3.xAxis, math.rad(-25)), "Chrome"))
+		return 1.6, y + 0.15, z
+	elseif option == 7 then
+		-- Titane : simple, bleui.
+		local tip = disc("ExhaustTip", 0.4, 0.5, at(1.6, y, z), "Chrome")
+		tip.Color = TITANIUM
+		add(list, tip)
+		return 1.6, y, z
 	end
-	add(list, disc("ExhaustTip", 0.36, 0.45, at(1.6, m.BottomY + 0.5, z), "Chrome"))
-	return 1.6, m.BottomY + 0.5
+	add(list, disc("ExhaustTip", 0.36, 0.45, at(1.6, y, z), "Chrome"))
+	return 1.6, y, z
+end
+
+
+-- Les pièces déjà posées qui portent ce nom (calandre, phares) : les accessoires s'y ajustent.
+local function named(list: { Spec }, name: string): { Spec }
+	local found = {}
+	for _, spec in ipairs(list) do
+		if spec.Name == name then
+			table.insert(found, spec)
+		end
+	end
+	return found
+end
+
+local WHITE = Color3.fromRGB(236, 236, 240)
+local STRAP_YELLOW = Color3.fromRGB(255, 205, 30)
+local STRAP_BLUE = Color3.fromRGB(40, 110, 230)
+local NET_RED = Color3.fromRGB(205, 30, 40)
+local AHEAD = 0.06 -- un accessoire posé devant la pièce qu'il habille (studs, vers l'avant)
+
+--[[
+	MOUSTACHE : la lame sous la calandre (le « sourire » des voitures de
+	rallye). Posée sous la calandre du modèle, à sa largeur.
+]]
+local function moustacheParts(list: { Spec }, m: Mounts, option: number)
+	if option == 1 then
+		return
+	end
+	local grille = named(list, "Grille")[1]
+	local grilleY = if grille then grille.At.Position.Y - grille.Size.Y / 2 else m.BottomY + 0.9
+	local z = m.NoseZ - 0.1
+	if option == 2 then
+		-- Fine : un trait sous la calandre.
+		add(list, block("Moustache", Vector3.new(3.0, 0.08, 0.14), at(0, grilleY - 0.1, z), "Trim"))
+	elseif option == 3 then
+		-- Lame : toute la largeur, au ras du sol.
+		add(list, block("Moustache", Vector3.new(m.HalfWidth * 2 - 0.2, 0.12, 0.45), at(0, m.BottomY + 0.28, z - 0.12), "Trim"))
+	elseif option == 4 then
+		local tip = block("Moustache", Vector3.new(2.6, 0.09, 0.12), at(0, grilleY - 0.08, z), "Chrome")
+		add(list, tip)
+	elseif option == 5 then
+		-- Double : deux traits, comme une moustache retroussée.
+		pair(list, function(s)
+			return block("Moustache", Vector3.new(1.5, 0.08, 0.14), at(s * 0.8, grilleY - 0.1, z) * CFrame.Angles(0, 0, s * math.rad(8)), "Trim")
+		end)
+	end
+end
+
+-- CALANDRE : une grille posée devant celle du modèle, à sa taille.
+local function grilleParts(list: { Spec }, option: number)
+	if option == 1 then
+		return
+	end
+	for _, grille in ipairs(named(list, "Grille")) do
+		local front = CFrame.new(0, 0, -AHEAD) * grille.At
+		local size = grille.Size
+		if option == 2 then
+			-- Nid d'abeille : un maillage sombre, cerné de noir.
+			add(list, block("GrilleMesh", Vector3.new(size.X - 0.1, size.Y - 0.06, 0.04), front, "Trim"))
+			add(list, block("GrilleFrame", Vector3.new(size.X + 0.12, 0.06, 0.06), front * CFrame.new(0, size.Y / 2 + 0.02, 0), "Trim"))
+		elseif option == 3 then
+			-- Barres horizontales chromées.
+			for _, t in ipairs({ -0.3, 0, 0.3 }) do
+				add(list, block("GrilleBar", Vector3.new(size.X - 0.05, 0.05, 0.05), front * CFrame.new(0, t * size.Y, 0), "Chrome"))
+			end
+		elseif option == 4 then
+			-- Grillage de rallye : plus grand que la calandre, pour les cailloux.
+			add(list, block("GrilleMesh", Vector3.new(size.X + 0.3, size.Y + 0.15, 0.04), front, "Trim"))
+			for _, x in ipairs({ -0.5, -0.25, 0, 0.25, 0.5 }) do
+				add(list, block("GrilleBar", Vector3.new(0.04, size.Y + 0.15, 0.05), front * CFrame.new(x * size.X, 0, -0.02), "Chrome"))
+			end
+		end
+	end
+end
+
+-- AILETTES (canards) aux coins du bouclier avant.
+local function canardParts(list: { Spec }, m: Mounts, option: number)
+	if option == 1 then
+		return
+	end
+	local rows = if option == 3 then { 0.55, 0.85 } else { 0.7 }
+	for _, height in ipairs(rows) do
+		pair(list, function(s)
+			return block("Canard", Vector3.new(0.6, 0.06, 0.5), at(s * (m.HalfWidth - 0.1), m.BottomY + height, m.NoseZ - 0.12) * CFrame.Angles(0, 0, s * math.rad(-14)), "Trim")
+		end)
+	end
+end
+
+-- BANDEAU DE PARE-BRISE : la bande en haut du pare-brise (noire, blanche, ou à la couleur).
+local function sunStripParts(list: { Spec }, c: Cabin, option: number)
+	if option == 1 then
+		return
+	end
+	local length = c.RoofFrontZ - c.WindshieldFrontZ
+	local height = c.TopY - c.BaseY
+	local slope = math.atan2(height, length)
+	local t = 0.84
+	local normal = Vector3.new(0, length, -height).Unit
+	local point = Vector3.new(0, c.BaseY + height * t, c.WindshieldFrontZ + length * t) + normal * 0.03
+	local strip = block("SunStrip", Vector3.new(c.HalfWidth * 2 - 0.3, 0.04, length * 0.3), CFrame.new(point) * CFrame.Angles(-slope, 0, 0), if option == 4 then "Body" else "Trim")
+	if option == 3 then
+		strip.Color = WHITE
+	end
+	add(list, strip)
+end
+
+-- GOUPILLES DE CAPOT : deux attaches rondes à l'avant du capot.
+local function hoodPinParts(list: { Spec }, m: Mounts, option: number)
+	if option == 1 then
+		return
+	end
+	pair(list, function(s)
+		local pin: Spec = { Name = "HoodPin", Shape = "Cylinder", Size = Vector3.new(0.06, 0.24, 0.24), At = at(s * 1.35, m.BeltY + 0.03, m.HoodFrontZ + 0.4) * CFrame.Angles(0, 0, math.pi / 2), Paint = if option == 2 then "Chrome" else "Trim" }
+		return pin
+	end)
+end
+
+-- ANNEAUX DE REMORQUAGE (avant et arrière) : anneaux rouges, sangles de couleur, ou rien.
+local function towParts(list: { Spec }, m: Mounts, option: number)
+	if option == 4 then
+		return
+	end
+	local strap = option == 2 or option == 3
+	for _, spot in ipairs({ { X = 1.35, Z = m.NoseZ - 0.12 }, { X = -1.35, Z = m.TailZ + 0.12 } }) do
+		local spec = if strap
+			then block("TowStrap", Vector3.new(0.3, 0.55, 0.04), at(spot.X, m.BottomY + 0.35, spot.Z), "Trim")
+			else block("TowHook", Vector3.new(0.12, 0.26, 0.26), at(spot.X, m.BottomY + 0.3, spot.Z), "Accent")
+		if strap then
+			spec.Color = if option == 2 then STRAP_YELLOW else STRAP_BLUE
+		end
+		add(list, spec)
+	end
+end
+
+-- CACHES-PHARES : posés devant chaque phare du modèle, à sa forme.
+local function lightCoverParts(list: { Spec }, option: number)
+	if option == 1 then
+		return
+	end
+	for _, light in ipairs(named(list, "HeadLight")) do
+		local front = CFrame.new(0, 0, -AHEAD) * light.At
+		if option == 2 then
+			-- Adhésif en croix : contre les éclats de verre, comme en course.
+			local size = light.Size
+			local span = math.max(size.X, size.Y, size.Z)
+			for _, angle in ipairs({ math.rad(35), math.rad(-35) }) do
+				add(list, block("LightTape", Vector3.new(span * 1.05, 0.06, 0.03), CFrame.new(front.Position) * CFrame.Angles(0, 0, angle), "Trim"))
+			end
+		else
+			-- Caches noirs : le phare disparaît (rallye de jour).
+			local cover = table.clone(light)
+			cover.Name = "LightCover"
+			cover.At = front
+			cover.Size = light.Size + Vector3.new(0.04, 0.04, 0.04)
+			cover.Paint = "Trim"
+			add(list, cover)
+		end
+	end
+end
+
+-- OUÏES : fentes d'aération sur les ailes avant, ou grandes prises sur les ailes arrière.
+local function sideVentParts(list: { Spec }, m: Mounts, option: number)
+	if option == 1 then
+		return
+	end
+	if option == 2 then
+		for _, dy in ipairs({ -0.15, -0.35, -0.55 }) do
+			pair(list, function(s)
+				return block("SideVent", Vector3.new(0.06, 0.08, 0.7), at(s * (m.HalfWidth + 0.03), m.BeltY + dy, -WHEEL_Z + ARCH_HALF + 0.25), "Trim")
+			end)
+		end
+	else
+		pair(list, function(s)
+			return block("SideVent", Vector3.new(0.1, 0.55, 1.1), at(s * (m.HalfWidth + 0.04), m.BeltY - 0.45, WHEEL_Z - ARCH_HALF - 0.75), "Trim")
+		end)
+	end
+end
+
+-- FILET DE VITRE : côté pilote, le filet de sécurité des voitures de course.
+local function windowNetParts(list: { Spec }, c: Cabin, option: number)
+	if option == 1 then
+		return
+	end
+	local x = -(c.HalfWidth + 0.03)
+	local bottom, top = c.BaseY + 0.15, c.TopY - 0.15
+	local front, back = c.RoofFrontZ + 0.15, c.RoofFrontZ + 1.35
+	local color = if option == 3 then NET_RED else nil
+	local function strand(size: Vector3, position: Vector3)
+		local spec = block("WindowNet", size, CFrame.new(position), "Trim")
+		spec.Color = color
+		add(list, spec)
+	end
+	for _, t in ipairs({ 0, 1 / 3, 2 / 3, 1 }) do
+		strand(Vector3.new(0.03, top - bottom, 0.04), Vector3.new(x, (top + bottom) / 2, front + (back - front) * t))
+	end
+	for _, t in ipairs({ 0, 0.5, 1 }) do
+		strand(Vector3.new(0.03, 0.04, back - front), Vector3.new(x, bottom + (top - bottom) * t, (front + back) / 2))
+	end
 end
 
 local function mudflapParts(list: { Spec }, option: number)
@@ -824,7 +1061,7 @@ end
 
 --[[
 	PASSE DÉTAILS, commune à tous les modèles du jeu : poignées de porte,
-	essuie-glaces, trappe à carburant, anneaux de remorquage. Petites pièces
+	essuie-glaces, trappe à carburant. Petites pièces
 	sans effet sur les rayons (game ready : voir DETAIL_NAMES).
 ]]
 local function detailParts(list: { Spec }, m: Mounts, c: Cabin)
@@ -834,12 +1071,10 @@ local function detailParts(list: { Spec }, m: Mounts, c: Cabin)
 	local shieldLength = c.RoofFrontZ - c.WindshieldFrontZ
 	local slope = math.atan2(c.TopY - c.BaseY, shieldLength)
 	pair(list, function(s)
-		return block("Wiper", Vector3.new(1.3, 0.05, 0.06), at(s * 0.7, c.BaseY + 0.1, c.WindshieldFrontZ + 0.2) * CFrame.Angles(slope, 0, s * math.rad(-6)), "Trim")
+		return block("Wiper", Vector3.new(1.3, 0.05, 0.06), at(s * 0.7, c.BaseY + 0.1, c.WindshieldFrontZ + 0.2) * CFrame.Angles(-slope, 0, s * math.rad(-6)), "Trim")
 	end)
 	-- Trappe à carburant : sur l'aile arrière droite, tournée vers le côté.
 	add(list, { Name = "FuelCap", Shape = "Cylinder", Size = Vector3.new(0.04, 0.42, 0.42), At = at(m.HalfWidth + 0.02, m.BeltY - 0.3, WHEEL_Z + 0.1), Paint = "Chrome" })
-	add(list, block("TowHook", Vector3.new(0.12, 0.26, 0.26), at(1.35, m.BottomY + 0.3, m.NoseZ - 0.12), "Accent"))
-	add(list, block("TowHook", Vector3.new(0.12, 0.26, 0.26), at(-1.35, m.BottomY + 0.3, m.TailZ + 0.12), "Accent"))
 end
 
 --------------------------------------------------------------------------------
@@ -862,11 +1097,11 @@ CarBodies.ZONES = {
 	{ Key = "Roof", Name = "Toit", Parts = { "Roof", "RoofScoop", "SharkFin" } },
 	{ Key = "Pillars", Name = "Montants", Parts = { "Pillar" } },
 	{ Key = "Wing", Name = "Aileron", Parts = { "Wing", "WingPost", "WingPlate", "Spoiler" } },
-	{ Key = "Bumpers", Name = "Boucliers", Parts = { "Grille", "Valance", "Diffuser", "DiffuserFin", "Lip", "Splitter", "SkidPlate", "Canard", "RearPanel", "Intake" } },
+	{ Key = "Bumpers", Name = "Boucliers", Parts = { "Grille", "Valance", "Diffuser", "DiffuserFin", "Lip", "Splitter", "SkidPlate", "Canard", "RearPanel", "Intake", "Moustache", "GrilleMesh", "GrilleFrame" } },
 	{ Key = "Skirts", Name = "Bas de caisse", Parts = { "Skirt", "FlareLip", "SideSkirt", "SideBlade" } },
 	{ Key = "Mirrors", Name = "Rétroviseurs", Parts = { "Mirror", "MirrorArm" } },
 	{ Key = "Mudflaps", Name = "Bavettes", Parts = { "Mudflap" } },
-	{ Key = "Details", Name = "Accessoires", Parts = { "Vent", "Louver", "LampBar", "SpotLampRim", "Antenna", "DoorHandle", "Wiper" } },
+	{ Key = "Details", Name = "Accessoires", Parts = { "Vent", "Louver", "LampBar", "SpotLampRim", "Antenna", "DoorHandle", "Wiper", "SideVent", "LightCover", "SunStrip" } },
 } :: { Zone }
 
 local zoneByPart: { [string]: string } = {}
@@ -943,8 +1178,10 @@ end
 
 -- Petites pièces de détail (game ready : hors des rayons, sans ombre).
 local DETAIL_NAMES: { [string]: boolean } = {
-	DoorHandle = true, Wiper = true, FuelCap = true, TowHook = true, Antenna = true,
-	MirrorArm = true, ExhaustTip = true, DiffuserFin = true, Mudflap = true,
+	DoorHandle = true, Wiper = true, FuelCap = true, TowHook = true, TowStrap = true, Antenna = true,
+	MirrorArm = true, ExhaustTip = true, DiffuserFin = true, Mudflap = true, HoodPin = true,
+	GrilleBar = true, GrilleMesh = true, GrilleFrame = true, LightTape = true, LightCover = true,
+	SideVent = true, WindowNet = true, Canard = true, Moustache = true, SunStrip = true,
 }
 
 local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
@@ -999,6 +1236,11 @@ local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 	elseif paint == "Accent" then
 		part.Color = ACCENT
 		part:SetAttribute(BASE_COLOR_ATTRIBUTE, ACCENT)
+	end
+	local own = spec.Color
+	if own then
+		part.Color = own
+		part:SetAttribute(BASE_COLOR_ATTRIBUTE, own)
 	end
 	-- Game ready : les petits détails ne gênent ni les rayons (numéros,
 	-- bandes, sponsors) ni l'éclairage (pas d'ombre).
@@ -1128,10 +1370,23 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 		end
 		skirtParts(specs, mounts, option("Skirts"))
 		diffuserParts(specs, mounts, option("Diffuser"))
-		local exhaustX, exhaustY = exhaustParts(specs, mounts, option("Exhaust"))
+		local exhaustX, exhaustY, exhaustZ = exhaustParts(specs, mounts, option("Exhaust"))
 		car:SetAttribute("ExhaustX", exhaustX)
 		car:SetAttribute("ExhaustY", exhaustY)
+		car:SetAttribute("ExhaustZ", exhaustZ)
 		mudflapParts(specs, option("Mudflaps"))
+		-- Habillages ajustés aux pièces déjà posées (calandre, phares), puis le reste.
+		lightCoverParts(specs, option("LightCovers"))
+		grilleParts(specs, option("Grille"))
+		moustacheParts(specs, mounts, option("Moustache"))
+		canardParts(specs, mounts, option("Canards"))
+		hoodPinParts(specs, mounts, option("HoodPins"))
+		towParts(specs, mounts, option("Tow"))
+		sideVentParts(specs, mounts, option("SideVents"))
+		if cab then
+			sunStripParts(specs, cab, option("SunStrip"))
+			windowNetParts(specs, cab, option("WindowNet"))
+		end
 	end
 	-- Game ready : un budget de pièces par voiture (six voitures à l'écran).
 	if #specs > PART_BUDGET and RunService:IsStudio() then

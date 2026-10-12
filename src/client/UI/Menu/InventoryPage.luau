@@ -172,8 +172,14 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 	end
 
 	-- Les pièces que ce modèle prend (avec la carrosserie de la voiture : jantes et accessoires).
+	local accessoriesTitled = false
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		if CarBodies.HasSlot(body, slot.Key) and (not ownBody or slot.Key == "Rims" or slot.Accessory) then
+			if slot.Accessory and not accessoriesTitled then
+				accessoriesTitled = true
+				b:Section("Accessoires")
+				b:Text("Échappement, moustache, calandre, caches-phares... : sur n'importe quelle carrosserie, même celle de ta voiture.", 12, Widgets.COLOR_DIM)
+			end
 			local current = (livery :: any)[slot.Key] or 1
 			b:Text(Format.Upper(slot.Name), 13, Theme.YELLOW)
 			local optionNames = {}

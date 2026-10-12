@@ -185,6 +185,7 @@ export type Owned = { [string]: boolean }
 
 export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
 	| "Mirrors" | "Roof" | "Skirts" | "Diffuser" | "Exhaust" | "Mudflaps"
+	| "Moustache" | "Grille" | "Canards" | "SunStrip" | "HoodPins" | "Tow" | "LightCovers" | "SideVents" | "WindowNet"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -261,6 +262,25 @@ Progression.ITEMS = {
 	{ Kind = "Exhaust", Index = 2, Requirement = { Level = 4 } }, -- Double
 	{ Kind = "Exhaust", Index = 3, Requirement = { Item = "part_exhaust_cannon" } }, -- Canon
 	{ Kind = "Mudflaps", Index = 3, Requirement = { Level = 7 } }, -- Longues
+	{ Kind = "Exhaust", Index = 4, Requirement = { Level = 9 } }, -- Quadruple
+	{ Kind = "Exhaust", Index = 5, Requirement = { Level = 12 } }, -- Latéral
+	{ Kind = "Exhaust", Index = 6, Requirement = { Level = 7 } }, -- Relevé
+	{ Kind = "Exhaust", Index = 7, Requirement = { Item = "part_exhaust_titanium" } }, -- Titane
+	{ Kind = "Moustache", Index = 3, Requirement = { Level = 4 } }, -- Lame
+	{ Kind = "Moustache", Index = 4, Requirement = { Level = 8 } }, -- Chromée
+	{ Kind = "Moustache", Index = 5, Requirement = { Item = "part_moustache_double" } }, -- Double
+	{ Kind = "Grille", Index = 2, Requirement = { Level = 3 } }, -- Nid d'abeille
+	{ Kind = "Grille", Index = 3, Requirement = { Level = 6 } }, -- Barres chromées
+	{ Kind = "Grille", Index = 4, Requirement = { Level = 9 } }, -- Grillage rallye
+	{ Kind = "Canards", Index = 3, Requirement = { Level = 8 } }, -- Doubles
+	{ Kind = "SunStrip", Index = 4, Requirement = { Level = 5 } }, -- Couleur caisse
+	{ Kind = "HoodPins", Index = 2, Requirement = { Level = 4 } }, -- Chromées
+	{ Kind = "Tow", Index = 2, Requirement = { Level = 3 } }, -- Sangles jaunes
+	{ Kind = "Tow", Index = 3, Requirement = { Level = 6 } }, -- Sangles bleues
+	{ Kind = "LightCovers", Index = 2, Requirement = { Level = 5 } }, -- Adhésif en croix
+	{ Kind = "LightCovers", Index = 3, Requirement = { Wins = 1 } }, -- Caches noirs
+	{ Kind = "SideVents", Index = 3, Requirement = { Level = 11 } }, -- Prises arrière
+	{ Kind = "WindowNet", Index = 3, Requirement = { AnyMedal = 3 } }, -- Rouge
 } :: { Item }
 
 function Progression.ItemFor(kind: Kind, index: number): Item?
@@ -417,7 +437,11 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 		result.Paints = paints
 	end
 	-- Modèle et pièces (CarBodies.luau) : le champ porte le nom de sa sorte.
-	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" } :: { Kind }) do
+	for _, kind in ipairs({
+		"Body", "Wing", "Bumper", "Hood", "Flares", "Rims",
+		"Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps",
+		"Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet",
+	} :: { Kind }) do
 		if result[kind] ~= nil then
 			keep(kind, kind)
 		end
