@@ -153,7 +153,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	fill.Parent = track
 	self.XpFill = fill
 
-	local car = Widgets.Label(panel, "Peinture pièce par pièce : menu C › INVENTAIRE", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+	local car = Widgets.Label(panel, "Peinture par pièce et accessoires : menu C › INVENTAIRE", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
 	car.Position = UDim2.fromOffset(16, 82)
 	car.Size = UDim2.new(1, -32, 0, 18)
 
@@ -233,13 +233,18 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 		-- 0 : la carrosserie de la voiture, puis chaque modèle.
 		change("Body", #CarBodies.LIST + 1, direction, 0)
 	end)
+	-- Les pièces principales ; les accessoires se choisissent dans le menu (INVENTAIRE).
 	self.SlotLabels = {}
-	for index, slot in ipairs(CarBodies.SLOTS) do
-		self.SlotLabels[slot.Key] = stepper(bodyY + index * BODY_ROW, slot.Name, function(direction)
-			change(slot.Key, #slot.Options, direction)
-		end)
+	local rows = 0
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		if not slot.Accessory then
+			rows += 1
+			self.SlotLabels[slot.Key] = stepper(bodyY + rows * BODY_ROW, slot.Name, function(direction)
+				change(slot.Key, #slot.Options, direction)
+			end)
+		end
 	end
-	local setupY = bodyY + (#CarBodies.SLOTS + 1) * BODY_ROW + 10
+	local setupY = bodyY + (rows + 1) * BODY_ROW + 10
 
 	local setup = Widgets.Button(panel, "RÉGLAGES DE LA VOITURE (P)", function()
 		callbacks.OpenSetup()
@@ -293,8 +298,8 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 	end
 	local body = CarBodies.Get(livery.Body)
 	for _, slot in ipairs(CarBodies.SLOTS) do
-		-- Carrosserie de la voiture (Body = 0) : ses pièces sont à elle, seules les jantes comptent.
-		if CarBodies.HasSlot(body, slot.Key) and (livery.Body ~= 0 or slot.Key == "Rims") then
+		-- Carrosserie de la voiture (Body = 0) : ses pièces sont à elle ; jantes et accessoires restent au joueur.
+		if CarBodies.HasSlot(body, slot.Key) and (livery.Body ~= 0 or slot.Key == "Rims" or slot.Accessory) then
 			table.insert(checks, { Kind = slot.Key :: any, Index = (livery :: any)[slot.Key] })
 		end
 	end
@@ -391,7 +396,9 @@ function Garage:_refresh()
 	plain(self.BodyLabel, bodyUnlocked)
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		local label = self.SlotLabels[slot.Key]
-		if ownBody and slot.Key ~= "Rims" then
+		if not label then
+			continue -- accessoire : choisi dans le menu
+		elseif ownBody and slot.Key ~= "Rims" then
 			label.Text = "De la voiture"
 			plain(label, true)
 		elseif CarBodies.HasSlot(body, slot.Key) then

@@ -57,6 +57,13 @@ export type Livery = {
 	Hood: number,
 	Flares: number,
 	Rims: number,
+	-- Accessoires (CarBodies.SLOTS : Accessory), toujours au choix du joueur.
+	Mirrors: number,
+	Roof: number,
+	Skirts: number,
+	Diffuser: number,
+	Exhaust: number,
+	Mudflaps: number,
 	-- Peinture par zone (CarBodies.ZONES) : indice dans COLORS ; zone absente = d'origine.
 	Paints: { [string]: number },
 	Pattern: number, -- Livery.PATTERNS (1 = aucun)
@@ -174,6 +181,12 @@ function Livery.Default(userId: number): Livery
 		Hood = 1,
 		Flares = 1,
 		Rims = 1,
+		Mirrors = 1,
+		Roof = 1,
+		Skirts = 1,
+		Diffuser = 1,
+		Exhaust = 1,
+		Mudflaps = 1,
 		Paints = {},
 		Pattern = 1,
 		PatternColor = 4, -- noir
@@ -304,8 +317,14 @@ function Livery.Key(livery: Livery): string
 		local chosen = if livery.Paints then livery.Paints[zone.Key] else nil
 		table.insert(paints, tostring(chosen or 0))
 	end
+	local accessories = {}
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		if slot.Accessory then
+			table.insert(accessories, tostring((livery :: any)[slot.Key] or 1))
+		end
+	end
 	return string.format(
-		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s|%d/%d/%d",
+		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s|%d/%d/%d|%s",
 		livery.Color,
 		livery.Number,
 		livery.Stripes,
@@ -322,7 +341,8 @@ function Livery.Key(livery: Livery): string
 		table.concat(paints, ","),
 		livery.SponsorHood or 1,
 		livery.SponsorDoors or 1,
-		livery.SponsorRoof or 1
+		livery.SponsorRoof or 1,
+		table.concat(accessories, "/")
 	)
 end
 

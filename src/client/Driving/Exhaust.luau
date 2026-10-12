@@ -212,8 +212,15 @@ end
 
 -- La sortie, selon la carrosserie (elle peut changer au garage).
 function Exhaust:_place()
-	local z = if self.Model then self.Model:GetAttribute("ExhaustZ") else nil
-	self.Attachment.Position = Vector3.new(EXHAUST_X, EXHAUST_Y, if type(z) == "number" then z else DEFAULT_Z)
+	local model = self.Model
+	local x = if model then model:GetAttribute("ExhaustX") else nil
+	local y = if model then model:GetAttribute("ExhaustY") else nil
+	local z = if model then model:GetAttribute("ExhaustZ") else nil
+	self.Attachment.Position = Vector3.new(
+		if type(x) == "number" then x else EXHAUST_X,
+		if type(y) == "number" then y else EXHAUST_Y,
+		if type(z) == "number" then z else DEFAULT_Z
+	)
 end
 
 local function playOne(sounds: { Sound }, pitchSpread: number)

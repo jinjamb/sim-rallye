@@ -50,7 +50,24 @@
 	Progression.luau) et appliqué partout où la livrée l'est
 	(LiveryPainter.Apply appelle CarBodies.Apply en premier).
 
-	CONSTRUCTION : les pièces sont sans masse, sans collision, soudées au
+	CONSTRUCTION, en cinq passes :
+		1 VOLUMES     la caisse (lowerBody) : caisse centrale, portes, ailes,
+		              coins ; les roues restent visibles ;
+		2 SILHOUETTE  nez et coffre plongeants, habitacle (cabin), arrière
+		              incliné (slopedRear) : ce qui fait reconnaître le modèle ;
+		3 STRUCTURE   montants, ailes bombées, prises d'air, persiennes ;
+		4 DÉTAILS     phares, calandre, feux, puis les pièces choisies
+		              (aileron, bouclier, capot, ailes, accessoires) et les
+		              détails communs (poignées, essuie-glaces, trappe à
+		              carburant, anneaux de remorquage : detailParts) ;
+		5 GAME READY  petites pièces hors des rayons et sans ombre
+		              (DETAIL_NAMES), budget de pièces (PART_BUDGET), tout
+		              sans masse ni collision.
+	ACCESSOIRES (emplacements Accessory) : rétroviseurs, toit, bas de caisse,
+	arrière, échappement, bavettes. Ils restent au choix du joueur même sur la
+	carrosserie de sa voiture.
+
+	Les pièces sont sans masse, sans collision, soudées au
 	châssis. La peinture de la livrée se pose sur celles marquées
 	« LiveryPaint » (comme sur le gabarit). Changer de modèle masque la
 	carrosserie importée (elle est gardée, pour revenir à l'Origine) et le
@@ -61,6 +78,7 @@
 ]]
 
 local PhysicsService = game:GetService("PhysicsService")
+local RunService = game:GetService("RunService")
 
 local BodyKits = require(script.Parent.BodyKits)
 
@@ -73,6 +91,7 @@ local HEAD = Color3.fromRGB(255, 250, 232)
 local TAIL = Color3.fromRGB(255, 38, 52)
 local LAMP = Color3.fromRGB(255, 232, 150)
 local CHROME = Color3.fromRGB(200, 205, 215)
+local ACCENT = Color3.fromRGB(220, 30, 40) -- anneaux de remorquage, rouges comme en rallye
 
 local FOLDER = "CustomBody"
 local PAINT_ATTRIBUTE = "LiveryPaint" -- comme LiveryPainter
@@ -81,8 +100,9 @@ local HIDDEN_ATTRIBUTE = "BodyTransparency" -- transparence d'origine d'une piè
 local ZONE_ATTRIBUTE = "PaintZone" -- zone de peinture de la pièce (ZONES)
 local BASE_COLOR_ATTRIBUTE = "BaseColor" -- couleur d'origine d'une pièce non peinte (garnitures)
 local CAR_COLLISION_GROUP = "Cars" -- CarService : les rayons des autres voitures traversent
+local PART_BUDGET = 140 -- pièces par carrosserie au plus (alerte dans Studio au-delà)
 
-type Paint = "Body" | "Trim" | "Glass" | "Head" | "Tail" | "Lamp" | "Chrome"
+type Paint = "Body" | "Trim" | "Glass" | "Head" | "Tail" | "Lamp" | "Chrome" | "Accent"
 type Shape = "Block" | "Wedge" | "Cylinder"
 export type Spec = { Name: string, Shape: Shape?, Size: Vector3, At: CFrame, Paint: Paint }
 
@@ -109,11 +129,14 @@ export type Body = {
 	Custom: boolean, -- false : la carrosserie importée du gabarit
 	Slots: { string }, -- emplacements de pièces proposés
 	Mounts: Mounts?,
+	Cabin: Cabin?, -- l'habitacle (rétroviseurs, toit, essuie-glaces : passe DÉTAILS)
 	Parts: { Spec },
 }
 
 export type Option = { Name: string }
-export type Slot = { Key: string, Name: string, Options: { Option } }
+-- Accessory : un accessoire, toujours au choix du joueur, même quand il garde
+-- la carrosserie de sa voiture (CarModels.luau : Design).
+export type Slot = { Key: string, Name: string, Options: { Option }, Accessory: boolean? }
 
 --------------------------------------------------------------------------------
 -- Petits constructeurs de description
@@ -241,10 +264,7 @@ local function cabin(list: { Spec }, c: Cabin)
 	add(list, block("Roof", Vector3.new(width, 0.24, roofLength), at(0, c.TopY + 0.12, c.RoofFrontZ + roofLength / 2), "Body"))
 	add(list, block("Window", Vector3.new(width - 0.1, height, roofLength), at(0, midY, c.RoofFrontZ + roofLength / 2), "Glass"))
 	add(list, block("Pillar", Vector3.new(width + 0.02, height, 0.3), at(0, midY, c.RoofFrontZ + roofLength * 0.48), "Body"))
-	-- Rétroviseurs.
-	pair(list, function(s)
-		return block("Mirror", Vector3.new(0.45, 0.28, 0.5), at(s * (c.HalfWidth + 0.25), c.BaseY + 0.55, c.RoofFrontZ - 0.3), "Trim")
-	end)
+	-- Les rétroviseurs sont un emplacement (Mirrors) : passe DÉTAILS.
 end
 
 -- Arrière incliné (hayon, lunette, fastback) : coin retourné, descendant vers l'arrière.
@@ -291,8 +311,9 @@ local function kaze(): Body
 		Name = "Kaze",
 		Description = "citadine WRC moderne à hayon",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -330,8 +351,9 @@ local function yama(): Body
 		Name = "Yama",
 		Description = "berline trois volumes, années 70",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -376,8 +398,9 @@ local function raijin(): Body
 		Name = "Raijin",
 		Description = "coupé en coin des années 80, ailes larges",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -414,8 +437,9 @@ local function hayate(): Body
 		Name = "Hayate",
 		Description = "berline de rallye, nez plongeant (façon Evo)",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -451,8 +475,9 @@ local function hoshi(): Body
 		Name = "Hoshi",
 		Description = "berline de rallye à phares ronds (façon Impreza)",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -484,8 +509,9 @@ local function tora(): Body
 		Name = "Tora",
 		Description = "citadine compacte moderne, porte-à-faux courts",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -524,8 +550,9 @@ local function kumo(): Body
 		Name = "Kumo",
 		Description = "bombe à moteur central des années 80",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -562,8 +589,9 @@ local function ryu(): Body
 		Name = "Ryu",
 		Description = "coupé long et bas des années 80, quatre phares ronds",
 		Custom = true,
-		Slots = { "Wing", "Bumper", "Hood", "Rims" },
+		Slots = { "Wing", "Bumper", "Hood", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" },
 		Mounts = m,
+		Cabin = c,
 		Parts = list,
 	}
 end
@@ -598,6 +626,13 @@ CarBodies.SLOTS = {
 	{ Key = "Hood", Name = "Capot", Options = { { Name = "Lisse" }, { Name = "Prises d'air" }, { Name = "Écope" }, { Name = "Rampe de phares" } } },
 	{ Key = "Flares", Name = "Ailes", Options = { { Name = "D'origine" }, { Name = "Élargies" } } },
 	{ Key = "Rims", Name = "Jantes", Options = { { Name = "Or" }, { Name = "Noires" }, { Name = "Blanches" }, { Name = "Chrome" }, { Name = "Sakura" }, { Name = "Néon" } } },
+	-- Accessoires : au choix du joueur, même sur la carrosserie de sa voiture.
+	{ Key = "Mirrors", Name = "Rétroviseurs", Accessory = true, Options = { { Name = "Route" }, { Name = "Course" }, { Name = "Rallye" } } },
+	{ Key = "Roof", Name = "Toit", Accessory = true, Options = { { Name = "Lisse" }, { Name = "Écope" }, { Name = "Aileron de requin" }, { Name = "Antenne" } } },
+	{ Key = "Skirts", Name = "Bas de caisse", Accessory = true, Options = { { Name = "D'origine" }, { Name = "Jupes" }, { Name = "Lames" } } },
+	{ Key = "Diffuser", Name = "Arrière", Accessory = true, Options = { { Name = "D'origine" }, { Name = "Diffuseur" }, { Name = "Diffuseur course" } } },
+	{ Key = "Exhaust", Name = "Échappement", Accessory = true, Options = { { Name = "Simple" }, { Name = "Double" }, { Name = "Canon" } } },
+	{ Key = "Mudflaps", Name = "Bavettes", Accessory = true, Options = { { Name = "Aucune" }, { Name = "Rallye" }, { Name = "Longues" } } },
 } :: { Slot }
 
 -- Couleurs des jantes : le cercle (Rim) et les branches (Spoke) des roues du gabarit.
@@ -694,6 +729,120 @@ local function flareParts(list: { Spec }, m: Mounts, option: number)
 end
 
 --------------------------------------------------------------------------------
+-- Accessoires (emplacements Accessory) et passe DÉTAILS
+--------------------------------------------------------------------------------
+
+local function mirrorParts(list: { Spec }, c: Cabin, option: number)
+	local y = c.BaseY + 0.55
+	local z = c.RoofFrontZ - 0.3
+	pair(list, function(s)
+		local x = s * (c.HalfWidth + 0.25)
+		if option == 2 then
+			-- Course : petite coque profilée, peinte.
+			return block("Mirror", Vector3.new(0.34, 0.2, 0.62), at(x, y, z) * CFrame.Angles(0, s * math.rad(-8), 0), "Body")
+		elseif option == 3 then
+			-- Rallye : grande coque, bien écartée.
+			return block("Mirror", Vector3.new(0.55, 0.36, 0.42), at(s * (c.HalfWidth + 0.42), y, z), "Trim")
+		end
+		return block("Mirror", Vector3.new(0.45, 0.28, 0.5), at(x, y, z), "Trim")
+	end)
+	if option == 3 then
+		pair(list, function(s)
+			return block("MirrorArm", Vector3.new(0.34, 0.06, 0.08), at(s * (c.HalfWidth + 0.15), y - 0.1, z), "Trim")
+		end)
+	end
+end
+
+local function roofParts(list: { Spec }, c: Cabin, option: number)
+	local top = c.TopY + 0.24
+	if option == 2 then
+		-- Écope : l'air frais de l'habitacle, à l'avant du toit.
+		add(list, block("RoofScoop", Vector3.new(1.1, 0.26, 1.0), at(0, top + 0.13, c.RoofFrontZ + 0.7), "Body"))
+		add(list, block("Vent", Vector3.new(0.9, 0.16, 0.06), at(0, top + 0.13, c.RoofFrontZ + 0.18), "Trim"))
+	elseif option == 3 then
+		-- Aileron de requin : la dérive de toit des voitures de course.
+		add(list, wedge("SharkFin", Vector3.new(0.1, 0.45, 1.5), at(0, top + 0.22, (c.RoofFrontZ + c.RoofRearZ) / 2 + 0.3) * FLIP, "Body"))
+	elseif option == 4 then
+		add(list, block("Antenna", Vector3.new(0.05, 1.3, 0.05), at(0.8, top + 0.65, c.RoofRearZ - 0.5), "Trim"))
+	end
+end
+
+local function skirtParts(list: { Spec }, m: Mounts, option: number)
+	local length = (WHEEL_Z - ARCH_HALF) * 2
+	if option == 2 then
+		pair(list, function(s)
+			return block("SideSkirt", Vector3.new(0.26, 0.36, length), at(s * (m.HalfWidth + 0.1), m.BottomY + 0.16, 0), "Body")
+		end)
+	elseif option == 3 then
+		pair(list, function(s)
+			return block("SideBlade", Vector3.new(0.5, 0.08, length), at(s * (m.HalfWidth + 0.15), m.BottomY + 0.02, 0), "Trim")
+		end)
+	end
+end
+
+local function diffuserParts(list: { Spec }, m: Mounts, option: number)
+	if option == 1 then
+		return
+	end
+	local race = option == 3
+	local width = if race then 5.2 else 4.2
+	add(list, block("Diffuser", Vector3.new(width, 0.2, 0.6), at(0, m.BottomY + 0.12, m.TailZ + 0.22), "Trim"))
+	local fins = if race then { -2.0, -1.0, 0, 1.0, 2.0 } else { -1.2, 0, 1.2 }
+	for _, x in ipairs(fins) do
+		add(list, block("DiffuserFin", Vector3.new(0.08, if race then 0.5 else 0.34, 0.6), at(x, m.BottomY + 0.3, m.TailZ + 0.22), "Trim"))
+	end
+end
+
+-- Embouts d'échappement ; renvoie où sortent les flammes (Exhaust.luau) : X, Y.
+local function exhaustParts(list: { Spec }, m: Mounts, option: number): (number, number)
+	local z = m.TailZ + 0.15
+	if option == 2 then
+		pair(list, function(s)
+			return disc("ExhaustTip", 0.34, 0.45, at(s * 0.45, m.BottomY + 0.45, z), "Chrome")
+		end)
+		return 0.45, m.BottomY + 0.45
+	elseif option == 3 then
+		add(list, disc("ExhaustTip", 0.62, 0.5, at(0, m.BottomY + 0.5, z), "Chrome"))
+		return 0, m.BottomY + 0.5
+	end
+	add(list, disc("ExhaustTip", 0.36, 0.45, at(1.6, m.BottomY + 0.5, z), "Chrome"))
+	return 1.6, m.BottomY + 0.5
+end
+
+local function mudflapParts(list: { Spec }, option: number)
+	if option == 1 then
+		return
+	end
+	local long = option == 3
+	local height = if long then 1.25 else 0.95
+	for _, wheelZ in ipairs({ -WHEEL_Z, WHEEL_Z }) do
+		pair(list, function(s)
+			return block("Mudflap", Vector3.new(if long then 1.15 else 0.95, height, 0.06), at(s * 2.58, -1.95 + height / 2, wheelZ + ARCH_HALF - 0.1), "Trim")
+		end)
+	end
+end
+
+--[[
+	PASSE DÉTAILS, commune à tous les modèles du jeu : poignées de porte,
+	essuie-glaces, trappe à carburant, anneaux de remorquage. Petites pièces
+	sans effet sur les rayons (game ready : voir DETAIL_NAMES).
+]]
+local function detailParts(list: { Spec }, m: Mounts, c: Cabin)
+	pair(list, function(s)
+		return block("DoorHandle", Vector3.new(0.07, 0.1, 0.45), at(s * (m.HalfWidth + 0.02), m.BeltY - 0.22, 1.3), "Trim")
+	end)
+	local shieldLength = c.RoofFrontZ - c.WindshieldFrontZ
+	local slope = math.atan2(c.TopY - c.BaseY, shieldLength)
+	pair(list, function(s)
+		return block("Wiper", Vector3.new(1.3, 0.05, 0.06), at(s * 0.7, c.BaseY + 0.1, c.WindshieldFrontZ + 0.2) * CFrame.Angles(slope, 0, s * math.rad(-6)), "Trim")
+	end)
+	-- Trappe à carburant : sur l'aile arrière droite, tournée vers le côté.
+	add(list, { Name = "FuelCap", Shape = "Cylinder", Size = Vector3.new(0.04, 0.42, 0.42), At = at(m.HalfWidth + 0.02, m.BeltY - 0.3, WHEEL_Z + 0.1), Paint = "Chrome" })
+	add(list, block("TowHook", Vector3.new(0.12, 0.26, 0.26), at(1.35, m.BottomY + 0.3, m.NoseZ - 0.12), "Accent"))
+	add(list, block("TowHook", Vector3.new(0.12, 0.26, 0.26), at(-1.35, m.BottomY + 0.3, m.TailZ + 0.12), "Accent"))
+end
+
+--------------------------------------------------------------------------------
 -- Zones de peinture
 --------------------------------------------------------------------------------
 
@@ -710,13 +859,14 @@ CarBodies.ZONES = {
 	{ Key = "Rear", Name = "Arrière", Parts = { "Tail", "TailSlope", "Fastback", "Corner" } },
 	{ Key = "Doors", Name = "Portières", Parts = { "Door" } },
 	{ Key = "Fenders", Name = "Ailes", Parts = { "Fender", "Arch", "Flare" } },
-	{ Key = "Roof", Name = "Toit", Parts = { "Roof" } },
+	{ Key = "Roof", Name = "Toit", Parts = { "Roof", "RoofScoop", "SharkFin" } },
 	{ Key = "Pillars", Name = "Montants", Parts = { "Pillar" } },
 	{ Key = "Wing", Name = "Aileron", Parts = { "Wing", "WingPost", "WingPlate", "Spoiler" } },
-	{ Key = "Bumpers", Name = "Boucliers", Parts = { "Grille", "Valance", "Diffuser", "Lip", "Splitter", "SkidPlate", "Canard", "RearPanel", "Intake" } },
-	{ Key = "Skirts", Name = "Bas de caisse", Parts = { "Skirt", "FlareLip" } },
-	{ Key = "Mirrors", Name = "Rétroviseurs", Parts = { "Mirror" } },
-	{ Key = "Details", Name = "Accessoires", Parts = { "Vent", "Louver", "LampBar", "SpotLampRim" } },
+	{ Key = "Bumpers", Name = "Boucliers", Parts = { "Grille", "Valance", "Diffuser", "DiffuserFin", "Lip", "Splitter", "SkidPlate", "Canard", "RearPanel", "Intake" } },
+	{ Key = "Skirts", Name = "Bas de caisse", Parts = { "Skirt", "FlareLip", "SideSkirt", "SideBlade" } },
+	{ Key = "Mirrors", Name = "Rétroviseurs", Parts = { "Mirror", "MirrorArm" } },
+	{ Key = "Mudflaps", Name = "Bavettes", Parts = { "Mudflap" } },
+	{ Key = "Details", Name = "Accessoires", Parts = { "Vent", "Louver", "LampBar", "SpotLampRim", "Antenna", "DoorHandle", "Wiper" } },
 } :: { Zone }
 
 local zoneByPart: { [string]: string } = {}
@@ -750,6 +900,7 @@ end
 --------------------------------------------------------------------------------
 
 -- Ce qui décide du look : le modèle et ses pièces (les champs de la livrée).
+-- Les accessoires (Mirrors, Roof...) sont lus par leur nom d'emplacement s'ils sont là.
 export type Design = { Body: number, Wing: number, Bumper: number, Hood: number, Flares: number, Rims: number }
 
 function CarBodies.Get(index: number): Body
@@ -780,11 +931,21 @@ function CarBodies.ShapeKey(design: Design): string
 	if not body.Custom then
 		return body.Id
 	end
-	local function part(key: string): number
-		return if CarBodies.HasSlot(body, key) then (design :: any)[key] or 1 else 1
+	-- Tous les emplacements sauf les jantes (qui ne changent pas la forme).
+	local parts = {}
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		if slot.Key ~= "Rims" then
+			table.insert(parts, tostring(if CarBodies.HasSlot(body, slot.Key) then (design :: any)[slot.Key] or 1 else 1))
+		end
 	end
-	return string.format("%s/%d/%d/%d/%d", body.Id, part("Wing"), part("Bumper"), part("Hood"), part("Flares"))
+	return body.Id .. "/" .. table.concat(parts, "/")
 end
+
+-- Petites pièces de détail (game ready : hors des rayons, sans ombre).
+local DETAIL_NAMES: { [string]: boolean } = {
+	DoorHandle = true, Wiper = true, FuelCap = true, TowHook = true, Antenna = true,
+	MirrorArm = true, ExhaustTip = true, DiffuserFin = true, Mudflap = true,
+}
 
 local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 	local part: BasePart
@@ -835,6 +996,15 @@ local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 	elseif paint == "Chrome" then
 		part.Color = CHROME
 		part.Material = Enum.Material.Metal
+	elseif paint == "Accent" then
+		part.Color = ACCENT
+		part:SetAttribute(BASE_COLOR_ATTRIBUTE, ACCENT)
+	end
+	-- Game ready : les petits détails ne gênent ni les rayons (numéros,
+	-- bandes, sponsors) ni l'éclairage (pas d'ombre).
+	if DETAIL_NAMES[spec.Name] then
+		part.CanQuery = false
+		part.CastShadow = false
 	end
 	if PhysicsService:IsCollisionGroupRegistered(CAR_COLLISION_GROUP) then
 		part.CollisionGroup = CAR_COLLISION_GROUP
@@ -921,6 +1091,9 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	car:SetAttribute("HeadLightZ", if m then m.NoseZ - 0.12 else nil)
 	-- Sponsor du capot (LiveryPainter) : au milieu du capot.
 	car:SetAttribute("HoodZ", if m then (m.HoodFrontZ + m.HoodRearZ) / 2 else nil)
+	-- Embouts d'échappement (Exhaust.luau) : posés plus bas, selon l'accessoire choisi.
+	car:SetAttribute("ExhaustX", nil)
+	car:SetAttribute("ExhaustY", nil)
 
 	local old = car:FindFirstChild(FOLDER)
 	if old then
@@ -946,6 +1119,23 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 		bumperParts(specs, mounts, option("Bumper"))
 		hoodParts(specs, mounts, option("Hood"))
 		flareParts(specs, mounts, option("Flares"))
+		-- Accessoires.
+		local cab = body.Cabin
+		if cab then
+			mirrorParts(specs, cab, option("Mirrors"))
+			roofParts(specs, cab, option("Roof"))
+			detailParts(specs, mounts, cab)
+		end
+		skirtParts(specs, mounts, option("Skirts"))
+		diffuserParts(specs, mounts, option("Diffuser"))
+		local exhaustX, exhaustY = exhaustParts(specs, mounts, option("Exhaust"))
+		car:SetAttribute("ExhaustX", exhaustX)
+		car:SetAttribute("ExhaustY", exhaustY)
+		mudflapParts(specs, option("Mudflaps"))
+	end
+	-- Game ready : un budget de pièces par voiture (six voitures à l'écran).
+	if #specs > PART_BUDGET and RunService:IsStudio() then
+		warn(string.format("[CarBodies] %s : %d pièces (budget %d)", body.Name, #specs, PART_BUDGET))
 	end
 	local folder = Instance.new("Model")
 	folder.Name = FOLDER

@@ -144,6 +144,10 @@ Une prévision (`Weather.luau`) tient en trois valeurs : le mode (sec, pluie, va
 
 Le profil vierge déclenche le tutoriel express (`TutorialService`) : le client lance aussitôt la spéciale par défaut, au sec, sans passer par le menu, et `Tutorial.luau` guide le pilote (accélérer, tourner, frein à main, suivre le copilote jusqu'à l'arrivée). La première spéciale terminée boucle le tutoriel et rapporte des crédits et un tirage ; le menu s'ouvre ensuite. Un joueur arrivé par l'invitation d'un ami est noté comme filleul (`ReferralService`) : quand il termine sa première spéciale ou sa première course, lui et son parrain sont récompensés.
 
+## Carrosseries
+
+`shared/Vehicle/CarBodies.luau` construit chaque modèle du jeu en cinq passes : volumes (la caisse), silhouette (nez, coffre, habitacle), structure (montants, ailes bombées, prises d'air), détails (phares, calandre, feux, pièces choisies, puis poignées, essuie-glaces, trappe à carburant et anneaux de remorquage communs à tous), game ready (petites pièces hors des rayons et sans ombre, budget de pièces par voiture). Emplacements : aileron, bouclier, capot, ailes, jantes, et six accessoires qui restent au choix du joueur même sur la carrosserie de sa voiture (rétroviseurs, toit, bas de caisse, arrière, échappement, bavettes). Les accessoires se choisissent dans l'INVENTAIRE ; l'échappement choisi déplace la sortie des flammes (`ExhaustX`, `ExhaustY`).
+
 ## Peinture et motifs
 
 La livrée (`Livery.luau`) porte, en plus de la couleur principale, une couleur par zone de carrosserie (`Paints` : capot, toit, portières, boucliers…, zones définies dans `CarBodies.ZONES` et posées sur chaque pièce par l'attribut `PaintZone`) et un motif (`Pattern`, `PatternColor`). `LiveryPainter` repeint chaque zone, puis pose le motif (une `Texture` répétée par face visible) sur les pièces restées dans la couleur principale. Les images des motifs sont dans `assets/patterns/` (générées par `generate.py`) : chacune s'importe sur Roblox, et son identifiant va dans `Livery.PATTERNS` (`Image`). Tant qu'il vaut 0, le motif se choisit mais ne s'affiche pas.

@@ -184,6 +184,7 @@ export type Requirement = {
 export type Owned = { [string]: boolean }
 
 export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+	| "Mirrors" | "Roof" | "Skirts" | "Diffuser" | "Exhaust" | "Mudflaps"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -248,6 +249,18 @@ Progression.ITEMS = {
 	{ Kind = "Rims", Index = 4, Requirement = { Level = 8 } }, -- Chrome
 	{ Kind = "Rims", Index = 5, Requirement = { Item = "part_rims_sakura" } }, -- Sakura
 	{ Kind = "Rims", Index = 6, Requirement = { Item = "part_rims_neon" } }, -- Néon
+	-- Accessoires (CarBodies.SLOTS : Accessory).
+	{ Kind = "Mirrors", Index = 2, Requirement = { Level = 3 } }, -- Course
+	{ Kind = "Mirrors", Index = 3, Requirement = { Level = 6 } }, -- Rallye
+	{ Kind = "Roof", Index = 2, Requirement = { Level = 4 } }, -- Écope
+	{ Kind = "Roof", Index = 3, Requirement = { Level = 8 } }, -- Aileron de requin
+	{ Kind = "Skirts", Index = 2, Requirement = { Level = 5 } }, -- Jupes
+	{ Kind = "Skirts", Index = 3, Requirement = { Level = 10 } }, -- Lames
+	{ Kind = "Diffuser", Index = 2, Requirement = { Level = 6 } }, -- Diffuseur
+	{ Kind = "Diffuser", Index = 3, Requirement = { Wins = 3 } }, -- Diffuseur course
+	{ Kind = "Exhaust", Index = 2, Requirement = { Level = 4 } }, -- Double
+	{ Kind = "Exhaust", Index = 3, Requirement = { Item = "part_exhaust_cannon" } }, -- Canon
+	{ Kind = "Mudflaps", Index = 3, Requirement = { Level = 7 } }, -- Longues
 } :: { Item }
 
 function Progression.ItemFor(kind: Kind, index: number): Item?
@@ -404,7 +417,7 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 		result.Paints = paints
 	end
 	-- Modèle et pièces (CarBodies.luau) : le champ porte le nom de sa sorte.
-	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims" } :: { Kind }) do
+	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps" } :: { Kind }) do
 		if result[kind] ~= nil then
 			keep(kind, kind)
 		end
