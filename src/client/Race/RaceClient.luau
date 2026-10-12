@@ -23,6 +23,7 @@ local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
@@ -77,6 +78,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Drift: any, -- Roi du drift (ChallengeService)
 	Team: any, -- écurie (TeamService)
 	Session: any, -- session : publique ou privée, son code (SessionService)
+	Championship: any, -- championnats : rallye en cours, rallyes, classements
 	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
@@ -114,6 +116,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Drift = nil
 	self.Team = nil
 	self.Session = nil
+	self.Championship = nil
 	self.Achievements = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
@@ -137,6 +140,14 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Team" then
 			if type(payload) == "table" then
 				Remotes.TeamAction:FireServer(payload.Action, payload)
+			end
+		elseif action == "Championship" then
+			if type(payload) == "table" then
+				Remotes.ChampionshipAction:FireServer(payload.Action, payload)
+				-- Courir ou reprendre : la voiture apparaît au départ, le menu se ferme.
+				if payload.Action == "Start" or payload.Action == "Continue" then
+					self.Menu:SetOpen(false)
+				end
 			end
 		elseif action == "Session" then
 			-- Inviter : l'invitation de Roblox, côté client ; le reste : SessionService.
@@ -261,6 +272,7 @@ function RaceClient:_refreshMenu()
 		Drift = self.Drift,
 		Team = self.Team,
 		Session = self.Session,
+		Championship = self.Championship,
 		Achievements = self.Achievements,
 	})
 end
@@ -567,6 +579,49 @@ function RaceClient:SetAchievements(earned: any, news: any)
 				Banner.Show("TROPHÉE", achievement.Name .. "  ·  " .. achievement.Description, Theme.ACCENT, 4.5, true)
 			end
 		end
+	end
+end
+
+-- Championnats : l'état (menu) et les annonces du rallye en cours.
+function RaceClient:SetChampionship(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Championship = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	local leg, done, finished, penalty = news.Leg, news.LegDone, news.Finished, news.Penalty
+	if type(leg) == "table" then
+		local weather = Weather.Sanitize(leg.Weather)
+		Banner.Show(
+			string.format("SPÉCIALE %d/%d", leg.Index, leg.Count),
+			string.format("%s · %s%s", tostring(leg.Name), tostring(leg.Rally), if weather == "Dry" then "" else " · " .. string.lower(Weather.MODE_NAMES[weather])),
+			Theme.ACCENT,
+			4,
+			true
+		)
+	elseif type(done) == "table" then
+		Banner.Show(
+			string.format("SPÉCIALE %d/%d TERMINÉE", done.Index, done.Count),
+			string.format("%s · cumul %s · suivante : %s dans %d s", Format.Ms(done.Ms), Format.Ms(done.Total), tostring(done.Next), done.Liaison),
+			Theme.GREEN,
+			5,
+			true
+		)
+	elseif type(finished) == "table" then
+		Banner.Show(
+			"RALLYE TERMINÉ",
+			string.format("%s · %s%s", tostring(finished.Rally), Format.Ms(finished.Total), if finished.Best then " · record perso !" else ""),
+			Theme.ACCENT,
+			6,
+			true
+		)
+	elseif type(penalty) == "table" then
+		Toast.Show(string.format("<b>+%d s de pénalité</b> · %s", penalty.Seconds, tostring(penalty.Reason)), Theme.RED)
+	elseif type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
 	end
 end
 

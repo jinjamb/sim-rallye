@@ -718,6 +718,11 @@ Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)
 	raceClient:SetAchievements(earned, news)
 end)
 
+-- Championnats : rallye en cours, rallyes, classements, annonces.
+Remotes.ChampionshipState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetChampionship(state, news)
+end)
+
 -- Session (publique ou privée, son code) : rubrique « Jouer entre amis ».
 Remotes.SessionState.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetSession(state, news)

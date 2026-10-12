@@ -103,6 +103,7 @@ export type Record = {
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
 	BonusXp: number, -- XP en plus des événements double XP (XpEvents.luau)
+	ChampionshipXp: number, -- XP des rallyes terminés (mode championnat)
 	Medals: { [string]: number },
 	Lessons: { [string]: number }, -- médaille (0 à 4) par leçon de l'école (Lessons.luau)
 }
@@ -116,6 +117,7 @@ function Progression.XpOf(record: Record): number
 		+ record.WeeklyCompleted * Progression.XP.WEEKLY
 		+ record.DailyXp
 		+ record.BonusXp
+		+ record.ChampionshipXp
 		+ record.Style // Progression.XP.STYLE_PER_XP
 	for track, tier in pairs(record.Medals) do
 		-- "stage" : la meilleure des spéciales, déjà comptée sous sa propre clé.

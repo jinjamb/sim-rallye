@@ -121,6 +121,13 @@ export type Remotes = {
 	SessionAction: RemoteEvent,
 	-- Serveur -> Client : (state, news?) { Private, Code, Players, MaxPlayers, Studio } ; news : message
 	SessionState: RemoteEvent,
+
+	-- MODE CHAMPIONNAT (ChampionshipService)
+	-- Client -> Serveur : (action: "Start" | "Continue" | "Abandon" | "State", payload { Id }?)
+	ChampionshipAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) rallye en cours, rallyes et classements ;
+	-- news : spéciale lancée, terminée, pénalité, rallye terminé, message
+	ChampionshipState: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -165,6 +172,8 @@ local RELIABLE = {
 	"Announce",
 	"SessionAction",
 	"SessionState",
+	"ChampionshipAction",
+	"ChampionshipState",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

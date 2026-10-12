@@ -84,6 +84,7 @@ function ProgressService.SnapshotOf(profile: ProfileSchema.Profile): Progression
 		WeeklyCompleted = profile.WeeklyCompleted,
 		DailyXp = profile.DailyXp,
 		BonusXp = profile.BonusXp,
+		ChampionshipXp = profile.ChampionshipXp,
 		Medals = medalsOf(profile),
 		Lessons = profile.Lessons,
 	})

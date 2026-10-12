@@ -50,6 +50,7 @@ local RollService = require(Services.RollService)
 local PassService = require(Services.PassService)
 local TeamService = require(Services.TeamService)
 local SessionService = require(Services.SessionService)
+local ChampionshipService = require(Services.ChampionshipService)
 local PaddockService = require(Services.PaddockService)
 
 -- Crochets entre services (sans dépendance circulaire entre modules).
@@ -57,6 +58,9 @@ GarageService.LiveryChanged = CarService.RefreshLivery
 EconomyService.EquippedChanged = CarService.RefreshEquipped
 EconomyService.PassPremiumGranted = PassService.OnPremium
 TeamService.Changed = CarService.RefreshTeam
+StageService.RallyLegStarted = ChampionshipService.LegStarted
+StageService.RallyLegFinished = ChampionshipService.StageFinished
+StageService.RallyPenalty = ChampionshipService.Penalty
 ProgressService.Changed = CarService.RefreshProgress
 RaceService.PodiumHandler = PaddockService.Podium :: any
 
@@ -79,6 +83,7 @@ RollService.Start()
 PassService.Start()
 TeamService.Start()
 SessionService.Start()
+ChampionshipService.Start()
 AchievementService.Start()
 
 ProfileStore.Start()

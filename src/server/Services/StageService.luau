@@ -22,6 +22,11 @@
 
 	À l'arrivée : le record (RecordService), le fantôme attendu (GhostService),
 	le résultat au joueur (RunValidated), la progression et les défis du jour.
+
+	VOITURE DE RALLYE (attribut Championship : mode championnat) : départ,
+	arrivée, retour au départ et passage refusé sont aussi signalés au mode
+	championnat, par des crochets branchés dans Main.server.luau
+	(ChampionshipService dépend, par RaceService, de ce service).
 ]]
 
 local Players = game:GetService("Players")
@@ -65,6 +70,17 @@ type Run = {
 }
 
 local runs: { [Player]: Run } = {}
+
+-- Crochets du mode championnat (branchés par Main.server.luau sur ChampionshipService).
+StageService.RallyLegStarted = function(_player: Player) end
+StageService.RallyLegFinished = function(_player: Player, _stageId: string, _ms: number) end
+StageService.RallyPenalty = function(_player: Player, _reason: string) end
+
+-- La voiture du joueur court-elle un rallye (mode championnat) ?
+local function inRally(player: Player): boolean
+	local car = workspace:FindFirstChild("Car_" .. player.UserId)
+	return car ~= nil and car:GetAttribute("Championship") ~= nil
+end
 
 -- Passage chronométré en cours (ou fini depuis moins de STYLE_GRACE s) :
 -- les points de style comptent (StyleService).
@@ -169,10 +185,16 @@ local function onFinish(player: Player, ms: number, clean: boolean, stageId: str
 	ProgressService.AddCounters(player, 1, 0)
 	EconomyService.Earn(player, Credits.REWARDS.StageRun, "Spéciale terminée")
 	stageFinished(player, clean, false)
+	if inRally(player) then
+		StageService.RallyLegFinished(player, stageId, ms)
+	end
 end
 
 local function onInvalid(player: Player, reason: string)
 	Remotes.RunValidated:FireClient(player, { Valid = false, Reason = reason })
+	if inRally(player) then
+		StageService.RallyPenalty(player, reason)
+	end
 end
 
 -- Une mesure de chaque voiture : départ, arrivée, raccourcis.
@@ -218,7 +240,10 @@ local function sample(now: number)
 				run.Running = false
 				onInvalid(player, "raccourci")
 			elseif delta < -RESTART_BACKWARD then
-				run.Running = false -- retour au départ : rien à signaler
+				run.Running = false -- retour au départ : rien à signaler (sauf en rallye)
+				if inRally(player) then
+					StageService.RallyPenalty(player, "retour au départ")
+				end
 			elseif last < finishDistance and progress >= finishDistance then
 				run.Running = false
 				local ms = math.floor((crossingTime(finishDistance) - run.StartTime) * 1000 + 0.5)
@@ -237,6 +262,9 @@ local function sample(now: number)
 			run.Running = true
 			run.Recovered = false
 			run.StartTime = crossingTime(startDistance)
+			if inRally(player) then
+				StageService.RallyLegStarted(player)
+			end
 		end
 	end
 end

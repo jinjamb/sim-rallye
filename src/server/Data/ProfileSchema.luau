@@ -81,6 +81,20 @@ export type Profile = {
 	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
 	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
 	XpBoostUntil: number, -- boost d'XP ×2 acheté (Products.luau) : actif jusqu'à cette date (os.time)
+	Championship: ChampionshipRun?, -- rallye en cours (Championships.luau), à reprendre
+	ChampBests: { [string]: number }, -- meilleur temps total (ms) par rallye et catégorie (ChampionshipService)
+	ChampionshipXp: number, -- XP gagnée à l'arrivée des rallyes, cumulée
+	ChampionshipsDone: number, -- rallyes terminés
+}
+
+export type ChampionshipRun = {
+	Id: string, -- rallye (Championships.luau)
+	Key: string, -- sa clé de classement (le rallye de la semaine change chaque semaine)
+	ClassId: string, -- catégorie de voiture, fixée au départ
+	Index: number, -- prochaine spéciale à courir (1 à n)
+	Times: { number }, -- temps de chaque spéciale courue (ms)
+	Penalty: number, -- pénalités cumulées (ms)
+	LegStarted: boolean, -- la spéciale en cours a été entamée (la reprendre coûte une pénalité)
 }
 
 export type PassState = {
@@ -93,7 +107,7 @@ export type PassState = {
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
 -- peut ajouter à ce qu'un autre serveur a écrit sans rien écraser.
-export type Counter = "StageRuns" | "Style" | "DailyXp" | "BonusXp" | "Credits" | "Rolls"
+export type Counter = "StageRuns" | "Style" | "DailyXp" | "BonusXp" | "Credits" | "Rolls" | "ChampionshipXp" | "ChampionshipsDone"
 
 function ProfileSchema.EmptyStats(): Stats
 	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
@@ -126,6 +140,10 @@ function ProfileSchema.Empty(userId: number): Profile
 		UseTeamColors = false,
 		Achievements = {},
 		Badges = {},
+		Championship = nil,
+		ChampBests = {},
+		ChampionshipXp = 0,
+		ChampionshipsDone = 0,
 		XpBoostUntil = 0,
 	}
 end
@@ -199,6 +217,33 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.WeeklyCompleted = count(data.WeeklyCompleted)
 	profile.DailyXp = count(data.DailyXp)
 	profile.BonusXp = count(data.BonusXp)
+	profile.ChampionshipXp = count(data.ChampionshipXp)
+	profile.ChampionshipsDone = count(data.ChampionshipsDone)
+	if type(data.ChampBests) == "table" then
+		for key, ms in pairs(data.ChampBests) do
+			if type(key) == "string" and type(ms) == "number" and ms > 0 then
+				profile.ChampBests[key] = math.floor(ms)
+			end
+		end
+	end
+	local run = data.Championship
+	if type(run) == "table" and type(run.Id) == "string" and type(run.Key) == "string" and type(run.ClassId) == "string" and type(run.Times) == "table" then
+		local times = {}
+		for _, ms in ipairs(run.Times) do
+			if type(ms) == "number" and ms > 0 then
+				table.insert(times, math.floor(ms))
+			end
+		end
+		profile.Championship = {
+			Id = run.Id,
+			Key = run.Key,
+			ClassId = run.ClassId,
+			Index = #times + 1, -- toujours la spéciale qui suit les temps gardés
+			Times = times,
+			Penalty = count(run.Penalty),
+			LegStarted = run.LegStarted == true,
+		}
+	end
 	if type(data.Lessons) == "table" then
 		for id, tier in pairs(data.Lessons) do
 			if type(id) == "string" and Lessons.Get(id) then

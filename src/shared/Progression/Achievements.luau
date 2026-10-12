@@ -225,6 +225,12 @@ Achievements.LIST = {
 		Announce = true,
 	},
 	{
+		Id = "first_rally",
+		Name = "Premier rallye",
+		Description = "Terminer un rallye du mode championnat.",
+		BadgeId = 0,
+	},
+	{
 		Id = "pass_complete",
 		Name = "Saison bouclée",
 		Description = "Atteindre le dernier palier du Rallye Pass.",
