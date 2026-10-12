@@ -122,7 +122,7 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	-- La spéciale : posée par le serveur au lancement (attribut Stage), sinon
 	-- celle dont le couloir passe par la voiture, sinon la spéciale par défaut.
 	local stageAttribute = model:GetAttribute("Stage")
-	local track = if Stages.Exists(stageAttribute) then Stages.Get(stageAttribute) else (Stages.FindAt(self.Chassis.Position) or Stages.Get())
+	local track = if Stages.Exists(stageAttribute) then Stages.Get(stageAttribute :: string) else (Stages.FindAt(self.Chassis.Position) or Stages.Get())
 	self.StageId = track.Id
 	local car = CarClass.new(self.Chassis, self.ClassId)
 	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))

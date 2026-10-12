@@ -55,6 +55,7 @@ export type Wallet = {
 	Equipped: { [string]: string },
 	Rolls: number?, -- tirages disponibles
 	Pity: number?, -- tirages depuis le dernier objet Usine ou plus
+	Perks: any?, -- avantages achetés (Perks.Snapshot : pass, boost, RandomRestricted...)
 }
 
 export type Context = {
