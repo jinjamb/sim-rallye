@@ -13,7 +13,7 @@
 		             même ; puis la PEINTURE PAR PIÈCE : on choisit une zone
 		             de la carrosserie (capot, toit, portières...), puis sa
 		             couleur (ou « d'origine »).
-		ÉQUIPEMENT   ses voitures, sons moteur, retours de flamme, fumées,
+		ÉQUIPEMENT   ses voitures, sons moteur, retours de flamme, phares, fumées,
 		             klaxons, célébrations :
 		             seulement ce qu'on possède, en cartes avec PORTER.
 
@@ -49,7 +49,7 @@ local CHIP_GAP = 6
 local CHIPS_PER_ROW = 3
 
 -- Équipement montré, dans l'ordre (les pièces sont choisies sur la voiture).
-local GEAR_KINDS: { Catalog.Kind } = { "Car", "Engine", "Backfire", "Smoke", "Horn", "Celebration" }
+local GEAR_KINDS: { Catalog.Kind } = { "Car", "Engine", "Backfire", "Headlight", "Smoke", "Horn", "Celebration" }
 
 -- La pastille verrouillée sur laquelle on a cliqué : sa condition, son achat.
 type Locked = { Kind: string, Index: number, Text: string }

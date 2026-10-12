@@ -50,10 +50,12 @@ local CARD_HEIGHT = ART_HEIGHT + 86
 local CARD_BUTTON_HEIGHT = 32
 
 -- Pastilles des sortes : icône et nom court.
+local CHIPS_PER_ROW = 4
 local KIND_CHIPS: { [string]: string } = {
 	Car = "🏎️ VOITURES",
 	Engine = "⚙️ MOTEURS",
 	Backfire = "🔥 FLAMMES",
+	Headlight = "💡 PHARES",
 	Smoke = "💨 FUMÉES",
 	Horn = "📯 KLAXONS",
 	Celebration = "🎉 FÊTES",
@@ -452,12 +454,18 @@ function ShopPage.Catalog(ctx: Context, b: Builder)
 		chosen = kinds[1]
 	end
 	b:Section("Objets")
-	local chips = b:Row(34)
+	-- Les pastilles, CHIPS_PER_ROW par ligne.
 	local gap = 6
-	local width = (MenuKit.CONTENT_WIDTH - gap * (#kinds - 1)) / #kinds
+	local perRow = math.min(CHIPS_PER_ROW, #kinds)
+	local width = (MenuKit.CONTENT_WIDTH - gap * (perRow - 1)) / perRow
+	local chips: Frame? = nil
 	for index, kind in ipairs(kinds) do
+		local column = (index - 1) % perRow
+		if column == 0 then
+			chips = b:Row(34)
+		end
 		local selected = kind == chosen
-		local chip = ctx.Button(chips, KIND_CHIPS[kind] or Format.Upper(Catalog.KIND_NAMES[kind]), (index - 1) * (width + gap), width, function()
+		local chip = ctx.Button(chips :: Frame, KIND_CHIPS[kind] or Format.Upper(Catalog.KIND_NAMES[kind]), column * (width + gap), width, function()
 			ctx.View.ShopKind = kind
 			ctx.Rebuild()
 		end)

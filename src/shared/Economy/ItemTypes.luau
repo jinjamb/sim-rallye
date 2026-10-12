@@ -7,7 +7,7 @@
 
 local Rarity = require(script.Parent.Rarity)
 
-export type Kind = "Car" | "Smoke" | "Horn" | "Celebration" | "Engine" | "Backfire" | "Part"
+export type Kind = "Car" | "Smoke" | "Horn" | "Celebration" | "Engine" | "Backfire" | "Headlight" | "Part"
 
 export type Item = {
 	Id: string,
@@ -23,7 +23,7 @@ export type Item = {
 	Starter: boolean?, -- exclusif au pack de démarrage (Products.luau)
 	Roll: boolean?,
 	-- Données propres à la sorte.
-	Color: Color3?, -- fumée, retour de flamme : couleur principale
+	Color: Color3?, -- fumée, retour de flamme : couleur principale ; phares : leur lumière
 	Color2: Color3?, -- fumée : seconde couleur (fumée bicolore) ; flamme : son cœur
 	Scale: number?, -- retour de flamme : taille de la gerbe (1 = normale)
 	Sound: string?, -- klaxon, retour de flamme : identifiant audio

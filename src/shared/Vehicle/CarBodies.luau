@@ -795,9 +795,10 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	car:SetAttribute("FlankPanel", if m then math.min(3.2, m.BeltY - m.BottomY - 0.15) else nil)
 	-- Sortie d'échappement (Exhaust.luau) : sous le pare-chocs arrière du modèle.
 	car:SetAttribute("ExhaustZ", if m then m.TailZ + 0.1 else nil)
-	-- Feux arrière (TailLights.luau) : juste derrière ceux du modèle.
+	-- Feux (CarLights.luau) : juste devant les phares et derrière les feux du modèle.
 	car:SetAttribute("TailLightZ", if m then m.TailZ + 0.12 else nil)
 	car:SetAttribute("TailLightY", if m then 0.1 else nil)
+	car:SetAttribute("HeadLightZ", if m then m.NoseZ - 0.12 else nil)
 
 	local old = car:FindFirstChild(FOLDER)
 	if old then

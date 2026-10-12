@@ -31,7 +31,8 @@
 	Sur le dur : un roulement de pneus. Sur glace : rien.
 	VENT : seulement pour sa propre voiture (il siffle autour de la caméra).
 	ÉCHAPPEMENT : retours de flamme et crépitements d'anti-lag (Exhaust.luau),
-	et FEUX ARRIÈRE (TailLights.luau, feux stop au freinage), pilotés par le
+	et FEUX (CarLights.luau : phares à la couleur portée, feux stop au
+	freinage), pilotés par le
 	même état.
 
 	Tous les sons passent par un SoundGroup commun : SoundBank.MasterVolume règle tout.
@@ -48,7 +49,7 @@ local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarClass = require(script.Parent.Parent.Physics.Car)
 local WheelClass = require(script.Parent.Parent.Physics.Wheel)
 local Exhaust = require(script.Parent.Parent.Driving.Exhaust)
-local TailLights = require(script.Parent.Parent.Driving.TailLights)
+local CarLights = require(script.Parent.Parent.Driving.CarLights)
 
 local CarAudio = {}
 CarAudio.__index = CarAudio
@@ -85,7 +86,7 @@ export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 	Recording: SoundBank.EngineProfile,
 	PitchScale: number, -- transposition de la tonalité (ou de son remplaçant)
 	Exhaust: Exhaust.Exhaust, -- retours de flamme et anti-lag
-	TailLights: TailLights.TailLights, -- feux arrière et feux stop
+	Lights: CarLights.CarLights, -- phares, feux arrière et feux stop
 	Connections: { RBXScriptConnection },
 	OnLoad: { Voice },
 	OffLoad: { Voice },
@@ -243,7 +244,7 @@ function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLoc
 		end
 	end
 	self.Exhaust = Exhaust.new(chassis, model)
-	self.TailLights = TailLights.new(chassis, model)
+	self.Lights = CarLights.new(chassis, model)
 	self.Gravel = makeSound("GravelRoll", SoundBank.GravelRoll, chassis)
 	self.TarmacRoll = makeSound("TarmacRoll", SoundBank.TarmacRoll, chassis)
 	-- Le vent n'a pas de source : parent SoundService = son non spatialisé.
@@ -351,7 +352,7 @@ function CarAudio:SetActive(active: boolean)
 		return
 	end
 	self.Active = active
-	local lights: TailLights.TailLights = self.TailLights
+	local lights: CarLights.CarLights = self.Lights
 	lights:SetVisible(active)
 	if not active then
 		stopAll(self)
@@ -366,7 +367,7 @@ function CarAudio:Destroy()
 	end
 	local exhaust: Exhaust.Exhaust = self.Exhaust
 	exhaust:Destroy()
-	local lights: TailLights.TailLights = self.TailLights
+	local lights: CarLights.CarLights = self.Lights
 	lights:Destroy()
 	for _, sound in ipairs(allSounds(self)) do
 		sound:Destroy()
@@ -492,7 +493,7 @@ function CarAudio:Update(dt: number, state: AudioState)
 	-- Échappement : la charge brute (un lever de pied franc fait détoner).
 	local exhaust: Exhaust.Exhaust = self.Exhaust
 	exhaust:Update(dt, state.Rpm, state.Load)
-	local lights: TailLights.TailLights = self.TailLights
+	local lights: CarLights.CarLights = self.Lights
 	lights:Update(dt, state.Brake)
 
 	-- Crissement, roue par roue

@@ -362,6 +362,10 @@ function ItemArt.New(parent: Instance, subject: Subject, width: number, livery: 
 			-- La flamme : sa couleur et son cœur, comme une fumée bicolore, et l'icône.
 			smokeArt(card, item.Color2 or Theme.YELLOW, item.Color)
 			iconArt(card, "🔥", "BANG !", tone, size)
+		elseif item.Kind == "Headlight" then
+			-- La lumière des phares : un halo de sa couleur, et l'ampoule.
+			smokeArt(card, item.Color or Theme.TEXT, Color3.new(1, 1, 1))
+			iconArt(card, "💡", nil, tone, size)
 		elseif item.Kind == "Celebration" then
 			iconArt(card, EFFECT_ICONS[item.Effect or ""] or KIND_ICONS.Celebration.Icon, nil, tone, size)
 		else

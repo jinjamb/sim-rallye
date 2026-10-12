@@ -22,6 +22,7 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local CarLights = require(script.Parent.Parent.Driving.CarLights)
 
 local StageModifier = {}
 
@@ -54,9 +55,11 @@ end
 
 local LIGHTING_PROPERTIES = { "ClockTime", "Brightness", "Ambient", "OutdoorAmbient", "FogStart", "FogEnd", "FogColor", "ExposureCompensation" }
 
--- Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z).
+-- Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z), à la
+-- couleur des phares portés (Items/Headlights.luau).
 local function headlights(chassis: BasePart): () -> ()
 	local created: { Instance } = {}
+	local beamColor = CarLights.HeadlightColor(chassis.Parent)
 	local half = chassis.Size
 	for _, side in ipairs({ -1, 1 }) do
 		local attachment = Instance.new("Attachment")
@@ -68,7 +71,7 @@ local function headlights(chassis: BasePart): () -> ()
 		light.Range = 60
 		light.Angle = 70
 		light.Brightness = 6
-		light.Color = Color3.fromRGB(255, 244, 220)
+		light.Color = beamColor
 		light.Shadows = true
 		light.Parent = attachment
 		attachment.Parent = chassis
@@ -78,7 +81,7 @@ local function headlights(chassis: BasePart): () -> ()
 	local glow = Instance.new("PointLight")
 	glow.Range = 18
 	glow.Brightness = 0.6
-	glow.Color = Color3.fromRGB(255, 240, 210)
+	glow.Color = beamColor
 	glow.Parent = chassis
 	table.insert(created, glow)
 
@@ -105,7 +108,7 @@ local function headlights(chassis: BasePart): () -> ()
 		light.Range = BEAM_HEIGHT + 20
 		light.Angle = 120
 		light.Brightness = spec.Brightness
-		light.Color = Color3.fromRGB(255, 244, 220)
+		light.Color = beamColor
 		light.Shadows = false
 		light.Parent = holder
 		holder.Parent = workspace
