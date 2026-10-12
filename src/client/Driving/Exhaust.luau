@@ -253,7 +253,8 @@ end
 
 function Exhaust:Update(dt: number, rpm: number, load: number)
 	local now = os.clock()
-	local class = CarClasses.Get(if self.Model then self.Model:GetAttribute("CarClass") else nil)
+	local model = self.Model
+	local class = CarClasses.ForCar(if model then model:GetAttribute("CarClass") else nil, if model then model:GetAttribute("CarModel") else nil)
 
 	-- Retour de flamme : la charge s'effondre à haut régime.
 	if self.LastLoad >= BANG_FROM_LOAD and load <= BANG_TO_LOAD and rpm >= BANG_RPM and now - self.LastBang >= BANG_COOLDOWN then

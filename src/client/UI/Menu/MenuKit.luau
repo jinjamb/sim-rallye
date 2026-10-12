@@ -150,14 +150,30 @@ function MenuKit.ChosenClass(ctx: Context): string
 	return CarClasses.Get(if item then item.CarClass else nil).Id
 end
 
--- Catégories dont le joueur possède la voiture, dans l'ordre du catalogue.
+-- La voiture choisie au garage (CarModels.luau ; celle de série sans choix).
+function MenuKit.ChosenCar(ctx: Context): string
+	local wallet = ctx.Data.Wallet
+	local item = Catalog.Get(if wallet then wallet.Equipped.Car else nil) or Catalog.Default("Car")
+	return if item then item.Id else "car_rally4"
+end
+
+-- Niveau du pilote (1 tant que la progression n'est pas arrivée).
+function MenuKit.Level(ctx: Context): number
+	local progress = ctx.Data.Progress
+	return if progress then progress.Level else 1
+end
+
+-- Catégories où le joueur a une voiture utilisable, dans l'ordre du catalogue.
 function MenuKit.OwnedClasses(ctx: Context): { string }
 	local owned = MenuKit.OwnedSet(ctx)
+	local level = MenuKit.Level(ctx)
 	local list = {}
 	for _, class in ipairs(CarClasses.LIST) do
-		local item = Catalog.CarItem(class.Id)
-		if item and (item.Free or owned[item.Id]) then
-			table.insert(list, class.Id)
+		for _, item in ipairs(Catalog.OfKind("Car")) do
+			if item.CarClass == class.Id and Catalog.Usable(item, owned, level) then
+				table.insert(list, class.Id)
+				break
+			end
 		end
 	end
 	return list

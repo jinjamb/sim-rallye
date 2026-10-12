@@ -31,6 +31,7 @@ export type Item = {
 	Effect: string?, -- célébration : effet joué au podium
 	Engine: string?, -- son moteur : profil (SoundBank.luau)
 	CarClass: string?, -- voiture : catégorie (CarClasses.luau)
+	Level: number?, -- voiture gratuite : niveau de pilote qui l'ouvre
 	Slot: string?, -- pièce : emplacement (CarBodies.SLOTS)
 	Option: number?, -- pièce : variante débloquée
 }

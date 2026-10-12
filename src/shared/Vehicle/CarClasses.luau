@@ -31,6 +31,9 @@
 	Rally4 ne donne pas l'appui des grands ailerons d'une WRC. L'appui ajoute de la charge sur les pneus, donc de
 	l'adhérence, d'autant plus qu'on va vite.
 
+	VOITURES (CarModels.luau) : huit par catégorie, chacune une retouche de
+	cette fiche (ForCar) ; la catégorie garde les records et les médailles.
+
 	CLASSEMENTS ÉQUITABLES : records, fantômes, médailles et classements sont
 	propres à chaque catégorie (RecordKey). La Rally2 garde les clés d'avant
 	les catégories (suffixe vide) : les temps déjà enregistrés restent les
@@ -47,9 +50,11 @@
 	donne les valeurs mesurées.
 ]]
 
+local CarModels = require(script.Parent.CarModels)
+
 local CarClasses = {}
 
-export type Drive = "AWD" | "FWD"
+export type Drive = "AWD" | "FWD" | "RWD" -- RWD : propulsion (certaines Groupe B)
 export type TorquePoint = { rpm: number, torque: number }
 -- Par surface de spéciale (StageTrack : Surface), et pour les circuits.
 export type MedalScale = { Tarmac: number, Gravel: number, Snow: number, Mixed: number, Circuit: number }
@@ -256,6 +261,30 @@ end
 -- La catégorie demandée, ou la Rally2 si l'identifiant est inconnu.
 function CarClasses.Get(id: any): Class
 	return byId[if type(id) == "string" then id else CarClasses.DEFAULT] or byId[CarClasses.DEFAULT]
+end
+
+--[[
+	La fiche d'une VOITURE (CarModels.luau) : celle de sa catégorie, retouchée
+	(puissance, couple, rapports, transmission, turbo, pneus, aéro, son). Sans
+	voiture connue, ou d'une autre catégorie : la fiche de la catégorie.
+]]
+local carCache: { [string]: Class } = {}
+function CarClasses.ForCar(classId: any, carId: any): Class
+	local class = CarClasses.Get(classId)
+	local model = CarModels.Get(carId)
+	if not model or model.Class ~= class.Id then
+		return class
+	end
+	local cached = carCache[model.Id]
+	if cached then
+		return cached
+	end
+	local merged = table.clone(class) :: any
+	for key, value in pairs(model.Tune) do
+		merged[key] = value
+	end
+	carCache[model.Id] = merged
+	return merged
 end
 
 function CarClasses.Exists(id: any): boolean

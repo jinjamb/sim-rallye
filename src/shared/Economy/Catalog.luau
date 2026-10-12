@@ -110,7 +110,12 @@ function Catalog.PartItem(slot: string, option: number): Item?
 	return nil
 end
 
--- La voiture du catalogue d'une catégorie (CarClasses.luau).
+-- Utilisable : possédé, et le niveau requis atteint (voitures gratuites d'une catégorie).
+function Catalog.Usable(item: Item, owned: { [string]: boolean }?, level: number): boolean
+	return Catalog.Owns(owned, item.Id) and (item.Level == nil or level >= item.Level)
+end
+
+-- La voiture de référence d'une catégorie (CarClasses.luau) : la première.
 function Catalog.CarItem(classId: string): Item?
 	for _, item in ipairs(Catalog.ITEMS) do
 		if item.Kind == "Car" and item.CarClass == classId then

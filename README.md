@@ -1,6 +1,6 @@
 # Sim Rallye
 
-Jeu Roblox de rallye : des spéciales chronométrées (forêt, neige) et des courses de rallycross jusqu'à six pilotes, avec une physique de voiture faite maison, quatre catégories de voitures (Rally4 de série, Rally2, WRC, Groupe B), une progression (défis, école, trophées, Rallye Pass) et des écuries entre amis.
+Jeu Roblox de rallye : des spéciales chronométrées (forêt, neige) et des courses de rallycross jusqu'à six pilotes, avec une physique de voiture faite maison, quatre catégories de voitures (Rally4, Rally2, WRC, Groupe B) de huit voitures chacune, une progression (défis, école, trophées, Rallye Pass) et des écuries entre amis.
 
 L'organisation du code est décrite dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 

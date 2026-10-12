@@ -81,7 +81,6 @@ local ReferralService = require(script.Parent.ReferralService)
 local MedalCalibration = require(script.Parent.MedalCalibration)
 local FlashEventService = require(script.Parent.FlashEventService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
-local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 
@@ -1207,12 +1206,9 @@ local function onSettings(player: Player, payload: any)
 	if payload.Weather ~= nil then
 		race.Weather = Weather.Sanitize(payload.Weather)
 	end
-	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
-	if CarClasses.Exists(payload.CarClass) then
-		local item = Catalog.CarItem(payload.CarClass)
-		if item and EconomyService.Owns(player, item.Id) then
-			race.CarClass = payload.CarClass
-		end
+	-- Catégorie : parmi celles où l'hôte a une voiture (les autres la reçoivent en prêt).
+	if CarClasses.Exists(payload.CarClass) and CarService.OwnsClass(player, payload.CarClass) then
+		race.CarClass = payload.CarClass
 	end
 	sendRaceState(race)
 	broadcastLobby()

@@ -211,7 +211,7 @@ function CarAudio.ToneIdOf(model: Model?): string
 	if item and item.Engine and SoundBank.TONES[item.Engine] then
 		return item.Engine
 	end
-	return CarClasses.Get(model:GetAttribute("CarClass")).Engine
+	return CarClasses.ForCar(model:GetAttribute("CarClass"), model:GetAttribute("CarModel")).Engine
 end
 
 --[[
@@ -237,7 +237,7 @@ function CarAudio.new(chassis: BasePart, wheelAttachments: { Attachment }, isLoc
 	self:_setTone(CarAudio.ToneIdOf(model))
 	-- Son moteur changé (garage) ou voiture d'une autre catégorie : la tonalité suit.
 	if model then
-		for _, attribute in ipairs({ "EquippedEngine", "CarClass" }) do
+		for _, attribute in ipairs({ "EquippedEngine", "CarClass", "CarModel" }) do
 			table.insert(self.Connections, model:GetAttributeChangedSignal(attribute):Connect(function()
 				self:_setTone(CarAudio.ToneIdOf(model))
 			end))

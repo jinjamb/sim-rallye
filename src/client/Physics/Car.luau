@@ -130,10 +130,11 @@ local CENTER_DIFF = { Split = 0.6, PreloadRatio = 0.05, PowerLock = 0.4, CoastLo
 local ANTI_ROLL_FRONT_RATIO = 0.6
 local ANTI_ROLL_REAR_RATIO = 0.42
 
-function Car.new(chassis: BasePart, classId: string?): Car
+-- `carId` : la voiture (CarModels.luau), qui retouche la fiche de sa catégorie.
+function Car.new(chassis: BasePart, classId: string?, carId: string?): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
-	self.Class = CarClasses.Get(classId)
+	self.Class = CarClasses.ForCar(classId, carId)
 	self.Aerodynamics = AerodynamicsClass.new(chassis, self.Class.DragRatio, self.Class.AeroBalance)
 	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
 	self.SteerAssist = 1 -- réglable (CarSetup.SteerAssist)
@@ -222,8 +223,9 @@ function Car:ApplySetup(input: CarSetup.Setup)
 	self.FrontDiff.CoastLock = setup.FrontCoastLock
 	self.RearDiff.PowerLock = setup.RearPowerLock
 	self.RearDiff.CoastLock = setup.RearCoastLock
-	-- Traction : tout à l'avant, quel que soit le réglage.
-	self.CenterDiff.Split = if self.Class.Drive == "FWD" then 0 else setup.CenterSplit
+	-- Traction : tout à l'avant ; propulsion : tout à l'arrière, quel que soit le réglage.
+	local drive = self.Class.Drive
+	self.CenterDiff.Split = if drive == "FWD" then 0 elseif drive == "RWD" then 1 else setup.CenterSplit
 	self.CenterDiff.PowerLock = setup.CenterLock
 	-- Le central est moins bloqué en frein moteur qu'en traction (rampes 1.5 voie).
 	self.CenterDiff.CoastLock = setup.CenterLock * 0.5
@@ -430,8 +432,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		et l'épingle au frein à main reste molle. Avec : l'arrière se bloque net
 		pendant que l'avant continue de tirer la voiture dans le virage.
 	]]
+	-- Une propulsion n'a rien à désaccoupler : le frein à main bloque l'arrière, c'est tout.
 	local fwd = self.Class.Drive == "FWD"
-	local rearDecoupled = inputs.handbrake or fwd
+	local rearDecoupled = (inputs.handbrake and self.Class.Drive == "AWD") or fwd
 
 	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
 	local rl, rr = self.WheelsByName.WheelRL, self.WheelsByName.WheelRR

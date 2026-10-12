@@ -42,8 +42,9 @@ end
 ProfileSchema.GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 ProfileSchema.GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
 ProfileSchema.MAX_RECEIPTS = 50
--- Gamme de voitures : 1 = Rally2 de série (avant), 2 = Rally4 de série.
-ProfileSchema.GARAGE_VERSION = 2 -- achats Robux retenus (Roblox ne rejoue que les récents)
+-- Gamme de voitures : 1 = Rally2 de série (avant), 2 = Rally4 de série,
+-- 3 = huit voitures par catégorie, chacune sa carrosserie.
+ProfileSchema.GARAGE_VERSION = 3 -- achats Robux retenus (Roblox ne rejoue que les récents)
 
 export type Ghost = { Rate: number, Frames: { number } }
 export type StageRecord = { Ms: number, Ghost: Ghost? }

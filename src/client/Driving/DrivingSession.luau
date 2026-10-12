@@ -72,6 +72,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Chassis: BasePart,
 	Car: CarClass.Car,
 	ClassId: string, -- catégorie de la voiture (attribut CarClass)
+	CarModel: string?, -- la voiture (attribut CarModel, CarModels.luau)
 	RaceId: string?,
 	StageId: string, -- la spéciale (Stages.luau) : attribut Stage de la voiture
 	Dashboard: Dashboard.Dashboard,
@@ -127,7 +128,10 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local stageAttribute = model:GetAttribute("Stage")
 	local track = if Stages.Exists(stageAttribute) then Stages.Get(stageAttribute :: string) else (Stages.FindAt(self.Chassis.Position) or Stages.Get())
 	self.StageId = track.Id
-	local car = CarClass.new(self.Chassis, self.ClassId)
+	-- La voiture (CarModels.luau) : sa fiche retouche celle de la catégorie.
+	local carModel = model:GetAttribute("CarModel")
+	self.CarModel = if type(carModel) == "string" then carModel else nil
+	local car = CarClass.new(self.Chassis, self.ClassId, self.CarModel)
 	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))
 	self.Car = car
 

@@ -14,7 +14,9 @@
 	PAR CATÉGORIE (CarClasses.luau) : chaque catégorie a ses réglages (le
 	profil en garde un jeu par catégorie) et peut changer les valeurs par
 	défaut (Setup de sa fiche). Une traction n'a ni différentiel central ni
-	arrière moteur : ces réglages (AwdOnly) ne s'affichent pas pour elle.
+	arrière moteur, une propulsion ni avant ni central : ces réglages (Axle)
+	ne s'affichent pas pour elles (la transmission est celle de la voiture,
+	CarModels.luau).
 	L'APPUI AÉRO a la plage de la voiture (CarClasses : DownforceRange) : les
 	bornes de Downforce ci-dessous ne sont qu'un repli.
 	PRÉRÉGLAGES : une valeur d'appui y est une part de cette plage (Relative),
@@ -38,7 +40,9 @@ export type Field = {
 	Format: string, -- format d'affichage (string.format)
 	Scale: number, -- multiplicateur d'affichage (0.65 -> 65 %)
 	Hint: string,
-	AwdOnly: boolean?, -- sans effet sur une traction
+	-- Différentiel concerné : sans effet (et caché) si la transmission ne
+	-- l'entraîne pas (traction : ni arrière ni central ; propulsion : ni avant ni central).
+	Axle: ("Front" | "Rear" | "Center")?,
 }
 
 CarSetup.FIELDS = {
@@ -71,35 +75,37 @@ CarSetup.FIELDS = {
 		Key = "FrontPowerLock", Label = "Avant, accélération", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.35, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus bloqué : plus de motricité, mais l'avant refuse de tourner au gaz.",
+		Axle = "Front",
 	},
 	{
 		Key = "FrontCoastLock", Label = "Avant, frein moteur", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.15, Format = "%.0f %%", Scale = 100,
 		Hint = "Stabilité au lever de pied.",
+		Axle = "Front",
 	},
 	{
 		Key = "RearPowerLock", Label = "Arrière, accélération", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.50, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus bloqué : l'arrière pousse et fait pivoter la voiture au gaz.",
-		AwdOnly = true,
+		Axle = "Rear",
 	},
 	{
 		Key = "RearCoastLock", Label = "Arrière, frein moteur", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.30, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus bloqué : plus stable au lever de pied, moins de rotation.",
-		AwdOnly = true,
+		Axle = "Rear",
 	},
 	{
 		Key = "CenterSplit", Label = "Central, part arrière", Group = "Différentiels",
 		Min = 0.40, Max = 0.75, Step = 0.05, Default = 0.60, Format = "%.0f %%", Scale = 100,
 		Hint = "Plus à l'arrière : caractère survireur, propulsion.",
-		AwdOnly = true,
+		Axle = "Center",
 	},
 	{
 		Key = "CenterLock", Label = "Central, blocage", Group = "Différentiels",
 		Min = 0, Max = 1, Step = 0.05, Default = 0.40, Format = "%.0f %%", Scale = 100,
 		Hint = "1 = arbre rigide, comme une vraie Rally2 : motricité maxi, sous-vire en épingle.",
-		AwdOnly = true,
+		Axle = "Center",
 	},
 	{
 		Key = "AntiRollFront", Label = "Barre avant", Group = "Châssis",
@@ -185,12 +191,21 @@ local function fieldFor(field: Field, classId: string?): Field
 	return adjusted
 end
 
--- Les réglages qui ont un effet sur cette catégorie, dans l'ordre du menu.
-function CarSetup.FieldsFor(classId: string?): { Field }
-	local drive = CarClasses.Get(classId).Drive
+-- Le différentiel `axle` est-il entraîné par cette transmission ?
+local function driven(axle: string?, drive: string): boolean
+	if axle == nil or drive == "AWD" then
+		return true
+	end
+	return (axle == "Front" and drive == "FWD") or (axle == "Rear" and drive == "RWD")
+end
+
+-- Les réglages qui ont un effet sur cette voiture, dans l'ordre du menu.
+-- `carId` : la voiture (CarModels.luau), dont la transmission peut différer de la catégorie.
+function CarSetup.FieldsFor(classId: string?, carId: string?): { Field }
+	local drive = CarClasses.ForCar(classId, carId).Drive
 	local fields = {}
 	for _, field in ipairs(CarSetup.FIELDS) do
-		if drive == "AWD" or not field.AwdOnly then
+		if driven(field.Axle, drive) then
 			table.insert(fields, fieldFor(field, classId))
 		end
 	end

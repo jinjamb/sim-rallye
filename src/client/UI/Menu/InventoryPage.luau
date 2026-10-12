@@ -27,6 +27,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
@@ -60,13 +61,16 @@ type Locked = { Kind: string, Index: number, Text: string }
 	choisi ; `pick(i)` au clic d'une pastille libre ; un clic sur une pastille
 	verrouillée affiche sa condition (et son achat).
 ]]
-local function chips(ctx: Context, b: Builder, kind: string, names: { string }, selected: number, pick: (number) -> ())
+-- `first` : valeur de la première pastille (1 par défaut ; 0 pour « celui de la voiture »).
+local function chips(ctx: Context, b: Builder, kind: string, names: { string }, selected: number, pick: (number) -> (), first: number?)
+	local offset = (first or 1) - 1
 	local progress = ctx.Data.Progress
 	local owned = MenuKit.OwnedSet(ctx)
 	local width = (MenuKit.CONTENT_WIDTH - CHIP_GAP * (CHIPS_PER_ROW - 1)) / CHIPS_PER_ROW
 	local row: Frame? = nil
-	for index, name in ipairs(names) do
-		local column = (index - 1) % CHIPS_PER_ROW
+	for position, name in ipairs(names) do
+		local index = position + offset
+		local column = (position - 1) % CHIPS_PER_ROW
 		if column == 0 then
 			row = b:Row(CHIP_HEIGHT + 4)
 		end
@@ -142,25 +146,34 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 
 	-- Aperçu : la voiture telle qu'elle roulera.
 	local previewRow = b:Row(PREVIEW_HEIGHT)
-	local preview = ItemArt.Car(previewRow, MenuKit.ChosenClass(ctx), livery, MenuKit.CONTENT_WIDTH, PREVIEW_HEIGHT)
+	local preview = ItemArt.Car(previewRow, MenuKit.ChosenCar(ctx), livery, MenuKit.CONTENT_WIDTH, PREVIEW_HEIGHT)
 	preview.Position = UDim2.fromOffset(0, 0)
 
 	lockedPanel(ctx, b)
 
-	-- Le modèle.
-	local body = CarBodies.Get(livery.Body)
-	b:Text("MODÈLE · " .. Format.Upper(body.Name) .. " · " .. body.Description, 13, Theme.YELLOW)
-	local names = {}
+	-- Le modèle : celui de la voiture (0), ou un autre au choix.
+	local car = CarModels.Get(MenuKit.ChosenCar(ctx))
+	local ownBody = livery.Body == 0
+	local body = CarBodies.Get(if ownBody and car then car.Design.Body else livery.Body)
+	if ownBody then
+		b:Text(string.format("MODÈLE · CELUI DE TA VOITURE (%s : %s)", Format.Upper(if car then car.Name else "?"), Format.Upper(body.Name)), 13, Theme.YELLOW)
+	else
+		b:Text("MODÈLE · " .. Format.Upper(body.Name) .. " · " .. body.Description, 13, Theme.YELLOW)
+	end
+	local names = { "De la voiture" }
 	for _, model in ipairs(CarBodies.LIST) do
 		table.insert(names, model.Name)
 	end
 	chips(ctx, b, "Body", names, livery.Body, function(i)
 		equip(ctx, livery, "Body", i)
-	end)
+	end, 0)
+	if ownBody then
+		b:Text("Carrosserie et pièces : celles de ta voiture, qui changent avec elle. Choisis un modèle pour les personnaliser.", 12, Widgets.COLOR_DIM)
+	end
 
-	-- Les pièces que ce modèle prend.
+	-- Les pièces que ce modèle prend (les jantes seulement, avec la carrosserie de la voiture).
 	for _, slot in ipairs(CarBodies.SLOTS) do
-		if CarBodies.HasSlot(body, slot.Key) then
+		if CarBodies.HasSlot(body, slot.Key) and (not ownBody or slot.Key == "Rims") then
 			local current = (livery :: any)[slot.Key] or 1
 			b:Text(Format.Upper(slot.Name), 13, Theme.YELLOW)
 			local optionNames = {}
@@ -241,7 +254,8 @@ function InventoryPage.Paint(ctx: Context, b: Builder)
 		return
 	end
 	b:Section("Peinture par pièce")
-	local body = CarBodies.Get(livery.Body)
+	local car = CarModels.Get(MenuKit.ChosenCar(ctx))
+	local body = CarBodies.Get(if livery.Body == 0 and car then car.Design.Body else livery.Body)
 	if not body.Custom then
 		b:Text("La carrosserie d'origine se peint d'un seul bloc : choisis un modèle du jeu pour peindre chaque pièce.", 12, Widgets.COLOR_DIM)
 		return

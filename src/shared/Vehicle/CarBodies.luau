@@ -15,7 +15,13 @@
 		5 Hayate    (« ouragan ») berline de rallye japonaise, capot
 		            plongeant, grande prise d'air (façon Evo) ;
 		6 Hoshi     (« étoile ») berline de rallye à phares ronds et
-		            antibrouillards (façon Impreza).
+		            antibrouillards (façon Impreza) ;
+		7 Tora      (« tigre ») citadine compacte moderne ;
+		8 Kumo      (« nuage ») petite bombe à moteur central des années 80 ;
+		9 Ryu       (« dragon ») coupé long et bas, quatre phares ronds.
+	Les voitures (CarModels.luau) ont chacune leur modèle et leurs pièces ;
+	le joueur peut garder ceux de sa voiture (Livery : Body = 0) ou choisir
+	les siens.
 	Les trois derniers s'inspirent des voitures de rallye low-poly de
 	référence (berline rouge, citadine blanche, berline bleue).
 
@@ -451,6 +457,117 @@ local function hoshi(): Body
 	}
 end
 
+-- Citadine compacte moderne, porte-à-faux très courts, hayon presque droit.
+local function tora(): Body
+	local m: Mounts = {
+		NoseZ = -6.0, TailZ = 5.6, BottomY = -1.45, BeltY = 0.5, HalfWidth = 3.0,
+		HoodFrontZ = -5.2, HoodRearZ = -2.6, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Roof", Z = 3.0, Y = 2.25, Width = 4.4 },
+		NoseSlope = { Length = 0.8, Drop = 0.3 },
+	}
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.5, TopY = 2.15, WindshieldFrontZ = -2.6, RoofFrontZ = -0.5, RoofRearZ = 3.0 }
+	local list: { Spec } = {}
+	lowerBody(list, m)
+	cabin(list, c)
+	slopedRear(list, c, 4.4, "Glass")
+	-- Phares en amande, grande calandre trapézoïdale, feux verticaux.
+	pair(list, function(s)
+		return block("HeadLight", Vector3.new(1.2, 0.36, 0.12), at(s * 1.95, 0.1, m.NoseZ - 0.04), "Head")
+	end)
+	add(list, block("Grille", Vector3.new(2.6, 0.6, 0.12), at(0, -0.45, m.NoseZ - 0.04), "Trim"))
+	pair(list, function(s)
+		return block("TailLight", Vector3.new(0.5, 0.8, 0.12), at(s * 2.45, 0.35, m.TailZ + 0.04), "Tail")
+	end)
+	add(list, block("Diffuser", Vector3.new(4.2, 0.3, 0.14), at(0, m.BottomY + 0.45, m.TailZ + 0.05), "Trim"))
+	return {
+		Id = "tora",
+		Name = "Tora",
+		Description = "citadine compacte moderne, porte-à-faux courts",
+		Custom = true,
+		Slots = { "Wing", "Bumper", "Hood", "Flares", "Rims" },
+		Mounts = m,
+		Parts = list,
+	}
+end
+
+-- Petite bombe à moteur central des années 80 : cabine avancée, long capot moteur arrière.
+local function kumo(): Body
+	local m: Mounts = {
+		NoseZ = -6.2, TailZ = 6.3, BottomY = -1.5, BeltY = 0.45, HalfWidth = 3.15,
+		HoodFrontZ = -5.6, HoodRearZ = -2.4, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Deck", Z = 5.9, Y = 0.45, Width = 4.8 },
+		NoseSlope = { Length = 0.9, Drop = 0.3 },
+	}
+	local c: Cabin = { HalfWidth = 2.25, BaseY = 0.45, TopY = 2.0, WindshieldFrontZ = -2.4, RoofFrontZ = -0.4, RoofRearZ = 1.7 }
+	local list: { Spec } = {}
+	lowerBody(list, m)
+	cabin(list, c)
+	slopedRear(list, c, 5.3, "Body")
+	-- Ailes arrière bombées et grandes prises d'air du moteur.
+	for _, z in ipairs({ -WHEEL_Z, WHEEL_Z }) do
+		pair(list, function(s)
+			return block("Arch", Vector3.new(1.0, 0.45, ARCH_HALF * 2 + 0.3), at(s * (m.HalfWidth - 0.5), m.BeltY + 0.18, z), "Body")
+		end)
+	end
+	pair(list, function(s)
+		return block("Intake", Vector3.new(0.14, 0.8, 1.4), at(s * (m.HalfWidth + 0.03), -0.2, 2.1), "Trim")
+	end)
+	add(list, block("Louver", Vector3.new(3.4, 0.07, 1.6), at(0, 1.1, 3.6) * CFrame.Angles(math.rad(22), 0, 0), "Trim"))
+	pair(list, function(s)
+		return block("HeadLight", Vector3.new(1.3, 0.28, 0.12), at(s * 1.95, 0.05, m.NoseZ - 0.04), "Head")
+	end)
+	add(list, block("Grille", Vector3.new(1.8, 0.24, 0.12), at(0, 0.05, m.NoseZ - 0.04), "Trim"))
+	add(list, block("TailLight", Vector3.new(5.2, 0.3, 0.12), at(0, 0.0, m.TailZ + 0.04), "Tail"))
+	add(list, block("RearPanel", Vector3.new(4.4, 0.5, 0.12), at(0, -0.6, m.TailZ + 0.04), "Trim"))
+	return {
+		Id = "kumo",
+		Name = "Kumo",
+		Description = "bombe à moteur central des années 80",
+		Custom = true,
+		Slots = { "Wing", "Bumper", "Hood", "Rims" },
+		Mounts = m,
+		Parts = list,
+	}
+end
+
+-- Coupé bas et long, capot interminable, cabine reculée (propulsion des années 80).
+local function ryu(): Body
+	local m: Mounts = {
+		NoseZ = -6.9, TailZ = 6.6, BottomY = -1.55, BeltY = 0.2, HalfWidth = 3.05,
+		HoodFrontZ = -5.7, HoodRearZ = -1.0, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Deck", Z = 6.15, Y = 0.2, Width = 4.6 },
+		NoseSlope = { Length = 1.2, Drop = 0.35 },
+	}
+	local c: Cabin = { HalfWidth = 2.15, BaseY = 0.2, TopY = 1.55, WindshieldFrontZ = -1.0, RoofFrontZ = 0.7, RoofRearZ = 2.4 }
+	local list: { Spec } = {}
+	lowerBody(list, m)
+	cabin(list, c)
+	slopedRear(list, c, 5.2, "Body")
+	-- Quatre phares ronds, ailes élargies, feux ronds par paires.
+	for _, x in ipairs({ -2.25, -1.45, 1.45, 2.25 }) do
+		add(list, disc("HeadLight", 0.5, 0.14, at(x, -0.15, m.NoseZ - 0.05), "Head"))
+	end
+	add(list, block("Grille", Vector3.new(1.6, 0.26, 0.12), at(0, -0.2, m.NoseZ - 0.04), "Trim"))
+	for _, z in ipairs({ -WHEEL_Z, WHEEL_Z }) do
+		pair(list, function(s)
+			return block("Arch", Vector3.new(1.1, 0.45, ARCH_HALF * 2 + 0.3), at(s * (m.HalfWidth - 0.5), m.BeltY + 0.18, z), "Body")
+		end)
+	end
+	for _, x in ipairs({ -2.2, -1.6, 1.6, 2.2 }) do
+		add(list, disc("TailLight", 0.45, 0.12, at(x, -0.1, m.TailZ + 0.05), "Tail"))
+	end
+	add(list, block("RearPanel", Vector3.new(4.0, 0.45, 0.12), at(0, -0.65, m.TailZ + 0.04), "Trim"))
+	return {
+		Id = "ryu",
+		Name = "Ryu",
+		Description = "coupé long et bas des années 80, quatre phares ronds",
+		Custom = true,
+		Slots = { "Wing", "Bumper", "Hood", "Rims" },
+		Mounts = m,
+		Parts = list,
+	}
+end
+
 CarBodies.LIST = {
 	{
 		Id = "origine",
@@ -466,6 +583,9 @@ CarBodies.LIST = {
 	raijin(),
 	hayate(),
 	hoshi(),
+	tora(),
+	kumo(),
+	ryu(),
 } :: { Body }
 
 --------------------------------------------------------------------------------

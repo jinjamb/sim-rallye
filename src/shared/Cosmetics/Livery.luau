@@ -9,7 +9,9 @@
 
 	ELLE PORTE AUSSI LE MODÈLE ET SES PIÈCES (CarBodies.luau) : Body (le
 	modèle), Wing, Bumper, Hood, Flares, Rims (une variante par
-	emplacement, 1 = de série). Même chemin que la couleur : sauvegardé,
+	emplacement, 1 = de série). Body = 0 (par défaut) : la carrosserie et
+	les pièces de sa VOITURE (CarModels.luau : Design), qui change avec elle ;
+	les jantes restent celles du joueur. Même chemin que la couleur : sauvegardé,
 	vérifié, débloqué en jouant (Progression.luau), posé par LiveryPainter.
 
 	PEINTURE PAR PIÈCE (Paints) : une couleur de la palette par zone de la
@@ -166,7 +168,7 @@ function Livery.Default(userId: number): Livery
 		Stripes = 1,
 		StripeColor = 3, -- blanc
 		Plate = 1,
-		Body = 2, -- Kaze : une voiture du jeu (l'Origine reste au choix)
+		Body = 0, -- la carrosserie de sa voiture (CarModels.luau)
 		Wing = 1,
 		Bumper = 1,
 		Hood = 1,
@@ -200,7 +202,7 @@ function Livery.Sanitize(input: any, userId: number): Livery
 	result.Stripes = index(input.Stripes, #Livery.STRIPES) or result.Stripes
 	result.StripeColor = index(input.StripeColor, #Livery.COLORS) or result.StripeColor
 	result.Plate = index(input.Plate, #Livery.PLATES) or result.Plate
-	result.Body = index(input.Body, #CarBodies.LIST) or result.Body
+	result.Body = if input.Body == 0 then 0 else index(input.Body, #CarBodies.LIST) or result.Body
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		(result :: any)[slot.Key] = index(input[slot.Key], #slot.Options) or 1
 	end
@@ -218,6 +220,22 @@ function Livery.Sanitize(input: any, userId: number): Livery
 	end
 	result.PatternColor = index(input.PatternColor, #Livery.COLORS) or result.PatternColor
 	return result
+end
+
+-- La carrosserie à poser : celle de la voiture (`design`, CarModels.luau)
+-- quand la livrée la garde (Body = 0), sinon celle choisie par le joueur.
+function Livery.WithDesign(livery: Livery, design: { Body: number, Wing: number, Bumper: number, Hood: number, Flares: number }?): Livery
+	if livery.Body ~= 0 then
+		return livery
+	end
+	local resolved = table.clone(livery)
+	local chosen = design or { Body = 2, Wing = 1, Bumper = 1, Hood = 1, Flares = 1 }
+	resolved.Body = chosen.Body
+	resolved.Wing = chosen.Wing
+	resolved.Bumper = chosen.Bumper
+	resolved.Hood = chosen.Hood
+	resolved.Flares = chosen.Flares
+	return resolved
 end
 
 function Livery.ColorOf(livery: Livery): Color3
@@ -265,6 +283,8 @@ function Livery.ItemName(kind: string, index: number): string
 	elseif kind == "Sponsor" then
 		local sponsor = Livery.SPONSORS[index]
 		return "Sponsor " .. (if sponsor then sponsor.Name else "?")
+	elseif kind == "Body" and index == 0 then
+		return "Modèle : celui de la voiture"
 	elseif kind == "Body" then
 		local body = CarBodies.LIST[index]
 		return "Modèle " .. (if body then body.Name else "?")

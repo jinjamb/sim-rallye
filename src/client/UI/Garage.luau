@@ -47,6 +47,8 @@ export type Callbacks = {
 	OpenSetup: () -> (),
 	-- Catégorie de la voiture choisie : sa carrosserie sur l'aperçu.
 	GetCarClass: () -> string,
+	-- La voiture choisie (CarModels.luau) : sa carrosserie si la livrée la garde (Body = 0).
+	GetCarModel: () -> string?,
 	-- Objets possédés (pièces gagnées aux tirages).
 	GetOwned: () -> { [string]: boolean },
 }
@@ -78,7 +80,7 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	ShowroomBase: CFrame?,
 	Angle: number,
 	Shown: string, -- livrée affichée sur l'aperçu (Livery.Key)
-	ShownClass: string, -- catégorie affichée sur l'aperçu (kit de carrosserie)
+	ShownClass: string, -- catégorie et voiture affichées sur l'aperçu (kit, carrosserie)
 }
 
 local PANEL_WIDTH = 380
@@ -228,7 +230,8 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	bodyTitle.Size = UDim2.new(1, -32, 0, 18)
 	local bodyY = y + 288
 	self.BodyLabel = stepper(bodyY, "Modèle", function(direction)
-		change("Body", #CarBodies.LIST, direction)
+		-- 0 : la carrosserie de la voiture, puis chaque modèle.
+		change("Body", #CarBodies.LIST + 1, direction, 0)
 	end)
 	self.SlotLabels = {}
 	for index, slot in ipairs(CarBodies.SLOTS) do
@@ -290,7 +293,8 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 	end
 	local body = CarBodies.Get(livery.Body)
 	for _, slot in ipairs(CarBodies.SLOTS) do
-		if CarBodies.HasSlot(body, slot.Key) then
+		-- Carrosserie de la voiture (Body = 0) : ses pièces sont à elle, seules les jantes comptent.
+		if CarBodies.HasSlot(body, slot.Key) and (livery.Body ~= 0 or slot.Key == "Rims") then
 			table.insert(checks, { Kind = slot.Key :: any, Index = (livery :: any)[slot.Key] })
 		end
 	end
@@ -380,13 +384,17 @@ function Garage:_refresh()
 	swatch(self.PatternColorLabel, patternColor.Color)
 
 	-- Carrosserie : le modèle, et chaque pièce (« - » si le modèle ne la prend pas).
+	local ownBody = livery.Body == 0
 	local body = CarBodies.Get(livery.Body)
 	local bodyUnlocked = Progression.IsUnlocked("Body", livery.Body, progress, owned)
-	self.BodyLabel.Text = valueText(body.Name, bodyUnlocked)
+	self.BodyLabel.Text = if ownBody then "De la voiture" else valueText(body.Name, bodyUnlocked)
 	plain(self.BodyLabel, bodyUnlocked)
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		local label = self.SlotLabels[slot.Key]
-		if CarBodies.HasSlot(body, slot.Key) then
+		if ownBody and slot.Key ~= "Rims" then
+			label.Text = "De la voiture"
+			plain(label, true)
+		elseif CarBodies.HasSlot(body, slot.Key) then
 			local index = (livery :: any)[slot.Key] or 1
 			local option = slot.Options[index] or slot.Options[1]
 			local unlocked = Progression.IsUnlocked(slot.Key :: any, index, progress, owned)
@@ -494,16 +502,21 @@ function Garage:Update(dt: number, position: Vector3?)
 		self.Shown = ""
 		self.ShownClass = ""
 	end
-	local model = self.Showroom
+	local model: Model? = self.Showroom
 	local base = self.ShowroomBase
 	if model and base then
 		self.Angle = (self.Angle + SPIN_SPEED * dt) % (math.pi * 2)
 		model:PivotTo(CFrame.new(base.Position) * CFrame.Angles(0, self.Angle, 0) * base.Rotation)
-		-- Carrosserie de la catégorie choisie (BodyKits.luau), inerte comme le reste.
+		-- La voiture choisie : son kit (BodyKits.luau) et sa carrosserie, inertes comme le reste.
 		local classId = self.Callbacks.GetCarClass()
-		if classId ~= self.ShownClass then
-			self.ShownClass = classId
-			BodyKits.Apply(model, CarClasses.Get(classId).Body)
+		local carId = self.Callbacks.GetCarModel()
+		local shownCar = classId .. "|" .. tostring(carId)
+		if shownCar ~= self.ShownClass then
+			self.ShownClass = shownCar
+			self.Shown = "" -- même livrée, autre voiture : on repeint
+			model:SetAttribute("CarClass", classId)
+			model:SetAttribute("CarModel", carId)
+			BodyKits.Apply(model, CarClasses.ForCar(classId, carId).Body)
 			local kit = model:FindFirstChild("BodyKit")
 			if kit then
 				for _, item in ipairs(kit:GetDescendants()) do

@@ -140,6 +140,16 @@ local function drivenClass(): string
 	return CarClasses.Get(if item then item.CarClass else nil).Id
 end
 
+-- La voiture conduite (CarModels.luau) ; à pied, celle choisie au garage.
+local function drivenCar(): string?
+	local current = session
+	if current then
+		return current.CarModel
+	end
+	local wallet = raceClient:GetWallet()
+	return if wallet then wallet.Equipped.Car else nil
+end
+
 local function setupFor(classId: string): CarSetup.Setup
 	return setups[classId] or CarSetup.Default(classId)
 end
@@ -271,6 +281,9 @@ local garage = Garage.new(playerGui, {
 	end,
 	GetCarClass = function()
 		return drivenClass()
+	end,
+	GetCarModel = function()
+		return drivenCar()
 	end,
 	-- Objets possédés : les pièces gagnées aux tirages débloquent leur variante.
 	GetOwned = function()
@@ -569,7 +582,7 @@ local function startSession(model: Model)
 	end
 	session = created
 	-- Réglages et adversaire fantôme de la catégorie de cette voiture.
-	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId))
+	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId), created.CarModel)
 	ghostChallenge:SetClass(created.ClassId)
 	-- Sa spéciale : son classement (L), son ralenti, l'adversaire fantôme.
 	currentStage = created.StageId
@@ -820,7 +833,7 @@ Remotes.Wallet.OnClientEvent:Connect(function(wallet: any, news: any)
 	-- Une autre voiture choisie, à pied : ses réglages, son classement, ses fantômes.
 	if not session then
 		local classId = drivenClass()
-		setupMenu:SetClass(classId, setupFor(classId))
+		setupMenu:SetClass(classId, setupFor(classId), drivenCar())
 		ghostChallenge:SetClass(classId)
 	end
 	refreshLeaderboard()

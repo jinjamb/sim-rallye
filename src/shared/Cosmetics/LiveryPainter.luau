@@ -52,6 +52,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 
 local LiveryPainter = {}
 
@@ -518,12 +519,24 @@ local function addPattern(part: BasePart, style: Livery.PatternStyle, color: Col
 	end
 end
 
+-- La carrosserie de la voiture (attributs CarModel, sinon CarClass : sa voiture de référence).
+local function designOf(car: Model): CarModels.Design?
+	local model = CarModels.Get(car:GetAttribute("CarModel"))
+	if not model then
+		local classId = car:GetAttribute("CarClass")
+		model = if type(classId) == "string" then CarModels.Reference(classId) else nil
+	end
+	return if model then model.Design else nil
+end
+
 -- Peinture, bandes et numéros. La voiture doit être dans le monde (rayons).
-function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
+function LiveryPainter.Apply(car: Model, wanted: Livery.Livery)
 	local chassis = car:FindFirstChild("Chassis")
 	if not chassis or not chassis:IsA("BasePart") then
 		return
 	end
+	-- « La carrosserie de la voiture » (Body = 0) : celle de sa fiche.
+	local livery = Livery.WithDesign(wanted, designOf(car))
 	local color = Livery.ColorOf(livery)
 	-- Le modèle et ses pièces d'abord : la peinture et les numéros se posent dessus.
 	CarBodies.Apply(car, livery, color)

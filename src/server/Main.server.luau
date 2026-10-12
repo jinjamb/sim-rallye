@@ -65,6 +65,10 @@ StageService.RallyLegStarted = ChampionshipService.LegStarted
 StageService.RallyLegFinished = ChampionshipService.StageFinished
 StageService.RallyPenalty = ChampionshipService.Penalty
 ProgressService.Changed = CarService.RefreshProgress
+EconomyService.LevelOf = function(player: Player): number
+	local snapshot = ProgressService.Get(player)
+	return if snapshot then snapshot.Level else 1
+end
 RaceService.PodiumHandler = PaddockService.Podium :: any
 
 PaddockService.Start()

@@ -16,8 +16,8 @@
 		Xp        XP éclair : XP gagnée ×XP_MULTIPLIER (sans se cumuler avec
 		          un week-end double XP : le plus fort l'emporte) ;
 		RareCar   voiture rare : une voiture d'exception (WRC ou Groupe B)
-		          prêtée à tous pour les spéciales, et vendue CAR_DISCOUNT
-		          moins cher en crédits pendant l'événement.
+		          prêtée à tous pour les spéciales, et les voitures de sa
+		          catégorie CAR_DISCOUNT moins cher en crédits.
 
 	Le serveur applique les effets (RollService, Perks, ProgressService,
 	EconomyService, PaddockService, FlashEventService) ; le client affiche
@@ -45,7 +45,7 @@ FlashEvents.KINDS = {
 	{ Id = "FreeRoll", Name = "Tirage offert", Icon = "🎟", Description = "Termine une spéciale ou une course : un tirage offert." },
 	{ Id = "Credits", Name = "Pluie de crédits", Icon = "💰", Description = "Tous les crédits gagnés comptent double." },
 	{ Id = "Xp", Name = "XP éclair", Icon = "⚡", Description = "Toute l'XP gagnée compte double." },
-	{ Id = "RareCar", Name = "Voiture rare", Icon = "🏎", Description = "Prêtée à tous sur les spéciales, et -30 % sur son prix en crédits." },
+	{ Id = "RareCar", Name = "Voiture rare", Icon = "🏎", Description = "Prêtée à tous sur les spéciales, et -30 % en crédits sur les voitures de sa catégorie." },
 } :: { Kind }
 
 export type Event = {

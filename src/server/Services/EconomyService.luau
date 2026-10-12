@@ -107,6 +107,18 @@ function EconomyService.Earn(player: Player, amount: number, reason: string)
 	sendWallet(player, { Gain = gain, Reason = reason })
 end
 
+-- Niveau du pilote (branché sur ProgressService par Main.server.luau).
+EconomyService.LevelOf = function(_player: Player): number
+	return 1
+end
+
+-- L'objet est-il à lui ET utilisable (voiture gratuite : niveau atteint) ?
+function EconomyService.CanUse(player: Player, itemId: string): boolean
+	local profile = ProfileStore.Get(player)
+	local item = Catalog.Get(itemId)
+	return profile ~= nil and item ~= nil and Catalog.Usable(item, profile.Owned, EconomyService.LevelOf(player))
+end
+
 function EconomyService.GetCredits(player: Player): number
 	local profile = ProfileStore.Get(player)
 	return if profile then profile.Credits else 0
@@ -128,7 +140,7 @@ function EconomyService.Equipped(player: Player, kind: Catalog.Kind): Catalog.It
 	if profile then
 		local id = profile.Equipped[kind]
 		local item = Catalog.Get(id)
-		if item and item.Kind == kind and Catalog.Owns(profile.Owned, item.Id) then
+		if item and item.Kind == kind and Catalog.Usable(item, profile.Owned, EconomyService.LevelOf(player)) then
 			return item
 		end
 	end
@@ -190,6 +202,10 @@ local function equipItem(player: Player, kind: any, itemId: any)
 		return
 	end
 	if profile.Equipped[item.Kind] == item.Id then
+		return
+	end
+	if item.Level and EconomyService.LevelOf(player) < item.Level then
+		sendWallet(player, { Error = string.format("%s : niveau %d requis.", item.Name, item.Level) })
 		return
 	end
 	profile.Equipped[item.Kind] = item.Id
@@ -330,19 +346,31 @@ local function migrateGarage(player: Player, profile: Profile)
 	if profile.GarageVersion >= ProfileSchema.GARAGE_VERSION then
 		return
 	end
-	local equipNow = profile.Equipped.Car == nil
-	profile.Owned[LEGACY_CAR] = true
-	if equipNow then
-		profile.Equipped.Car = LEGACY_CAR
+	if profile.GarageVersion < 2 then
+		profile.Owned[LEGACY_CAR] = true
+		if profile.Equipped.Car == nil then
+			profile.Equipped.Car = LEGACY_CAR
+		end
+	end
+	local version = profile.GarageVersion
+	-- Version 3 : chaque voiture a sa carrosserie ; l'ancien modèle par défaut
+	-- (Kaze, jamais choisi) laisse place à celui de la voiture.
+	if version < 3 and profile.Livery.Body == 2 then
+		profile.Livery.Body = 0
 	end
 	profile.GarageVersion = ProfileSchema.GARAGE_VERSION
 	ProfileStore.Update(player.UserId, "nouvelle gamme", function(stored)
 		if stored.GarageVersion >= ProfileSchema.GARAGE_VERSION then
 			return false
 		end
-		stored.Owned[LEGACY_CAR] = true
-		if stored.Equipped.Car == nil then
-			stored.Equipped.Car = LEGACY_CAR
+		if stored.GarageVersion < 2 then
+			stored.Owned[LEGACY_CAR] = true
+			if stored.Equipped.Car == nil then
+				stored.Equipped.Car = LEGACY_CAR
+			end
+		end
+		if stored.Livery.Body == 2 then
+			stored.Livery.Body = 0
 		end
 		stored.GarageVersion = ProfileSchema.GARAGE_VERSION
 		return true

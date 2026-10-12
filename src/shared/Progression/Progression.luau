@@ -229,6 +229,9 @@ Progression.ITEMS = {
 	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
 	{ Kind = "Body", Index = 5, Requirement = { Level = 4 } }, -- Hayate
 	{ Kind = "Body", Index = 6, Requirement = { Level = 8 } }, -- Hoshi
+	{ Kind = "Body", Index = 7, Requirement = { Level = 5 } }, -- Tora
+	{ Kind = "Body", Index = 8, Requirement = { Level = 14 } }, -- Kumo
+	{ Kind = "Body", Index = 9, Requirement = { Level = 18 } }, -- Ryu
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye

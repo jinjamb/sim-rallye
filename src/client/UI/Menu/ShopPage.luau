@@ -30,6 +30,8 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MenuKit = require(script.Parent.MenuKit)
@@ -316,6 +318,13 @@ local function cardAction(ctx: Context, holder: Frame, item: Catalog.Item, owned
 		state.TextXAlignment = Enum.TextXAlignment.Center
 		return
 	end
+	-- Voiture gratuite d'une catégorie pas encore ouverte : le niveau qui l'ouvre.
+	if isOwned and item.Level and MenuKit.Level(ctx) < item.Level then
+		local state = Widgets.Label(holder, string.format("🔒 NIVEAU %d", item.Level), 12, Enum.Font.GothamBlack, Widgets.COLOR_DIM)
+		state.Size = UDim2.fromScale(1, 1)
+		state.TextXAlignment = Enum.TextXAlignment.Center
+		return
+	end
 	if isOwned then
 		local button = ctx.Button(holder, if equipped then "PORTÉ ✓" else "PORTER", 0, CARD_WIDTH, function()
 			if not equipped then
@@ -417,8 +426,7 @@ end
 
 -- Les cartes des objets d'une sorte, trois par rangée, sans titre.
 -- `ownedOnly` : seulement ce qu'on possède (INVENTAIRE).
-function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOnly: boolean?)
-	local items, owned = shownItems(ctx, kind, ownedOnly)
+local function cardRows(ctx: Context, b: Builder, items: { Catalog.Item }, owned: { [string]: boolean })
 	local row: Frame? = nil
 	for index, item in ipairs(items) do
 		local column = (index - 1) % CARD_COLUMNS + 1
@@ -426,6 +434,32 @@ function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOn
 			row = b:Row(CARD_HEIGHT + CARD_GAP)
 		end
 		itemCard(ctx, row :: Frame, column, item, owned)
+	end
+end
+
+function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOnly: boolean?)
+	local items, owned = shownItems(ctx, kind, ownedOnly)
+	if kind ~= "Car" then
+		cardRows(ctx, b, items, owned)
+		return
+	end
+	-- Voitures : par catégorie, avec le niveau qui ouvre ses voitures gratuites.
+	for _, class in ipairs(CarClasses.LIST) do
+		local ofClass = {}
+		for _, item in ipairs(items) do
+			if item.CarClass == class.Id then
+				table.insert(ofClass, item)
+			end
+		end
+		if #ofClass > 0 then
+			local level = CarModels.CLASS_LEVELS[class.Id] or 1
+			b:Text(string.format(
+				"%s · 3 gratuites%s, 5 à débloquer en crédits ou en Robux",
+				Format.Upper(class.Name),
+				if level > 1 then string.format(" dès le niveau %d", level) else ""
+			), 13, Theme.YELLOW)
+			cardRows(ctx, b, ofClass, owned)
+		end
 	end
 end
 

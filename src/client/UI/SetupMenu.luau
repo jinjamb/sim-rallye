@@ -33,6 +33,7 @@ SetupMenu.__index = SetupMenu
 
 export type SetupMenu = typeof(setmetatable({}, SetupMenu)) & {
 	ClassId: string,
+	CarId: string?, -- la voiture (CarModels.luau) : sa transmission choisit les réglages montrés
 	Setup: CarSetup.Setup,
 	Title: TextLabel,
 	OnChange: (CarSetup.Setup, string) -> (), -- réglages, catégorie
@@ -152,7 +153,7 @@ function SetupMenu:_build()
 	self.ValueLabels = {}
 	self.FirstButton = nil
 	self.Title.Text = "RÉGLAGES · " .. Format.Upper(CarClasses.Get(self.ClassId).Name)
-	local fields = CarSetup.FieldsFor(self.ClassId)
+	local fields = CarSetup.FieldsFor(self.ClassId, self.CarId)
 
 	local groups: { string } = {}
 	local seen: { [string]: boolean } = {}
@@ -238,9 +239,10 @@ function SetupMenu:SetSetup(setup: CarSetup.Setup)
 end
 
 -- La voiture conduite change de catégorie : ses réglages à elle.
-function SetupMenu:SetClass(classId: string, setup: CarSetup.Setup)
-	local changed = classId ~= self.ClassId
+function SetupMenu:SetClass(classId: string, setup: CarSetup.Setup, carId: string?)
+	local changed = classId ~= self.ClassId or carId ~= self.CarId
 	self.ClassId = classId
+	self.CarId = carId
 	self.Setup = CarSetup.Sanitize(setup, classId)
 	if changed then
 		self:_build()
