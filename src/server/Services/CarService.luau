@@ -383,7 +383,7 @@ end
 
 -- Objets portés que les autres voient ou entendent (Catalog.luau) : un
 -- attribut par sorte sur la voiture, lu par chaque client (RemoteCars).
-local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine" }
+local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine", "Backfire" }
 local function tagEquipped(car: Model, player: Player)
 	for _, kind in ipairs(VISIBLE_KINDS) do
 		local item = EconomyService.Equipped(player, kind :: any)
@@ -663,7 +663,7 @@ function CarService.Start()
 		end
 	end)
 
-	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any)
+	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any, brake: any)
 		local now = os.clock()
 		if now - (lastTelemetryAt[player] or 0) < TELEMETRY_MIN_INTERVAL then
 			return
@@ -681,6 +681,7 @@ function CarService.Start()
 		chassis:SetAttribute("GravelSlide", finiteIn(gravelSlide, 0, 1))
 		chassis:SetAttribute("GravelShare", finiteIn(gravelShare, 0, 1))
 		chassis:SetAttribute("TarmacShare", finiteIn(tarmacShare, 0, 1))
+		chassis:SetAttribute("Brake", finiteIn(brake, 0, 1)) -- feux stop (TailLights)
 	end)
 
 	-- Filet de sécurité : mort, respawn, joueur téléporté loin de sa voiture.

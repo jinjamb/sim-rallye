@@ -19,6 +19,7 @@ Aerodynamics.__index = Aerodynamics
 
 export type Aerodynamics = typeof(setmetatable({}, Aerodynamics)) & {
 	DragCoefficient: number, -- traînée : F = k * v²
+	DragScale: number, -- 1 ; moins dans l'aspiration d'une autre voiture (Slipstream.luau)
 	DownforceFront: number, -- appui avant : F = k * vLongitudinale²
 	DownforceRear: number, -- appui arrière
 	RearBias: number, -- part de l'appui sur l'arrière
@@ -58,6 +59,7 @@ function Aerodynamics.new(chassis: BasePart, dragRatio: number, rearBias: number
 	local referencePressure = REFERENCE_SPEED * REFERENCE_SPEED
 
 	self.DragCoefficient = (weight * dragRatio) / referencePressure
+	self.DragScale = 1
 	self.Weight = weight
 	self.RearBias = rearBias
 	self:SetDownforceRatio(DOWNFORCE_RATIO)
@@ -95,7 +97,7 @@ function Aerodynamics:Apply(chassis: BasePart, dt: number)
 	local cframe = chassis.CFrame
 
 	-- 1. TRAÎNÉE : toujours opposée au vecteur vitesse réel, donc active aussi en travers.
-	local dragForce = self.DragCoefficient * speed * speed
+	local dragForce = self.DragCoefficient * self.DragScale * speed * speed
 	chassis:ApplyImpulse(-velocity.Unit * dragForce * dt)
 
 	-- 2. APPUI : basé sur la vitesse longitudinale seule (un aileron en crabe ne

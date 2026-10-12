@@ -176,11 +176,13 @@ end
 --[[
 	ÉCHAPPEMENT (Driving/Exhaust.luau), sons courts joués une fois :
 		Backfire     retour de flamme (lever de pied franc, passage de
-		             rapport, rupteur) : une grosse détonation ;
+		             rapport, rupteur) : une explosion. Un retour de flamme
+		             porté (Items/Backfires.luau) peut avoir la sienne (Sound) ;
 		AntiLagPops  crépitements de l'anti-lag, pied levé.
 	Plusieurs identifiants par liste : l'un d'eux au hasard, transposé un peu
 	(moins répétitif). Listes vides : les flammes sans le son. À chercher dans
-	le Creator Store : « backfire », « exhaust pop », « anti lag », « crackle ».
+	le Creator Store : « backfire », « explosion », « exhaust pop », « anti
+	lag », « crackle ».
 ]]
 SoundBank.Backfire = {} :: { string }
 SoundBank.AntiLagPops = {} :: { string }

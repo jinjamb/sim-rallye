@@ -47,6 +47,7 @@ local Theme = require(script.Parent.UI.Theme)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Tutorial = require(script.Parent.Tutorial.Tutorial)
+local Slipstream = require(script.Parent.Driving.Slipstream)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -906,9 +907,15 @@ end)
 local TELEMETRY_INTERVAL = 0.1 -- 10 Hz : assez pour le son et les roues des autres
 local telemetryAccumulator = 0
 
+-- Aspiration : dans le sillage d'une autre voiture, moins de traînée.
+local slipstream = Slipstream.new(playerGui)
+
 RunService.RenderStepped:Connect(function(dt: number)
 	remoteCars:Update(dt)
 	tutorial:Update(dt)
+	local drafting = session
+	local leader = slipstream:Update(dt, if drafting and drafting.HasControl then drafting.Car else nil, remoteCars:GetVisibleCars())
+	remoteCars:SetDraftLeader(leader)
 
 	-- Une course qui part (revanche, salle rejointe) reprend la main sur le ralenti.
 	if replay:IsActive() and raceClient:IsRaceUnderway() then
@@ -938,7 +945,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 					screech,
 					audioState.GravelSlide,
 					audioState.GravelShare,
-					audioState.TarmacShare
+					audioState.TarmacShare,
+					audioState.Brake
 				)
 			end
 		end

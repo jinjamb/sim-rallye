@@ -53,6 +53,7 @@ local CARD_BUTTON_HEIGHT = 32
 local KIND_CHIPS: { [string]: string } = {
 	Car = "🏎️ VOITURES",
 	Engine = "⚙️ MOTEURS",
+	Backfire = "🔥 FLAMMES",
 	Smoke = "💨 FUMÉES",
 	Horn = "📯 KLAXONS",
 	Celebration = "🎉 FÊTES",

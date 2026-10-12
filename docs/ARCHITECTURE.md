@@ -154,6 +154,12 @@ Chaque moteur est un enregistrement du Creator Store (`Audio/SoundBank.luau`, `R
 
 Anti-lag et retours de flamme : `Driving/Exhaust.luau`, piloté par le même état que le son (régime, charge) pour toutes les voitures. Un lever de pied franc à haut régime fait un retour de flamme ; pied levé, l'anti-lag (`CarClasses.AntiLag`) fait crépiter l'échappement et garde la pression du turbo (`Powertrain`).
 
+## Retours de flamme, feux et aspiration
+
+- **Retours de flamme** (`Driving/Exhaust.luau`) : une explosion (gerbe, boule de feu, étincelles, fumée, éclair) au lever de pied franc à haut régime, aux passages de rapport et au rupteur ; crépitements pied levé avec l'anti-lag. Couleurs, taille et détonation viennent de l'objet porté (`Items/Backfires.luau`, sorte « Backfire », attribut `EquippedBackfire`), à débloquer comme les fumées.
+- **Feux arrière** (`Driving/TailLights.luau`) : allumés sur toute voiture qui roule, halos lumineux qui percent la poussière et la neige, feux stop au freinage (`Brake`, ajouté à la télémétrie).
+- **Aspiration** (`Driving/Slipstream.luau`) : dans le sillage d'une autre voiture (cône derrière elle), la traînée baisse jusqu'à 70 % (`Aerodynamics.DragScale`). Chaque voiture lancée laisse une traînée d'air (`RemoteCars`), cyan quand on l'aspire, et « ASPIRATION » s'affiche avec une jauge.
+
 ## Conventions
 
 - `--!strict` partout. Les types exportés sont nommés comme le module (`Car.Car`, `MainMenu.MainMenu`).
