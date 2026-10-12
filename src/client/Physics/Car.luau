@@ -20,6 +20,7 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	Powertrain: PowertrainClass.Powertrain,
 	Aerodynamics: AerodynamicsClass.Aerodynamics,
 	MaxSteerAngle: number,
+	SteerAssist: number, -- 0..1 : aide au braquage (voir AIDE AU BRAQUAGE)
 	MaxBrakeForce: number,
 	HandbrakeForce: number,
 	BrakeBiasFront: number,
@@ -135,6 +136,7 @@ function Car.new(chassis: BasePart, classId: string?): Car
 	self.Class = CarClasses.Get(classId)
 	self.Aerodynamics = AerodynamicsClass.new(chassis)
 	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
+	self.SteerAssist = 1 -- réglable (CarSetup.SteerAssist)
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
 	self.Wheels = {}
 	self.WheelsByName = {}
@@ -210,6 +212,7 @@ function Car:ApplySetup(input: CarSetup.Setup)
 	self.Setup = setup
 
 	self.MaxSteerAngle = setup.SteerAngle
+	self.SteerAssist = setup.SteerAssist
 	InputManager:SetHighSpeedSteer(setup.HighSpeedSteer)
 
 	self.BrakeBiasFront = setup.BrakeBias
@@ -311,6 +314,53 @@ end
 	vers le HAUT à gauche et le tire vers le BAS à droite : le roulis diminue, et la
 	charge (donc le grip) est transférée vers l'extérieur du virage.
 ]]
+--[[
+	AIDE AU BRAQUAGE.
+	Un pneu tient le mieux à un petit angle de dérive (~9° sur l'asphalte,
+	~14° sur la terre : Surfaces.luau). Au-delà, il glisse et perd de
+	l'adhérence. Or au clavier, appuyer sur une flèche braque presque à fond :
+	à 50 km/h, ~43° de braquage quand la voiture n'en demande que ~18°. Les
+	roues avant travaillent alors à 3-4 fois leur dérive idéale : sur la
+	terre le pneu le pardonne (il garde ~96 % de son adhérence), sur
+	l'asphalte il en perd 15 à 20 % -- la voiture « pousse » tout droit.
+
+	L'aide limite donc le braquage, DANS LE SENS OÙ L'ON BRAQUE, à la
+	direction de la vitesse de l'essieu avant plus la dérive idéale du sol
+	(avec une marge), comme un pilote qui dose le volant. Elle ne contre-braque
+	jamais à la place du pilote et ne retourne jamais le volant : en glisse,
+	le contre-braquage reste entier, et braquer vers l'intérieur garde au
+	moins ASSIST_MIN_SHARE du braquage demandé. Sans effet à basse vitesse (épingles,
+	manœuvres), où le plein braquage sert.
+]]
+local ASSIST_START_SPEED = 15 -- studs/s (~15 km/h) : en dessous, aucune aide
+local ASSIST_FULL_SPEED = 35 -- aide complète au-delà
+local ASSIST_SLIP_MARGIN = 1.25 -- jusqu'à 25 % au-delà de la dérive idéale
+-- Part du braquage demandé toujours gardée : en grosse glisse, braquer vers
+-- l'intérieur tourne encore un peu les roues (le volant ne semble jamais mort).
+local ASSIST_MIN_SHARE = 0.2
+
+function Car:_assistSteer(angle: number): number
+	if self.SteerAssist <= 0 or angle == 0 then
+		return angle
+	end
+	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
+	local cframe = self.Chassis.CFrame
+	local axle = (fl.Attachment.WorldPosition + fr.Attachment.WorldPosition) / 2
+	local velocity = self.Chassis:GetVelocityAtPosition(axle)
+	local forward = velocity:Dot(cframe.LookVector)
+	if forward <= ASSIST_START_SPEED then
+		return angle
+	end
+	-- Direction de la vitesse de l'essieu avant, positive à gauche (comme le braquage).
+	local heading = math.atan2(-velocity:Dot(cframe.RightVector), forward)
+	local peak = math.atan(math.max(fl.Surface.Tire.PeakSlipAngle, fr.Surface.Tire.PeakSlipAngle)) * ASSIST_SLIP_MARGIN
+	local limited = if angle > 0
+		then math.min(angle, math.max(angle * ASSIST_MIN_SHARE, heading + peak))
+		else math.max(angle, math.min(angle * ASSIST_MIN_SHARE, heading - peak))
+	local blend = math.clamp((forward - ASSIST_START_SPEED) / (ASSIST_FULL_SPEED - ASSIST_START_SPEED), 0, 1) * self.SteerAssist
+	return angle + (limited - angle) * blend
+end
+
 local function applyAxleAntiRoll(left: WheelClass.Wheel, right: WheelClass.Wheel, stiffness: number)
 	local delta = left.Compression - right.Compression
 	local force = delta * stiffness
@@ -458,7 +508,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	end
 
 	-- Ackermann Steering
-	local targetSteerAngle = math.rad(self.MaxSteerAngle * inputs.steer)
+	local targetSteerAngle = self:_assistSteer(math.rad(self.MaxSteerAngle * inputs.steer))
 	local leftAngle, rightAngle = 0, 0
 	if math.abs(targetSteerAngle) > 0.001 then
 		local turnRadius = self.Wheelbase / math.tan(targetSteerAngle)

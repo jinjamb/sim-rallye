@@ -49,6 +49,11 @@ CarSetup.FIELDS = {
 		Hint = "Clavier et tactile : part du braquage gardée à 120 km/h (la manette n'est jamais limitée).",
 	},
 	{
+		Key = "SteerAssist", Label = "Aide au braquage", Group = "Direction",
+		Min = 0, Max = 1, Step = 0.25, Default = 1, Format = "%.0f %%", Scale = 100,
+		Hint = "Quand on braque plus que les pneus ne peuvent tenir (clavier surtout), garde les roues avant près de leur meilleure adhérence : moins de sous-virage, surtout sur l'asphalte. Le contre-braquage reste libre. 0 % : braquage brut.",
+	},
+	{
 		Key = "BrakeBias", Label = "Répartition AV", Group = "Freins",
 		Min = 0.50, Max = 0.80, Step = 0.01, Default = 0.65, Format = "%.0f %%", Scale = 100,
 		Hint = "Moins à l'avant : l'arrière décroche au freinage, la voiture pivote.",
