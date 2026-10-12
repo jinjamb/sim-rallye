@@ -44,15 +44,19 @@ local LAP_STORE_PREFIX = "RallyLap_"
 
 --[[
 	Lectures des classements sauvegardés : Roblox en permet ~5 + 2 x joueurs
-	par minute (GetSortedAsync). Avec une catégorie de plus, on ne relit plus
-	tout d'un coup : une catégorie à chaque fois, à tour de rôle (une relecture
-	complète toutes les 90 s pour la spéciale, 6 min pour les circuits), plus
-	la catégorie où un record vient de tomber.
+	par minute (GetSortedAsync). Avec 10 spéciales, 10 circuits et 3
+	catégories (60 classements), on ne relit qu'un classement à la fois, à
+	tour de rôle : ~2 lectures par minute pour les spéciales, ~2 pour les
+	circuits (un tour complet toutes les 15 min chacun ; 8 min au démarrage),
+	plus le classement où un record vient de tomber, aussitôt. Entre deux
+	lectures, les temps de la session complètent l'affichage (Boards.luau).
 ]]
 local LEADERBOARD_SIZE = 10
-local LEADERBOARD_ROTATE = 30 -- secondes entre deux catégories relues
+local LEADERBOARD_ROTATE = 30 -- secondes entre deux classements de spéciale relus
+local STAGE_FIRST_WAIT = 16 -- premier tour, au démarrage du serveur
 local LAP_BOARD_SIZE = 5
-local LAP_BOARD_ROTATE = 120
+local LAP_BOARD_ROTATE = 30 -- secondes entre deux classements de circuit relus
+local LAP_FIRST_WAIT = 16
 
 -- Session : UserId -> meilleur temps, par clé de classement.
 type Session = { [string]: { [number]: number } }
@@ -206,30 +210,33 @@ end
 -- Appelée à chaque mise à jour des records du tour (panneaux du paddock).
 RecordService.TrackRecordsChanged = function(_boards: any) end
 
--- Relit les records du tour d'une catégorie, sur tous les circuits.
-local function refreshLapBoards(classId: string)
-	local boards: { [string]: TrackBoard } = {}
-	for _, id in ipairs(Tracks.List()) do
-		local circuit = Tracks.Get(id)
-		if circuit then
-			local key = ProfileSchema.LapKey(circuit.Key, classId)
-			boards[id] = {
-				Key = key,
-				Entries = Boards.Merge(lapStore(key), sessionOf(sessionLaps, key), LAP_BOARD_SIZE, "records du tour"),
-			}
-		end
+-- Relit les records du tour d'un circuit, dans une catégorie (une lecture).
+local function refreshLapBoard(classId: string, trackId: string)
+	local circuit = Tracks.Get(trackId)
+	if not circuit then
+		return
 	end
-	lapBoards[classId] = boards
+	local boards = lapBoards[classId]
+	if not boards then
+		boards = {}
+		lapBoards[classId] = boards
+	end
+	local key = ProfileSchema.LapKey(circuit.Key, classId)
+	boards[trackId] = {
+		Key = key,
+		Entries = Boards.Merge(lapStore(key), sessionOf(sessionLaps, key), LAP_BOARD_SIZE, "records du tour"),
+	}
 	Remotes.TrackRecords:FireAllClients(lapBoards)
 	RecordService.TrackRecordsChanged(lapBoards)
 end
 
-local dirtyLaps: { [string]: boolean } = {}
+-- Circuits où un record vient de tomber, par catégorie : relus un peu après.
+local dirtyLaps: { [string]: { Class: string, Track: string } } = {}
 local refreshDirtyLaps = Boards.Debounced(3, function()
-	local classes = dirtyLaps
+	local pending = dirtyLaps
 	dirtyLaps = {}
-	for classId in pairs(classes) do
-		refreshLapBoards(classId)
+	for _, board in pairs(pending) do
+		refreshLapBoard(board.Class, board.Track)
 	end
 end)
 
@@ -276,7 +283,12 @@ function RecordService.SubmitLap(player: Player, trackKey: string, classId: stri
 		return true
 	end)
 	Boards.SubmitLowest(lapStore(key), player.UserId, ms, "records du tour")
-	dirtyLaps[classId] = true
+	for _, id in ipairs(Tracks.List()) do
+		local circuit = Tracks.Get(id)
+		if circuit and circuit.Key == trackKey then
+			dirtyLaps[classId .. "|" .. id] = { Class = classId, Track = id }
+		end
+	end
 	refreshDirtyLaps()
 	pushProfile(player)
 	return true
@@ -349,38 +361,39 @@ function RecordService.Start()
 		Remotes.TrackRecords:FireClient(player, lapBoards)
 	end)
 
-	-- Une catégorie à la fois, à tour de rôle ; le premier tour plus vite
-	-- (classements vides au démarrage), sans tout lire d'un coup.
-	local function rotate(refresh: (string) -> (), firstWait: number, interval: number)
+	--[[
+		Relecture à tour de rôle : un classement à chaque fois (un tracé dans
+		une catégorie), le premier tour plus vite (classements vides au
+		démarrage) sans tout lire d'un coup. Les records tout juste battus
+		sont relus à part (dirtyStage, dirtyLaps).
+	]]
+	local function rotate(boards: { any }, refresh: (any) -> (), firstWait: number, interval: number)
 		task.spawn(function()
 			local index = 0
-			local firstPass = #CarClasses.LIST
+			local firstPass = #boards
 			while true do
-				index = index % #CarClasses.LIST + 1
-				refresh(CarClasses.LIST[index].Id)
+				index = index % #boards + 1
+				refresh(boards[index])
 				firstPass -= 1
 				task.wait(if firstPass > 0 then firstWait else interval)
 			end
 		end)
 	end
-	-- Classements des spéciales : chaque spéciale dans chaque catégorie, à tour de rôle.
-	task.spawn(function()
-		local boards = {}
+	local stageBoards, lapBoardList = {}, {}
+	for _, class in ipairs(CarClasses.LIST) do
 		for _, stageId in ipairs(Stages.List()) do
-			for _, class in ipairs(CarClasses.LIST) do
-				table.insert(boards, { Stage = stageId, Class = class.Id })
-			end
+			table.insert(stageBoards, { Stage = stageId, Class = class.Id })
 		end
-		local index = 0
-		local firstPass = #boards
-		while true do
-			index = index % #boards + 1
-			refreshLeaderboard(boards[index].Class, boards[index].Stage)
-			firstPass -= 1
-			task.wait(if firstPass > 0 then 5 else LEADERBOARD_ROTATE)
+		for _, trackId in ipairs(Tracks.List()) do
+			table.insert(lapBoardList, { Track = trackId, Class = class.Id })
 		end
-	end)
-	rotate(refreshLapBoards, 20, LAP_BOARD_ROTATE)
+	end
+	rotate(stageBoards, function(board)
+		refreshLeaderboard(board.Class, board.Stage)
+	end, STAGE_FIRST_WAIT, LEADERBOARD_ROTATE)
+	rotate(lapBoardList, function(board)
+		refreshLapBoard(board.Class, board.Track)
+	end, LAP_FIRST_WAIT, LAP_BOARD_ROTATE)
 end
 
 return RecordService

@@ -208,8 +208,8 @@ function PaddockScenery.Build(paddock: Instance)
 	end
 
 	-- Oriflammes le long des zones de course, piles de pneus, mâts d'éclairage.
-	for i, x in ipairs({ -200, -152, -108, -62 }) do
-		Scenery.Flag(folder, Vector3.new(x, 0.2, 112), Scenery.TEAM_COLORS[(i % 4) + 1], Vector3.new(0, 0, 1))
+	for i, x in ipairs({ -212, -38 }) do
+		Scenery.Flag(folder, Vector3.new(x, 0.2, 118), Scenery.TEAM_COLORS[(i % 4) + 1], Vector3.new(0, 0, 1))
 	end
 	for _, spot in ipairs({ Vector3.new(-236, 0.2, 60), Vector3.new(-160, 0.2, 58), Vector3.new(-58, 0.2, 58), Vector3.new(-24, 0.2, 150), Vector3.new(-236, 0.2, 200) }) do
 		Scenery.TireStack(folder, spot, rng)

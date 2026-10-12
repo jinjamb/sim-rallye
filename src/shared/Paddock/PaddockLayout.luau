@@ -6,9 +6,11 @@
 	serveur (construction, détection des zones, retour au paddock) et le client
 	(caméra du podium).
 
-	TOUT EST À PORTÉE DU SPAWN : on apparaît face aux trois zones de course,
-	disposées en arc à une quarantaine de studs (quelques secondes de marche),
-	la zone voiture à droite, le podium à gauche. Panneaux tournés vers le spawn.
+	TOUT EST À PORTÉE DU SPAWN : on apparaît face aux zones de course (une par
+	circuit), en deux rangées de cinq à 40 et 80 studs (quelques secondes de
+	marche), la seconde décalée pour que ses panneaux se voient entre ceux de
+	la première ; la zone voiture à droite, le podium à gauche. Panneaux
+	tournés vers le spawn. On rejoint aussi une course depuis le menu (C).
 
 	La Baseplate est déjà occupée ailleurs : piste d'essai à droite (X de 24 à
 	250), places des voitures en Z = -180, départ de la spéciale en Z = -256
@@ -34,11 +36,19 @@ PaddockLayout.PLAZA_SIZE = Vector2.new(230, 190)
 PaddockLayout.PAD_RADIUS = 12
 PaddockLayout.CAR_PAD_ID = "car"
 
--- En arc devant le spawn (cap -Z) : gauche, centre, droite vus du spawn.
+-- Devant le spawn (cap -Z), de gauche à droite vus du spawn : rangée avant,
+-- puis rangée arrière décalée d'une demi-place.
 PaddockLayout.RACE_PADS = {
-	{ Id = "greves", Position = Vector3.new(-175, 0, 138), Radius = 12, Color = Color3.fromRGB(70, 150, 255) },
-	{ Id = "ajoncs", Position = Vector3.new(-130, 0, 130), Radius = 12, Color = Color3.fromRGB(70, 200, 95) },
-	{ Id = "valdefaye", Position = Vector3.new(-85, 0, 138), Radius = 12, Color = Color3.fromRGB(255, 140, 40) },
+	{ Id = "greves", Position = Vector3.new(-190, 0, 138), Radius = 11, Color = Color3.fromRGB(70, 150, 255) },
+	{ Id = "ajoncs", Position = Vector3.new(-160, 0, 138), Radius = 11, Color = Color3.fromRGB(70, 200, 95) },
+	{ Id = "valdefaye", Position = Vector3.new(-130, 0, 138), Radius = 11, Color = Color3.fromRGB(255, 140, 40) },
+	{ Id = "falaises", Position = Vector3.new(-100, 0, 138), Radius = 11, Color = Color3.fromRGB(40, 200, 200) },
+	{ Id = "anneau", Position = Vector3.new(-70, 0, 138), Radius = 11, Color = Color3.fromRGB(240, 70, 70) },
+	{ Id = "lacs", Position = Vector3.new(-175, 0, 98), Radius = 11, Color = Color3.fromRGB(170, 215, 255) },
+	{ Id = "carriere", Position = Vector3.new(-145, 0, 98), Radius = 11, Color = Color3.fromRGB(200, 160, 100) },
+	{ Id = "port", Position = Vector3.new(-115, 0, 98), Radius = 11, Color = Color3.fromRGB(120, 130, 255) },
+	{ Id = "brumes", Position = Vector3.new(-85, 0, 98), Radius = 11, Color = Color3.fromRGB(160, 170, 180) },
+	{ Id = "tourbieres", Position = Vector3.new(-55, 0, 98), Radius = 11, Color = Color3.fromRGB(190, 110, 255) },
 } :: { Pad }
 
 -- À droite du spawn.

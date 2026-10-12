@@ -198,7 +198,9 @@ local function buildPaddock()
 	for _, pad in ipairs(PaddockLayout.RACE_PADS) do
 		padRing(folder, pad)
 		local circuit = Tracks.Get(pad.Id)
-		local _, frame = board(folder, pad.Position + Vector3.new(0, 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
+		-- Rangée arrière : panneau plus haut, visible au-dessus de la rangée avant.
+		local back = pad.Position.Z < PaddockLayout.SPAWN.Z - 60
+		local _, frame = board(folder, pad.Position + Vector3.new(0, if back then 12 else 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
 		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
 		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
 		local record = label(frame, "Record du tour : —", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))

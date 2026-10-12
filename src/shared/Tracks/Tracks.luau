@@ -8,9 +8,14 @@
 	tools/build-circuit.luau dans Studio. Les records du tour repartent alors de
 	zéro (la clé de sauvegarde dépend de la longueur du tracé).
 
-	Implantation : loin du paddock (Baseplate) et de la spéciale, qui s'étend de
-	X = -3600 à +400 et de Z = -1600 à +600, accotements compris. Un circuit
-	occupe environ 1700 x 1000 studs avec ses dégagements.
+	Implantation : à l'est, loin du paddock (Baseplate) et des spéciales
+	(Stages.luau, à l'ouest et au nord). Un circuit occupe son tracé plus
+	~330 studs tout autour (dégagements, collines : tools/build-circuit.luau),
+	soit environ 2200 x 1500 studs ; ces zones ne doivent pas se chevaucher.
+	Trois rangées, un circuit tous les ~3000 studs :
+		Z = 0      : Ajoncs, Val-de-Faye, Grèves, Falaises (X = 3000 à 12000) ;
+		Z = -3000  : Lacs Gelés, Carrière, Anneau, Port ;
+		Z = -6000  : Brumes, Tourbières.
 
 	Relief : la ligne droite de départ reste à plat (grille) ; ailleurs, le
 	tracé monte et descend jusqu'à 18 studs (5 m), et les collines du décor
@@ -26,6 +31,7 @@ local Tracks = {}
 
 local ASPHALT = Enum.Material.Asphalt
 local GROUND = Enum.Material.Ground
+local SNOW = Enum.Material.Snow
 
 local DEFINITIONS: { Circuit.Definition } = {
 	{
@@ -121,6 +127,221 @@ local DEFINITIONS: { Circuit.Definition } = {
 		},
 		Jumps = {
 			{ Edge = 6, T = 0.5, Height = 5, Up = 34, Down = 120 },
+		},
+	},	{
+		Id = "lacs",
+		Name = "Lacs Gelés",
+		Description = "0,99 km — 56 % asphalte, 44 % neige. Rallycross d'hiver : épingle dans l'infield, joker enneigé.",
+		Origin = Vector3.new(3000, 0, -3000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 4,
+		Points = {
+			{ X = -700, Z = -200, Radius = 90, Material = ASPHALT },
+			{ X = 500, Z = -200, Radius = 100 },
+			{ X = 750, Z = 150, Radius = 80, Material = SNOW, Height = 6 },
+			{ X = 400, Z = 350, Radius = 60, Height = 10 },
+			{ X = 150, Z = 150, Radius = 45, Height = 4 },
+			{ X = -150, Z = 350, Radius = 60, Height = 12 },
+			{ X = -650, Z = 250, Radius = 90, Material = ASPHALT, Height = 0 },
+		},
+		StartLine = { Edge = 1, T = 0.55 },
+		Joker = {
+			From = { Edge = 3, T = 0.4 },
+			To = { Edge = 4, T = 0.45 },
+			Lead = 20,
+			Radius = 50,
+			Via = { { X = 760, Z = 520, Radius = 70 }, { X = 420, Z = 560, Radius = 60 } },
+			Material = SNOW,
+		},
+		Jumps = {
+			{ Edge = 6, T = 0.5, Height = 3, Up = 24, Down = 80 },
+		},
+	},
+	{
+		Id = "carriere",
+		Name = "La Carrière",
+		Description = "0,90 km — 65 % terre. Bosse au cœur de la carrière, montées et descentes, joker en contrebas.",
+		Origin = Vector3.new(6000, 0, -3000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 5,
+		Points = {
+			{ X = -550, Z = -300, Radius = 70, Material = ASPHALT },
+			{ X = 300, Z = -300, Radius = 60 },
+			{ X = 500, Z = -80, Radius = 50, Material = GROUND, Height = 12 },
+			{ X = 250, Z = 100, Radius = 50, Height = 18 },
+			{ X = 500, Z = 330, Radius = 70, Height = 8 },
+			{ X = -100, Z = 420, Radius = 80, Height = 16 },
+			{ X = -300, Z = 150, Radius = 50, Height = 6 },
+			{ X = -650, Z = 50, Radius = 70, Height = 0 },
+		},
+		StartLine = { Edge = 1, T = 0.5 },
+		Joker = {
+			From = { Edge = 6, T = 0.5 },
+			To = { Edge = 7, T = 0.5 },
+			Lead = 20,
+			Radius = 45,
+			Via = { { X = -560, Z = 480, Radius = 60 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 4, T = 0.5, Height = 4, Up = 28, Down = 100 },
+		},
+	},
+	{
+		Id = "port",
+		Name = "Le Port",
+		Description = "0,74 km — 82 % asphalte. Le plus court : virages à angle droit entre les docks.",
+		Origin = Vector3.new(12300, 0, -3000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 6,
+		Points = {
+			{ X = -500, Z = -250, Radius = 50, Material = ASPHALT },
+			{ X = 350, Z = -250, Radius = 45 },
+			{ X = 350, Z = 50, Radius = 40, Height = 3 },
+			{ X = 50, Z = 50, Radius = 35 },
+			{ X = 50, Z = 300, Radius = 45, Material = GROUND, Height = 5 },
+			{ X = -250, Z = 300, Radius = 50, Height = 8 },
+			{ X = -250, Z = 100, Radius = 40, Material = ASPHALT, Height = 3 },
+			{ X = -500, Z = 100, Radius = 50, Height = 0 },
+		},
+		StartLine = { Edge = 1, T = 0.5 },
+		Joker = {
+			From = { Edge = 5, T = 0.2 },
+			To = { Edge = 5, T = 0.85 },
+			Lead = 20,
+			Radius = 45,
+			Via = { { X = -100, Z = 480, Radius = 50 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 2, T = 0.5, Height = 2.5, Up = 20, Down = 60 },
+		},
+	},
+	{
+		Id = "anneau",
+		Name = "L'Anneau",
+		Description = "1,14 km — 73 % asphalte. Le plus rapide : grandes courbes et gros saut sur la terre.",
+		Origin = Vector3.new(9300, 0, -3000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 4,
+		Points = {
+			{ X = -900, Z = -250, Radius = 150, Material = ASPHALT },
+			{ X = 600, Z = -250, Radius = 140 },
+			{ X = 800, Z = 150, Radius = 100, Material = GROUND, Height = 10 },
+			{ X = 300, Z = 380, Radius = 120, Height = 14 },
+			{ X = -200, Z = 250, Radius = 90, Material = ASPHALT, Height = 6 },
+			{ X = -850, Z = 350, Radius = 130, Height = 2 },
+		},
+		StartLine = { Edge = 1, T = 0.5 },
+		Joker = {
+			From = { Edge = 4, T = 0.35 },
+			To = { Edge = 5, T = 0.5 },
+			Lead = 20,
+			Radius = 55,
+			Via = { { X = 0, Z = 600, Radius = 70 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 3, T = 0.5, Height = 4.5, Up = 32, Down = 110 },
+		},
+	},
+	{
+		Id = "brumes",
+		Name = "Les Brumes",
+		Description = "1,07 km — 86 % terre. Long droit en terre, épingle dans l'infield, saut.",
+		Origin = Vector3.new(3000, 0, -6000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 4,
+		Points = {
+			{ X = 600, Z = -300, Radius = 80, Material = GROUND },
+			{ X = -350, Z = -300, Radius = 90 },
+			{ X = -650, Z = -50, Radius = 70, Height = 7 },
+			{ X = -520, Z = 250, Radius = 60, Height = 16 },
+			{ X = -180, Z = 160, Radius = 40, Material = ASPHALT, Height = 9 },
+			{ X = 0, Z = -60, Radius = 40, Height = 13 },
+			{ X = 200, Z = 150, Radius = 50, Material = GROUND, Height = 5 },
+			{ X = 120, Z = 360, Radius = 50, Height = 14 },
+			{ X = 520, Z = 320, Radius = 90, Height = 4 },
+			{ X = 760, Z = 20, Radius = 80, Height = 0 },
+		},
+		StartLine = { Edge = 1, T = 0.55 },
+		Joker = {
+			From = { Edge = 3, T = 0.4 },
+			To = { Edge = 4, T = 0.5 },
+			Lead = 20,
+			Radius = 50,
+			Via = { { X = -820, Z = 470, Radius = 70 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 8, T = 0.5, Height = 4, Up = 28, Down = 95 },
+		},
+	},
+	{
+		Id = "tourbieres",
+		Name = "Les Tourbières",
+		Description = "0,96 km — 66 % terre. Technique : enchaînements serrés et bosse en crête.",
+		Origin = Vector3.new(6000, 0, -6000),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 5,
+		Points = {
+			{ X = 550, Z = -275, Radius = 66, Material = ASPHALT },
+			{ X = -330, Z = -275, Radius = 55 },
+			{ X = -495, Z = 0, Radius = 44, Material = GROUND, Height = 9 },
+			{ X = -220, Z = 132, Radius = 44, Height = 15 },
+			{ X = -495, Z = 330, Radius = 77, Height = 3 },
+			{ X = -110, Z = 462, Radius = 66, Height = 10 },
+			{ X = 385, Z = 330, Radius = 55, Height = 17 },
+			{ X = 165, Z = 88, Radius = 50, Height = 6 },
+			{ X = 605, Z = 55, Radius = 66, Height = 0 },
+		},
+		StartLine = { Edge = 1, T = 0.5 },
+		Joker = {
+			From = { Edge = 6, T = 0.45 },
+			To = { Edge = 7, T = 0.4 },
+			Lead = 20,
+			Radius = 45,
+			Via = { { X = 594, Z = 594, Radius = 66 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 5, T = 0.45, Height = 3.5, Up = 24, Down = 80 },
+		},
+	},
+	{
+		Id = "falaises",
+		Name = "Les Falaises",
+		Description = "1,06 km — 81 % asphalte. Grand droit, longues courbes, gros saut sur l'asphalte.",
+		Origin = Vector3.new(12000, 0, 0),
+		RoadWidth = 44,
+		JokerWidth = 34,
+		DefaultLaps = 4,
+		Points = {
+			{ X = 900, Z = -200, Radius = 120, Material = ASPHALT },
+			{ X = -500, Z = -200, Radius = 70 },
+			{ X = -700, Z = 100, Radius = 100, Height = 14 },
+			{ X = -300, Z = 350, Radius = 50, Material = GROUND, Height = 8 },
+			{ X = 0, Z = 150, Radius = 60, Height = 2 },
+			{ X = 300, Z = 400, Radius = 80, Material = ASPHALT, Height = 12 },
+			{ X = 800, Z = 250, Radius = 100, Height = 3 },
+		},
+		StartLine = { Edge = 1, T = 0.55 },
+		Joker = {
+			From = { Edge = 3, T = 0.5 },
+			To = { Edge = 4, T = 0.5 },
+			Lead = 20,
+			Radius = 50,
+			Via = { { X = -300, Z = 580, Radius = 70 } },
+			Material = GROUND,
+		},
+		Jumps = {
+			{ Edge = 6, T = 0.5, Height = 4, Up = 30, Down = 110 },
 		},
 	},
 }
