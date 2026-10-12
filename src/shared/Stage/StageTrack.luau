@@ -69,9 +69,14 @@ export type SegmentInfo = {
 	Material: Enum.Material,
 }
 
--- Décor de la spéciale (tools/build-stage.luau) : forêt de pins et de
--- feuillus, ou montagne enneigée.
-export type Theme = "Forest" | "Snow"
+-- Décor de la spéciale (tools/build-stage.luau, THEMES) : forêt, montagne
+-- enneigée, route de col, garrigue, bocage.
+export type Theme = "Forest" | "Snow" | "Mountain" | "Garrigue" | "Countryside"
+
+-- Nature de la spéciale, déduite de ses surfaces (menu, filtres) :
+-- Tarmac (95 % d'asphalte ou plus), Snow (75 % de neige et de verglas ou
+-- plus), Gravel (95 % de terre ou plus), Mixed sinon.
+export type SurfaceKind = "Tarmac" | "Snow" | "Gravel" | "Mixed"
 
 export type Definition = {
 	Id: string,
@@ -97,6 +102,7 @@ export type Track = {
 	Description: string,
 	RecordId: string,
 	Theme: Theme,
+	Surface: SurfaceKind,
 	MedalSpeeds: { number },
 	ORIGIN: Vector3,
 	SAMPLE_STEP: number,
@@ -226,6 +232,26 @@ function StageTrack.new(definition: Definition): Track
 	build()
 
 	track.RecordId = definition.RecordPrefix .. "_" .. tostring(math.floor(length))
+
+	-- Nature de la spéciale : part de chaque famille de surface sur le parcours.
+	local tarmac, winter, loose, total = 0, 0, 0, 0
+	for _, segment in ipairs(segments) do
+		local span = segment.EndDistance - segment.StartDistance
+		local material = segment.Material
+		total += span
+		if material == Enum.Material.Asphalt or material == Enum.Material.Concrete or material == Enum.Material.Pavement then
+			tarmac += span
+		elseif material == Enum.Material.Snow or material == Enum.Material.Ice or material == Enum.Material.Glacier then
+			winter += span
+		else
+			loose += span
+		end
+	end
+	total = math.max(total, 1)
+	track.Surface = if tarmac / total >= 0.95 then "Tarmac"
+		elseif winter / total >= 0.75 then "Snow"
+		elseif loose / total >= 0.95 then "Gravel"
+		else "Mixed"
 
 	function track.GetSamples(): { Sample }
 		return samples

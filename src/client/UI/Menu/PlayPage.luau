@@ -90,6 +90,9 @@ function PlayPage.XpEvent(_ctx: Context, b: Builder)
 	end
 end
 
+local SURFACE_ICONS = { Tarmac = "🛣 ", Snow = "❄ ", Gravel = "🌲 ", Mixed = "🔀 " }
+local SURFACE_NAMES = { Tarmac = "Asphalte", Snow = "Neige", Gravel = "Terre", Mixed = "Mixte" }
+
 -- Les spéciales : une ligne chacune (nom, ce qui l'attend, LANCER), puis le
 -- ralenti de son meilleur passage.
 function PlayPage.Stage(ctx: Context, b: Builder)
@@ -99,11 +102,10 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 	for index, id in ipairs(Stages.List()) do
 		local track = Stages.Get(id)
 		local row = b:Row(44)
-		local icon = if track.Theme == "Snow" then "❄ " else "🌲 "
-		local name = Widgets.Label(row, icon .. track.Name, 15, Enum.Font.GothamBold)
+		local name = Widgets.Label(row, SURFACE_ICONS[track.Surface] .. track.Name, 15, Enum.Font.GothamBold)
 		name.Position = UDim2.fromOffset(0, 2)
 		name.Size = UDim2.new(1, -176, 0, 18)
-		local info = Widgets.Label(row, track.Description, 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+		local info = Widgets.Label(row, SURFACE_NAMES[track.Surface] .. " · " .. track.Description, 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
 		info.Position = UDim2.fromOffset(0, 21)
 		info.Size = UDim2.new(1, -176, 0, 22)
 		info.TextWrapped = true

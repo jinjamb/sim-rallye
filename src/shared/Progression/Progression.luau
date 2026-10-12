@@ -26,6 +26,7 @@
 ]]
 
 local Tracks = require(script.Parent.Parent.Tracks.Tracks)
+local Stages = require(script.Parent.Parent.Stage.Stages)
 local Lessons = require(script.Parent.Parent.School.Lessons)
 local Format = require(script.Parent.Parent.Util.Format)
 local Catalog = require(script.Parent.Parent.Economy.Catalog)
@@ -88,8 +89,9 @@ end
 
 --[[
 	Ce que le profil sait, et dont tout se déduit. `Medals` : palier de médaille
-	(Medals.luau, 0 à 4) par tracé : "stage" pour la spéciale, l'identifiant
-	du circuit sinon (Tracks.luau).
+	(Medals.luau, 0 à 4) par tracé : "stage:<id>" par spéciale
+	(Stages.MedalKey), l'identifiant du circuit sinon (Tracks.luau), et
+	"stage" : la meilleure des spéciales (déblocages seulement, hors XP).
 ]]
 export type Record = {
 	Races: number,
@@ -115,8 +117,11 @@ function Progression.XpOf(record: Record): number
 		+ record.DailyXp
 		+ record.BonusXp
 		+ record.Style // Progression.XP.STYLE_PER_XP
-	for _, tier in pairs(record.Medals) do
-		xp += Progression.MEDAL_XP[tier] or 0
+	for track, tier in pairs(record.Medals) do
+		-- "stage" : la meilleure des spéciales, déjà comptée sous sa propre clé.
+		if track ~= Stages.BEST_MEDAL_KEY then
+			xp += Progression.MEDAL_XP[tier] or 0
+		end
 	end
 	for _, tier in pairs(record.Lessons) do
 		xp += Lessons.MEDAL_XP[tier] or 0
@@ -285,8 +290,12 @@ end
 local TIER_NAMES = { "Bronze", "Argent", "Or", "Platine" }
 
 local function trackName(id: string): string
-	if id == "stage" then
-		return "la spéciale"
+	if id == Stages.BEST_MEDAL_KEY then
+		return "une spéciale"
+	end
+	local stageId = Stages.FromMedalKey(id)
+	if stageId then
+		return Stages.Get(stageId).Name
 	end
 	local circuit = Tracks.Get(id)
 	return if circuit then circuit.Name else id

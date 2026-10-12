@@ -18,6 +18,7 @@
 ]]
 
 local Tracks = require(script.Parent.Parent.Tracks.Tracks)
+local Stages = require(script.Parent.Parent.Stage.Stages)
 local Lessons = require(script.Parent.Parent.School.Lessons)
 
 local Achievements = {}
@@ -30,7 +31,7 @@ export type Facts = {
 	Podiums: number,
 	StageRuns: number,
 	WeeklyCompleted: number,
-	Medals: { [string]: number }, -- palier (0 à 4) par tracé : "stage", ou l'id du circuit
+	Medals: { [string]: number }, -- palier (0 à 4) par tracé : "stage:<spéciale>", ou l'id du circuit
 	Lessons: { [string]: number }, -- palier (0 à 4) par leçon de l'école
 }
 
@@ -47,7 +48,10 @@ local GOLD, PLATINUM = 3, 4
 
 -- Tous les tracés à médailles : la spéciale et chaque circuit.
 local function allTracks(): { string }
-	local list = { "stage" }
+	local list = {}
+	for _, id in ipairs(Stages.List()) do
+		table.insert(list, Stages.MedalKey(id))
+	end
 	for _, id in ipairs(Tracks.List()) do
 		table.insert(list, id)
 	end
@@ -131,7 +135,7 @@ Achievements.LIST = {
 	{
 		Id = "all_gold",
 		Name = "Grand chelem d'or",
-		Description = "La médaille d'or sur la spéciale et sur chaque circuit.",
+		Description = "La médaille d'or sur chaque spéciale et sur chaque circuit.",
 		BadgeId = 0,
 		Announce = true,
 		Check = function(facts: Facts)
@@ -141,7 +145,7 @@ Achievements.LIST = {
 	{
 		Id = "all_platinum",
 		Name = "Intouchable",
-		Description = "La médaille de platine sur la spéciale et sur chaque circuit.",
+		Description = "La médaille de platine sur chaque spéciale et sur chaque circuit.",
 		BadgeId = 0,
 		Announce = true,
 		Check = function(facts: Facts)

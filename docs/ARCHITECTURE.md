@@ -116,7 +116,7 @@ Records, fantômes, médailles et classements sont propres à chaque catégorie.
 
 ## Spéciales et cartes
 
-Une spéciale est une entrée de `shared/Stage/Stages.luau` : son tracé (segments), son thème (forêt, neige), son emplacement et ses vitesses de médailles. Le chrono, le copilote, les records et les fantômes la lisent d'eux-mêmes.
+Une spéciale est une entrée de `shared/Stage/Stages.luau` : son tracé (segments), son thème de décor (`Forest`, `Snow`, `Mountain`, `Garrigue`, `Countryside` : réglages dans `THEMES` de `tools/build-stage.luau`), son emplacement et ses vitesses de médailles. Sa nature (asphalte, neige, terre, mixte) se déduit de ses surfaces. Chaque spéciale a sa propre médaille dans la progression (`Stages.MedalKey`). Le chrono, le copilote, les records et les fantômes la lisent d'eux-mêmes.
 
 Le terrain et le décor se construisent dans Studio avec les outils de `tools/` (rangés par Rojo dans `ServerStorage.Tools`, jamais exécutés en jeu), à coller dans la barre de commandes avec `rojo serve` actif :
 
