@@ -119,14 +119,16 @@ Products.LIST = {
 
 Products.PASSES = {
 	{
-		-- Tout d'un coup : les deux pass ci-dessous, les sessions privées et
-		-- la voie premium du Rallye Pass à chaque saison (Perks.luau). Les
-		-- voitures et les cosmétiques restent à gagner en jouant.
+		-- Tout d'un coup : les deux pass ci-dessous, les sessions privées et,
+		-- en cadeau, la voie premium du Rallye Pass de la saison d'achat
+		-- (PassService) ; les saisons suivantes se rachètent comme pour tout
+		-- le monde. Les voitures et les cosmétiques restent à gagner en jouant.
+		-- Prix : les deux pass seuls valent déjà 698 R$.
 		Key = "premium",
 		GamePassId = 0,
 		Name = "Premium Sim Rallye",
-		Description = "Tout d'un coup, pour toujours : VIP (XP +25 %, badge doré), crédits ×2, sessions privées entre amis, et la voie premium du Rallye Pass à chaque saison.",
-		SuggestedRobux = 799,
+		Description = "Tout d'un coup, pour toujours : VIP (XP +25 %, badge doré), crédits ×2 et sessions privées entre amis. En cadeau : le Rallye Pass premium de la saison en cours.",
+		SuggestedRobux = 699,
 	},
 	{
 		Key = "credits_x2",

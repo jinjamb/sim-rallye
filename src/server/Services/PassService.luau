@@ -135,11 +135,27 @@ function PassService.OnPremium(player: Player)
 	sendPass(player, { Premium = true })
 end
 
--- Pass Premium de Sim Rallye (MonetizationService, ou au chargement) : la
--- voie premium de la saison en cours, si elle ne l'est pas déjà.
+--[[
+	Pass Premium de Sim Rallye (MonetizationService, ou au chargement) : en
+	cadeau, la voie premium de la SAISON D'ACHAT seulement -- la saison où le
+	pass est vu pour la première fois, retenue dans le profil. Les saisons
+	suivantes se rachètent comme pour tout le monde.
+]]
 function PassService.EnsurePremium(player: Player)
 	local profile = ProfileStore.Get(player)
-	if not profile or stateOf(profile).Premium then
+	if not profile then
+		return
+	end
+	local season = Pass.Current().Key
+	if profile.PremiumPassSeason == nil then
+		profile.PremiumPassSeason = season
+		ProfileStore.Defer(player, "PremiumPassSeason", function(stored)
+			if stored.PremiumPassSeason == nil then
+				stored.PremiumPassSeason = season
+			end
+		end)
+	end
+	if profile.PremiumPassSeason ~= season or stateOf(profile).Premium then
 		return
 	end
 	PassService.OnPremium(player)

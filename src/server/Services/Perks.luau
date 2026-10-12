@@ -4,8 +4,8 @@
 	Les avantages d'un joueur, lus par l'économie et la progression :
 		- pass de jeu possédés (Products.PASSES : Premium, Crédits ×2, VIP) ;
 		  le Premium vaut tous les autres (Perks.Has), plus les sessions
-		  privées (SessionService) et la voie premium du Rallye Pass à
-		  chaque saison (PassService) ;
+		  privées (SessionService) et la voie premium du Rallye Pass de la
+		  saison d'achat (PassService) ;
 		- abonné Roblox Premium ;
 		- boost d'XP acheté (profil, XpBoostUntil) ;
 		- objets aléatoires payants interdits dans son pays (PolicyService).

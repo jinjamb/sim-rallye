@@ -81,6 +81,7 @@ export type Profile = {
 	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
 	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
 	XpBoostUntil: number, -- boost d'XP ×2 acheté (Products.luau) : actif jusqu'à cette date (os.time)
+	PremiumPassSeason: string?, -- saison (Pass.luau) où le pass Premium a été vu la première fois : son Rallye Pass offert
 	Championship: ChampionshipRun?, -- rallye en cours (Championships.luau), à reprendre
 	ChampBests: { [string]: number }, -- meilleur temps total (ms) par rallye et catégorie (ChampionshipService)
 	ChampionshipXp: number, -- XP gagnée à l'arrivée des rallyes, cumulée
@@ -145,6 +146,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		ChampionshipXp = 0,
 		ChampionshipsDone = 0,
 		XpBoostUntil = 0,
+		PremiumPassSeason = nil,
 	}
 end
 
@@ -258,6 +260,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
 	profile.UseTeamColors = data.UseTeamColors == true
 	profile.XpBoostUntil = count(data.XpBoostUntil)
+	profile.PremiumPassSeason = if type(data.PremiumPassSeason) == "string" and #data.PremiumPassSeason <= 16 then data.PremiumPassSeason else nil
 	-- Trophées : gardés même s'ils ont quitté la liste (un exploit ne se perd pas).
 	if type(data.Achievements) == "table" then
 		for id, at in pairs(data.Achievements) do
