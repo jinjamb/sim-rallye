@@ -37,7 +37,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "ajoncs",
 		Name = "Les Ajoncs",
-		Description = "1,07 km — 55 % asphalte. Long droit de départ, épingle dans l'infield, saut sur la terre.",
+		Description = "1,07 km · 55 % asphalte. Long droit de départ, épingle dans l'infield, saut sur la terre.",
 		Origin = Vector3.new(3000, 0, 0),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -70,7 +70,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "valdefaye",
 		Name = "Val-de-Faye",
-		Description = "0,87 km — 70 % terre. Technique : enchaînements serrés, bosse en crête.",
+		Description = "0,87 km · 70 % terre. Technique : enchaînements serrés, bosse en crête.",
 		Origin = Vector3.new(6000, 0, 0),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -102,7 +102,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "greves",
 		Name = "Les Grèves",
-		Description = "1,06 km — rapide. Grand droit, longues courbes, gros saut sur l'asphalte.",
+		Description = "1,06 km · rapide. Grand droit, longues courbes, gros saut sur l'asphalte.",
 		Origin = Vector3.new(9000, 0, 0),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -131,7 +131,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	},	{
 		Id = "lacs",
 		Name = "Lacs Gelés",
-		Description = "0,99 km — 56 % asphalte, 44 % neige. Rallycross d'hiver : épingle dans l'infield, joker enneigé.",
+		Description = "0,99 km · 56 % asphalte, 44 % neige. Rallycross d'hiver : épingle dans l'infield, joker enneigé.",
 		Origin = Vector3.new(3000, 0, -3000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -161,7 +161,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "carriere",
 		Name = "La Carrière",
-		Description = "0,90 km — 65 % terre. Bosse au cœur de la carrière, montées et descentes, joker en contrebas.",
+		Description = "0,90 km · 65 % terre. Bosse au cœur de la carrière, montées et descentes, joker en contrebas.",
 		Origin = Vector3.new(6000, 0, -3000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -192,7 +192,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "port",
 		Name = "Le Port",
-		Description = "0,74 km — 82 % asphalte. Le plus court : virages à angle droit entre les docks.",
+		Description = "0,74 km · 82 % asphalte. Le plus court : virages à angle droit entre les docks.",
 		Origin = Vector3.new(12300, 0, -3000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -223,7 +223,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "anneau",
 		Name = "L'Anneau",
-		Description = "1,14 km — 73 % asphalte. Le plus rapide : grandes courbes et gros saut sur la terre.",
+		Description = "1,14 km · 73 % asphalte. Le plus rapide : grandes courbes et gros saut sur la terre.",
 		Origin = Vector3.new(9300, 0, -3000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -252,7 +252,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "brumes",
 		Name = "Les Brumes",
-		Description = "1,07 km — 86 % terre. Long droit en terre, épingle dans l'infield, saut.",
+		Description = "1,07 km · 86 % terre. Long droit en terre, épingle dans l'infield, saut.",
 		Origin = Vector3.new(3000, 0, -6000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -285,7 +285,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "tourbieres",
 		Name = "Les Tourbières",
-		Description = "0,96 km — 66 % terre. Technique : enchaînements serrés et bosse en crête.",
+		Description = "0,96 km · 66 % terre. Technique : enchaînements serrés et bosse en crête.",
 		Origin = Vector3.new(6000, 0, -6000),
 		RoadWidth = 44,
 		JokerWidth = 34,
@@ -317,7 +317,7 @@ local DEFINITIONS: { Circuit.Definition } = {
 	{
 		Id = "falaises",
 		Name = "Les Falaises",
-		Description = "1,06 km — 81 % asphalte. Grand droit, longues courbes, gros saut sur l'asphalte.",
+		Description = "1,06 km · 81 % asphalte. Grand droit, longues courbes, gros saut sur l'asphalte.",
 		Origin = Vector3.new(12000, 0, 0),
 		RoadWidth = 44,
 		JokerWidth = 34,

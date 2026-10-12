@@ -228,7 +228,7 @@ function GhostChallenge:_onOpponent(payload: any)
 		Data = { Rate = ghost.Rate, Frames = ghost.Frames },
 		StageId = self.StageId,
 	}
-	local line = string.format("%s — %s", payload.Name, Format.Ms(payload.Ms))
+	local line = string.format("%s · %s", payload.Name, Format.Ms(payload.Ms))
 	if beaten then
 		Banner.Show("RIVAL BATTU : " .. Format.Upper(beaten), "Prochain rival : " .. line, COLOR_BEATEN, 4, true)
 	else

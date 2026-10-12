@@ -149,7 +149,7 @@ function InventoryPage.Car(ctx: Context, b: Builder)
 
 	-- Le modèle.
 	local body = CarBodies.Get(livery.Body)
-	b:Text("MODÈLE · " .. Format.Upper(body.Name) .. " — " .. body.Description, 13, Theme.YELLOW)
+	b:Text("MODÈLE · " .. Format.Upper(body.Name) .. " · " .. body.Description, 13, Theme.YELLOW)
 	local names = {}
 	for _, model in ipairs(CarBodies.LIST) do
 		table.insert(names, model.Name)

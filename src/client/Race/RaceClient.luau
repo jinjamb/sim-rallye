@@ -350,19 +350,19 @@ function RaceClient:_onEvent(kind: string, data: any)
 		Banner.Show("JOKER OBLIGATOIRE", "Une fois par course, par la branche orange de la mini-carte · sinon +5 s", Widgets.COLOR_ORANGE, 3.5)
 	elseif kind == "Lap" then
 		local lap = tonumber(data.Lap) or 0
-		local text = string.format("TOUR %d — %s", lap, Format.Time(tonumber(data.Time)))
+		local text = string.format("TOUR %d · %s", lap, Format.Time(tonumber(data.Time)))
 		local color = Widgets.COLOR_TEXT
 		if data.Record then
-			text ..= " — RECORD PERSO DU CIRCUIT !"
+			text ..= " · RECORD PERSO DU CIRCUIT !"
 			color = Widgets.COLOR_ACCENT
 		elseif data.Best and lap > 1 then
-			text ..= " — MEILLEUR TOUR"
+			text ..= " · MEILLEUR TOUR"
 			color = Widgets.COLOR_GREEN
 		end
 		if race and lap == race.Laps - 1 then
 			local myRow = self:_myRow()
 			local jokerDue = myRow ~= nil and myRow.J == 0
-			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
+			text = "DERNIER TOUR" .. (if jokerDue then " · JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
 			color = if jokerDue then Widgets.COLOR_ORANGE else Widgets.COLOR_TEXT
 			if jokerDue then
 				Banner.Show("JOKER PAS FAIT !", "Dernier tour : prends la branche orange, sinon +5 s à l'arrivée", Widgets.COLOR_ORANGE, 4, true)
@@ -375,7 +375,7 @@ function RaceClient:_onEvent(kind: string, data: any)
 			local circuit = if race then Tracks.Get(race.TrackId) else nil
 			Banner.Show(
 				tier.Title,
-				string.format("%s — tour en %s", if circuit then circuit.Name else "Circuit", Format.Time(tonumber(data.Time))),
+				string.format("%s · tour en %s", if circuit then circuit.Name else "Circuit", Format.Time(tonumber(data.Time))),
 				tier.Color,
 				4,
 				true
@@ -390,7 +390,7 @@ function RaceClient:_onEvent(kind: string, data: any)
 	elseif kind == "Overtake" then
 		local points = tonumber(data.Points) or 0
 		hud:ShowMessage(
-			"DÉPASSEMENT — " .. tostring(data.Name) .. (if points > 0 then "  +" .. Format.Thousands(points) else ""),
+			"DÉPASSEMENT · " .. tostring(data.Name) .. (if points > 0 then "  +" .. Format.Thousands(points) else ""),
 			Widgets.COLOR_GREEN,
 			2
 		)
@@ -404,13 +404,13 @@ function RaceClient:_onEvent(kind: string, data: any)
 			hud:ShowMessage("JOKER EN TROP : un seul suffit", Widgets.COLOR_ORANGE)
 		end
 	elseif kind == "Penalty" then
-		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
+		hud:ShowMessage(string.format("PÉNALITÉ +%s s · %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
 	elseif kind == "Chequered" then
-		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
+		hud:ShowMessage("DRAPEAU À DAMIER · " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
 	elseif kind == "Finished" then
 		local returnIn = tonumber(data.ReturnIn) or 6
 		hud:ShowMessage(
-			string.format("ARRIVÉE — P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
+			string.format("ARRIVÉE · P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
 			Widgets.COLOR_ACCENT,
 			returnIn
 		)

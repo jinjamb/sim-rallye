@@ -534,7 +534,7 @@ function RaceHud:ShowResults(results: RaceTypes.Results)
 	if circuit then
 		trackName = " · " .. Format.Upper(circuit.Name)
 	end
-	self.ResultsTitle.Text = (if results.Final then "RÉSULTATS — " else "") .. results.RoundName .. trackName
+	self.ResultsTitle.Text = (if results.Final then "RÉSULTATS · " else "") .. results.RoundName .. trackName
 	for _, child in ipairs(self.ResultsRows:GetChildren()) do
 		child:Destroy()
 	end
@@ -591,7 +591,7 @@ function RaceHud:ShowPodium(names: { string }, duration: number)
 	for index, name in ipairs(names) do
 		table.insert(parts, string.format("%d. %s", index, name))
 	end
-	self:ShowMessage("PODIUM — " .. table.concat(parts, "   "), Widgets.COLOR_ACCENT, duration)
+	self:ShowMessage("PODIUM · " .. table.concat(parts, "   "), Widgets.COLOR_ACCENT, duration)
 end
 
 function RaceHud:HideResults()
@@ -607,7 +607,7 @@ function RaceHud:SetSpectate(state: SpectateState)
 	self.SpectateBar.Visible = self.Gui.Enabled and (state.Available or state.Active)
 	self.SpectateButtons.Visible = state.Active
 	self.WatchButton.Visible = state.Available and not state.Active
-	self.SpectateLabel.Text = if state.Active then "SPECTATEUR — " .. state.Name else "COURSE TERMINÉE POUR TOI"
+	self.SpectateLabel.Text = if state.Active then "SPECTATEUR · " .. state.Name else "COURSE TERMINÉE POUR TOI"
 end
 
 --------------------------------------------------------------------------------
@@ -814,7 +814,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 			elseif row.G then
 				gap = string.format("+%.1f", row.G)
 			else
-				gap = "—"
+				gap = "-"
 			end
 			label.Text = string.format("%d %s%s%s", row.P, name, padding, gap)
 			local mine = row.U == self.LocalUserId
@@ -843,7 +843,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 		local remaining = math.max(0, math.ceil(results.NextAt - serverNow))
 		self.ResultsFooter.Text = if results.Final
 			then string.format("Retour au paddock dans %d s. REVANCHE : la salle reste ouverte pour ceux qui votent.", remaining)
-			else string.format("%s dans %d s — grille dans l'ordre de ce classement", results.NextRoundName or "Manche suivante", remaining)
+			else string.format("%s dans %d s · grille dans l'ordre de ce classement", results.NextRoundName or "Manche suivante", remaining)
 	end
 end
 

@@ -450,16 +450,16 @@ local function setControl(granted: boolean)
 	if granted then
 		CharacterControls.SetEnabled(false)
 		if current:IsRacing() then
-			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
+			print("[Car] En course : R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), K klaxon, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant : R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), K klaxon, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
 			CharacterControls.ResetCamera()
 		end
 		CharacterControls.SetEnabled(true)
-		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le menu")
+		print("[Car] Hors de la voiture : E pour reprendre le volant, C pour le menu")
 	end
 	applyDrivingUi()
 end

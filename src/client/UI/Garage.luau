@@ -222,7 +222,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	end)
 
 	-- Carrosserie : le modèle et ses pièces. Une pièce que le modèle ne prend
-	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « — ».
+	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « - ».
 	local bodyTitle = Widgets.Label(panel, "CARROSSERIE", 14, Enum.Font.GothamBlack, Theme.ACCENT)
 	bodyTitle.Position = UDim2.fromOffset(16, y + 266)
 	bodyTitle.Size = UDim2.new(1, -32, 0, 18)
@@ -300,7 +300,7 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 			table.insert(lines, Livery.ItemName(check.Kind, check.Index) .. " : " .. Progression.Describe(item.Requirement))
 		end
 	end
-	return if #lines > 0 then "Verrouillé — " .. table.concat(lines, " · ") .. ". Essai seulement : non sauvegardé." else nil
+	return if #lines > 0 then "Verrouillé : " .. table.concat(lines, " · ") .. ". Essai seulement : non sauvegardé." else nil
 end
 
 local function valueText(name: string, unlocked: boolean): string
@@ -376,7 +376,7 @@ function Garage:_refresh()
 	self.PatternColorLabel.Text = valueText(patternColor.Name, Progression.IsUnlocked("Color", livery.PatternColor or 4, progress, owned))
 	swatch(self.PatternColorLabel, patternColor.Color)
 
-	-- Carrosserie : le modèle, et chaque pièce (« — » si le modèle ne la prend pas).
+	-- Carrosserie : le modèle, et chaque pièce (« - » si le modèle ne la prend pas).
 	local body = CarBodies.Get(livery.Body)
 	local bodyUnlocked = Progression.IsUnlocked("Body", livery.Body, progress, owned)
 	self.BodyLabel.Text = valueText(body.Name, bodyUnlocked)
@@ -390,7 +390,7 @@ function Garage:_refresh()
 			label.Text = valueText(option.Name, unlocked)
 			plain(label, unlocked)
 		else
-			label.Text = "—"
+			label.Text = "-"
 			label.BackgroundTransparency = 1
 			label.TextColor3 = Widgets.COLOR_DIM
 		end

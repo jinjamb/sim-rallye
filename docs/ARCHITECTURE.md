@@ -164,6 +164,7 @@ Anti-lag et retours de flamme : `Driving/Exhaust.luau`, piloté par le même ét
 
 - `--!strict` partout. Les types exportés sont nommés comme le module (`Car.Car`, `MainMenu.MainMenu`).
 - Commentaires et textes en français. Chaque module commence par un bloc qui explique son rôle et ses choix.
+- Jamais de tiret cadratin (« — »), ni dans les textes du jeu, ni dans le code, ni dans la documentation : un séparateur « · », deux-points, ou une virgule à la place.
 - Les constantes réglables sont en tête de module, en MAJUSCULES, avec leur unité.
 - Aucun identifiant d'asset en dur dans le code : ils sont rassemblés dans des catalogues (`SoundBank`, etc.).
 - Tout ce qui vient du client est vérifié par le serveur : type, bornes, débit (cooldown).

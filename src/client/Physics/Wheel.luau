@@ -216,7 +216,7 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	end
 
 	--[[
-		CENTRE DE ROULIS — le réglage anti-tonneau.
+		CENTRE DE ROULIS : le réglage anti-tonneau.
 
 		Appliquer la force latérale à l'empreinte du pneu crée un couple de
 		renversement F * h, où h est la hauteur du centre de masse au-dessus du

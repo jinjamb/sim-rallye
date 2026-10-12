@@ -204,7 +204,7 @@ local function buildPaddock()
 		local _, frame = board(folder, pad.Position + Vector3.new(0, if back then 12 else 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
 		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
 		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-		local record = label(frame, "Record du tour : —", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
+		local record = label(frame, "Record du tour : -", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
 		if circuit then
 			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, Color3.fromRGB(200, 202, 210))
 			medals.RichText = true
@@ -318,7 +318,7 @@ local function updateSigns()
 			table.insert(lines, string.format("%d en course", status.Racing))
 		end
 		sign.Status.Text = table.concat(lines, "\n")
-		sign.Record.Text = recordText[padId] or "Record du tour : —"
+		sign.Record.Text = recordText[padId] or "Record du tour : -"
 	end
 end
 
@@ -333,7 +333,7 @@ local function onTrackRecords(boards: any)
 	for padId, boardData in pairs(byTrack) do
 		local entries = type(boardData) == "table" and boardData.Entries
 		local best = type(entries) == "table" and entries[1]
-		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s — %s", Format.Ms(best.Ms), best.Name) else "Record du tour : —"
+		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s · %s", Format.Ms(best.Ms), best.Name) else "Record du tour : -"
 	end
 end
 

@@ -25,7 +25,7 @@
 	Tout le reste du modèle physique se recale seul sur la masse et la géométrie
 	(suspension, freins, aéro, Ackermann) : rien à retoucher ailleurs.
 
-	GÉOMÉTRIE ANTI-TONNEAU — la voiture bascule quand  mu > demi_voie / hauteur_cdm.
+	GÉOMÉTRIE ANTI-TONNEAU : la voiture bascule quand  mu > demi_voie / hauteur_cdm.
 	Ici : demi_voie = 2.75, hauteur du centre de masse au-dessus du contact ~ 1.79,
 	soit un seuil de 1.54, bien au-dessus du mu maximal des surfaces (1.05 sur
 	asphalte). La voiture glisse donc toujours avant de se retourner.

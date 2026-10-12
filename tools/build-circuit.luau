@@ -381,7 +381,7 @@ local function buildCircuit(circuit)
 	local beamCenter = base + Vector3.new(0, postHeight - 1.5, 0)
 	local facing = CFrame.lookAt(beamCenter, beamCenter - start.ForwardFlat) -- regarde vers la grille
 	local beam = anchoredPart(gantry, "Beam", Vector3.new(halfSpan * 2 + 2, 3, 1.5), facing, Color3.fromRGB(20, 20, 24), false)
-	banner(beam, "RALLYCROSS — " .. string.upper(circuit.Name), Color3.fromRGB(20, 20, 24), { Enum.NormalId.Front })
+	banner(beam, "RALLYCROSS · " .. string.upper(circuit.Name), Color3.fromRGB(20, 20, 24), { Enum.NormalId.Front })
 	for i = 1, 5 do
 		local offset = (i - 3) * 3.2
 		local light = anchoredPart(

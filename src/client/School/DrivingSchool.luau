@@ -261,7 +261,7 @@ end
 
 function DrivingSchool:_fail(reason: string)
 	self.State = "Failed"
-	self.ResultText = "RATÉ — " .. reason
+	self.ResultText = "RATÉ : " .. reason
 	self.ResultColor = Theme.RED
 end
 
@@ -275,7 +275,7 @@ function DrivingSchool:_finish(score: number, description: string)
 	end
 	local info = Medals.Get(tier)
 	if info then
-		self.ResultText = string.format("%s — %s", description, Medals.Rich(tier, info.Title))
+		self.ResultText = string.format("%s · %s", description, Medals.Rich(tier, info.Title))
 		self.ResultColor = Theme.TEXT
 		if tier > self.Best then
 			self.Best = tier
@@ -283,7 +283,7 @@ function DrivingSchool:_finish(score: number, description: string)
 			Banner.Show(info.Title, "École de pilotage · " .. lesson.Name .. " · " .. description, info.Color, 4, true)
 		end
 	else
-		self.ResultText = description .. " — pas encore de médaille. " .. self:_limitsText()
+		self.ResultText = description .. " : pas encore de médaille. " .. self:_limitsText()
 		self.ResultColor = Theme.ORANGE
 	end
 end

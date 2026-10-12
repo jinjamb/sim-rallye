@@ -74,11 +74,11 @@ function RacePage.Race(ctx: Context, b: Builder, race: RaceTypes.RaceSnapshot)
 	if inLobby then
 		stateText = string.format("Salle d'attente (%d/%d pilotes)", #race.Members, race.MaxPlayers)
 	elseif race.State == "Grid" or race.State == "Countdown" then
-		stateText = race.RoundName .. " — départ imminent"
+		stateText = race.RoundName .. " · départ imminent"
 	elseif race.State == "Racing" then
-		stateText = race.RoundName .. " — en cours"
+		stateText = race.RoundName .. " · en cours"
 	else
-		stateText = race.RoundName .. " — résultats"
+		stateText = race.RoundName .. " · résultats"
 	end
 	b:Text(stateText, 14, Widgets.COLOR_ACCENT)
 	ctx.SetCountdown(b:Text("", 14, Widgets.COLOR_GREEN))
