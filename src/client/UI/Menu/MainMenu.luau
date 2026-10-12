@@ -9,6 +9,7 @@
 	onglets, corps défilant, ouverture, sélection à la manette. Le contenu
 	vient des rubriques, une par module (MenuKit.luau décrit ce qu'elles
 	reçoivent), réparties en onglets :
+		INVENTAIRE InventoryPage (sa voiture : modèle et pièces ; son équipement),
 		JOUER      PlayPage (spéciale et ralenti, rallycross, essais libres),
 		           SchoolPage (école de pilotage, en tête pour un débutant)
 		           et un rappel des défis ;
@@ -19,14 +20,18 @@
 		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière).
 	Pendant une course, RacePage remplace tout (sans onglets).
 
+	À pied, la barre de boutons à gauche (HubBar.luau) ouvre chaque onglet
+	d'un clic, et le menu s'ouvre à côté d'elle : le personnage reste visible
+	et continue de marcher.
+
 	Le contenu est reconstruit à chaque changement d'état (il change rarement) ;
 	seuls les comptes à rebours sont rafraîchis à chaque frame.
 ]]
 
 local GuiService = game:GetService("GuiService")
+local UserInputService = game:GetService("UserInputService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local MenuKit = require(script.Parent.MenuKit)
 local PlayPage = require(script.Parent.PlayPage)
@@ -37,6 +42,8 @@ local TeamPage = require(script.Parent.TeamPage)
 local SchoolPage = require(script.Parent.SchoolPage)
 local CareerPage = require(script.Parent.CareerPage)
 local RacePage = require(script.Parent.RacePage)
+local HubBar = require(script.Parent.HubBar)
+local InventoryPage = require(script.Parent.InventoryPage)
 local Widgets = require(script.Parent.Parent.Widgets)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -54,6 +61,8 @@ export type MainMenu = typeof(setmetatable({}, MainMenu)) & {
 	TabBar: Frame,
 	TabButtons: { [string]: TextButton },
 	Tab: string,
+	Footer: TextLabel,
+	Hub: HubBar.HubBar, -- barre de boutons à gauche, à pied (HubBar.luau)
 	Balance: TextLabel,
 	Scale: UIScale,
 	TouchLayout: boolean,
@@ -68,17 +77,19 @@ export type MainMenu = typeof(setmetatable({}, MainMenu)) & {
 }
 
 local PANEL_WIDTH = MenuKit.PANEL_WIDTH
-local HEADER_HEIGHT = 70 -- en-tête du jeu : titre, sous-titre, damier
-local TAB_HEIGHT = 34
+local HEADER_HEIGHT = 70 -- en-tête du jeu : titre, étiquette, filet rose
+local TAB_HEIGHT = 56 -- icône au-dessus du nom : on trouve l'onglet d'un coup d'œil
+local FOOTER_HEIGHT = 24 -- rappel des touches
 
-type Tab = { Id: string, Name: string }
+type Tab = { Id: string, Name: string, Icon: string }
 local TABS: { Tab } = {
-	{ Id = "Play", Name = "JOUER" },
-	{ Id = "Challenges", Name = "DÉFIS" },
-	{ Id = "Pass", Name = "PASS" },
-	{ Id = "Team", Name = "ÉCURIE" },
-	{ Id = "Shop", Name = "BOUTIQUE" },
-	{ Id = "Career", Name = "CARRIÈRE" },
+	{ Id = "Play", Name = "JOUER", Icon = "🏁" },
+	{ Id = "Inventory", Name = "INVENTAIRE", Icon = "🎒" },
+	{ Id = "Challenges", Name = "DÉFIS", Icon = "🎯" },
+	{ Id = "Pass", Name = "PASS", Icon = "🎫" },
+	{ Id = "Team", Name = "ÉCURIE", Icon = "🤝" },
+	{ Id = "Shop", Name = "BOUTIQUE", Icon = "🛒" },
+	{ Id = "Career", Name = "CARRIÈRE", Icon = "🏆" },
 }
 local SCREEN_PADDING = 24
 local TOUCH_SCALE = 1.1
@@ -115,33 +126,46 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Panel = panel
 	self.Scale = scale
 
-	-- En-tête du jeu : le titre en capitales condensées, une étiquette jaune,
-	-- un filet à damier dessous.
-	local title = Widgets.Label(panel, "SIM RALLYE", 30, Enum.Font.GothamBlack)
-	title.Position = UDim2.fromOffset(18, 8)
-	title.Size = UDim2.fromOffset(170, 38)
-	local tag = Theme.Tag(panel, "SPÉCIALE · RALLYCROSS", Theme.ACCENT, Theme.ON_ACCENT, 13)
-	tag.Position = UDim2.fromOffset(176, 17)
-	local checker = Theme.Checker(panel, PANEL_WIDTH, 5, 2)
-	checker.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 14)
-	checker.BackgroundTransparency = 0.2
-	local close = Widgets.Button(panel, "×", function()
+	-- En-tête du jeu : le titre en capitales italiques, une étiquette jaune
+	-- penchée, des bandes de vitesse, le filigrane « ラリー » (rallye), un
+	-- filet rose dessous.
+	local kana = Theme.Kana(panel, "ラリー", 64, 0.9)
+	kana.Position = UDim2.fromOffset(-120, -6)
+	kana.Size = UDim2.new(1, 0, 0, HEADER_HEIGHT)
+	local title = Widgets.Label(panel, "SIM RALLYE", 32, Enum.Font.GothamBlack)
+	title.FontFace = Theme.HEADLINE
+	title.Position = UDim2.fromOffset(18, 6)
+	title.Size = UDim2.fromOffset(0, 40)
+	title.AutomaticSize = Enum.AutomaticSize.X
+	Theme.TextInk(title, 2, Theme.ACCENT)
+	local tag = Theme.Tag(panel, "SPÉCIALE · RALLYCROSS", Theme.YELLOW, Theme.ON_YELLOW, 12)
+	tag.Position = UDim2.fromOffset(20, 44)
+	local stripes = Theme.Stripes(panel, Theme.ACCENT, 4)
+	stripes.Position = UDim2.fromOffset(214, 46)
+	stripes.Size = UDim2.fromOffset(70, 17)
+	local rule = Instance.new("Frame")
+	rule.BorderSizePixel = 0
+	rule.BackgroundColor3 = Theme.ACCENT
+	rule.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 3)
+	rule.Size = UDim2.new(1, 0, 0, 3)
+	rule.Parent = panel
+	local close = Widgets.Button(panel, "X", function()
 		self:SetOpen(false)
 	end)
-	close.Position = UDim2.new(1, -44, 0, 8)
-	close.Size = UDim2.fromOffset(32, 28)
-	close.TextSize = 18
+	close.Position = UDim2.new(1, -46, 0, 12)
+	close.Size = UDim2.fromOffset(34, 32)
+	close.TextSize = 16
 	-- Solde de crédits, toujours en vue.
-	local balance = Theme.Tag(panel, "… " .. Credits.SHORT, Theme.PANEL_2, Theme.ACCENT, 15)
+	local balance = Theme.Tag(panel, "… " .. Credits.SHORT, Theme.INK, Theme.YELLOW, 16)
 	balance.AnchorPoint = Vector2.new(1, 0)
-	balance.Position = UDim2.new(1, -54, 0, 12)
+	balance.Position = UDim2.new(1, -56, 0, 15)
 	self.Balance = balance
 
-	-- Onglets.
+	-- Onglets : une icône, le nom dessous ; l'onglet choisi en rose plein.
 	local tabBar = Instance.new("Frame")
 	tabBar.BackgroundTransparency = 1
-	tabBar.Position = UDim2.fromOffset(16, HEADER_HEIGHT)
-	tabBar.Size = UDim2.new(1, -32, 0, TAB_HEIGHT)
+	tabBar.Position = UDim2.fromOffset(16, HEADER_HEIGHT + 6)
+	tabBar.Size = UDim2.new(1, -32, 0, TAB_HEIGHT - 6)
 	tabBar.Parent = panel
 	local tabLayout = Instance.new("UIListLayout")
 	tabLayout.FillDirection = Enum.FillDirection.Horizontal
@@ -149,31 +173,47 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	tabLayout.Parent = tabBar
 	local tabWidth = (PANEL_WIDTH - 32 - 4 * (#TABS - 1)) / #TABS
 	for index, tab in ipairs(TABS) do
-		local button = Widgets.Button(tabBar, tab.Name, function()
+		local button = Widgets.Button(tabBar, "", function()
 			self:SetTab(tab.Id)
 		end)
 		button.LayoutOrder = index
-		button.Size = UDim2.fromOffset(tabWidth, TAB_HEIGHT - 6)
-		button.FontFace = Theme.HEADLINE
-		button.TextSize = 15
-		local underline = Instance.new("Frame")
-		underline.Name = "Underline"
-		underline.BorderSizePixel = 0
-		underline.BackgroundColor3 = Theme.ACCENT
-		underline.AnchorPoint = Vector2.new(0, 1)
-		underline.Position = UDim2.fromScale(0, 1)
-		underline.Size = UDim2.new(1, 0, 0, 3)
-		underline.Parent = button
+		button.Size = UDim2.fromOffset(tabWidth, TAB_HEIGHT - 12)
+		local icon = Widgets.Label(button, tab.Icon, 20)
+		icon.Name = "Icon"
+		icon.TextXAlignment = Enum.TextXAlignment.Center
+		icon.Position = UDim2.fromOffset(0, 3)
+		icon.Size = UDim2.new(1, 0, 0, 22)
+		local name = Widgets.Label(button, tab.Name, 12)
+		name.Name = "TabName"
+		name.FontFace = Theme.HEADLINE
+		name.TextXAlignment = Enum.TextXAlignment.Center
+		name.Position = UDim2.fromOffset(2, 25)
+		name.Size = UDim2.new(1, -4, 0, 16)
+		-- Sept onglets : un nom long (INVENTAIRE) rétrécit pour tenir.
+		name.TextScaled = true
+		local nameLimit = Instance.new("UITextSizeConstraint")
+		nameLimit.MaxTextSize = 12
+		nameLimit.Parent = name
 		self.TabButtons[tab.Id] = button
 	end
 	self.TabBar = tabBar
 
+	-- Rappel des touches, en pied : on sait toujours comment sortir.
+	local footer = Widgets.Label(panel, "C  ·  fermer le menu", 12, Enum.Font.GothamBold, Widgets.COLOR_DIM)
+	footer.Name = "Footer"
+	footer.AnchorPoint = Vector2.new(0, 1)
+	footer.Position = UDim2.new(0, 18, 1, -4)
+	footer.Size = UDim2.new(1, -36, 0, FOOTER_HEIGHT - 6)
+	footer.TextXAlignment = Enum.TextXAlignment.Right
+	self.Footer = footer
+
 	local body = Instance.new("ScrollingFrame")
 	body.Position = UDim2.fromOffset(0, HEADER_HEIGHT + TAB_HEIGHT)
-	body.Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + TAB_HEIGHT))
+	body.Size = UDim2.new(1, 0, 1, -(HEADER_HEIGHT + TAB_HEIGHT + FOOTER_HEIGHT))
 	body.BackgroundTransparency = 1
 	body.BorderSizePixel = 0
 	body.ScrollBarThickness = 4
+	body.ScrollBarImageColor3 = Theme.ACCENT
 	body.ScrollingDirection = Enum.ScrollingDirection.Y
 	body.AutomaticCanvasSize = Enum.AutomaticSize.Y
 	body.CanvasSize = UDim2.new()
@@ -190,6 +230,10 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 	self.Body = body
 
 	gui.Parent = playerGui
+	-- Barre de boutons à pied : un clic ouvre (ou referme) l'onglet.
+	self.Hub = HubBar.new(playerGui, TABS, function(tab: string)
+		self:OpenTab(tab)
+	end)
 	self:_rebuild()
 	return self
 end
@@ -228,7 +272,11 @@ end
 
 -- Hors course : le contenu de l'onglet choisi.
 local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
-	if tab == "Challenges" then
+	if tab == "Inventory" then
+		InventoryPage.Car(ctx, b)
+		InventoryPage.Livery(ctx, b)
+		InventoryPage.Gear(ctx, b)
+	elseif tab == "Challenges" then
 		ChallengesPage.Weekly(ctx, b)
 		ChallengesPage.Daily(ctx, b)
 		ChallengesPage.DriftKing(ctx, b)
@@ -238,10 +286,9 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 		TeamPage.Team(ctx, b)
 	elseif tab == "Shop" then
 		ShopPage.Balance(ctx, b)
+		ShopPage.Offers(ctx, b)
 		ShopPage.Rolls(ctx, b)
-		for _, kind in ipairs(Catalog.KINDS) do
-			ShopPage.Items(ctx, b, kind :: Catalog.Kind)
-		end
+		ShopPage.Catalog(ctx, b)
 		ShopPage.CreditPacks(ctx, b)
 	elseif tab == "Career" then
 		CareerPage.Car(ctx, b)
@@ -265,19 +312,20 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 	end
 end
 
--- Onglets visibles hors course ; l'onglet choisi en jaune, souligné.
+-- Onglets visibles hors course ; l'onglet choisi en rose plein.
 function MainMenu:_refreshTabs()
 	local inRace = self.Data.Race ~= nil
 	self.TabBar.Visible = not inRace
-	local top = if inRace then HEADER_HEIGHT else HEADER_HEIGHT + TAB_HEIGHT
+	local top = if inRace then HEADER_HEIGHT + 8 else HEADER_HEIGHT + TAB_HEIGHT
 	self.Body.Position = UDim2.fromOffset(0, top)
-	self.Body.Size = UDim2.new(1, 0, 1, -top)
+	self.Body.Size = UDim2.new(1, 0, 1, -(top + FOOTER_HEIGHT))
 	for id, button in pairs(self.TabButtons) do
 		local selected = id == self.Tab
-		button.TextColor3 = if selected then Theme.ACCENT else Widgets.COLOR_DIM
-		local underline = button:FindFirstChild("Underline")
-		if underline and underline:IsA("Frame") then
-			underline.Visible = selected
+		button.BackgroundColor3 = if selected then Theme.ACCENT else Theme.PANEL_2
+		button.BackgroundTransparency = if selected then 0 else 0.35
+		local name = button:FindFirstChild("TabName")
+		if name and name:IsA("TextLabel") then
+			name.TextColor3 = if selected then Theme.ON_ACCENT else Widgets.COLOR_DIM
 		end
 	end
 	local wallet = self.Data.Wallet
@@ -304,8 +352,40 @@ function MainMenu:_rebuild()
 	else
 		buildTab(ctx, b, self.Tab)
 	end
-	if self.Gui.Enabled and not self.TouchLayout then
+	if self.Gui.Enabled and self:_usingGamepad() then
 		GuiService.SelectedObject = self.FirstButton
+	end
+end
+
+-- Joue-t-on à la manette ? Seulement alors le menu prend la sélection (à la
+-- souris, le cadre de sélection gênerait, et le clic suffit).
+function MainMenu:_usingGamepad(): boolean
+	if self.TouchLayout then
+		return false
+	end
+	local last = UserInputService:GetLastInputType()
+	return last.Name:sub(1, 7) == "Gamepad"
+end
+
+-- La barre de boutons suit le menu : onglet ouvert, solde, niveau.
+function MainMenu:_refreshHub()
+	local wallet = self.Data.Wallet
+	local open = self.Gui.Enabled and self.Data.Race == nil
+	self.Hub:Refresh(if open then self.Tab else nil, if wallet then wallet.Credits else nil, self.Data.Progress)
+end
+
+--[[
+	Place du menu : à côté de la barre de boutons quand elle est là (le
+	personnage reste visible au milieu de l'écran), au centre sinon.
+]]
+function MainMenu:_place()
+	if self.Hub:IsVisible() then
+		local left = (HubBar.MARGIN + HubBar.WIDTH) * self.Hub.Scale.Scale + 16
+		self.Panel.AnchorPoint = Vector2.new(0, 0.5)
+		self.Panel.Position = UDim2.new(0, left, 0.5, 0)
+	else
+		self.Panel.AnchorPoint = Vector2.new(0.5, 0.5)
+		self.Panel.Position = UDim2.fromScale(0.5, 0.5)
 	end
 end
 
@@ -320,12 +400,34 @@ function MainMenu:SetData(data: Data)
 	if (previousRace == nil) ~= (data.Race == nil) then
 		self.Status = ""
 	end
+	self:_refreshHub()
 	-- Menu fermé : inutile de tout reconstruire à chaque point de style.
 	if not self.Gui.Enabled then
 		self.Dirty = true
 		return
 	end
 	self:_rebuild()
+end
+
+-- Bouton de la barre : ouvre l'onglet, ou referme le menu s'il y est déjà.
+function MainMenu:OpenTab(tab: string)
+	if self.Gui.Enabled and self.Tab == tab then
+		self:SetOpen(false)
+		return
+	end
+	self:SetTab(tab)
+	self:SetOpen(true)
+end
+
+-- Barre de boutons visible (à pied, hors course) ; jamais sur mobile.
+function MainMenu:SetHubVisible(visible: boolean)
+	local shown = visible and not self.TouchLayout
+	if self.Hub:IsVisible() == shown then
+		return
+	end
+	self.Hub:SetVisible(shown)
+	self:_refreshHub()
+	self:_place()
 end
 
 function MainMenu:SetTab(tab: string)
@@ -336,6 +438,7 @@ function MainMenu:SetTab(tab: string)
 	self.Status = ""
 	self.Body.CanvasPosition = Vector2.zero
 	self:_rebuild()
+	self:_refreshHub()
 end
 
 function MainMenu:SetStatus(text: string, color: Color3?)
@@ -346,6 +449,7 @@ end
 
 function MainMenu:SetTouchLayout(enabled: boolean)
 	self.TouchLayout = enabled
+	self.Footer.Text = if enabled then "MENU  ·  fermer" else "C  ·  fermer le menu"
 end
 
 function MainMenu:IsOpen(): boolean
@@ -361,15 +465,18 @@ function MainMenu:SetOpen(open: boolean)
 	if open then
 		local viewport = workspace.CurrentCamera.ViewportSize
 		local scale = if self.TouchLayout then TOUCH_SCALE * math.clamp(viewport.Y / 500, 0.6, 1) else math.clamp(viewport.Y / 1080, 0.6, 1.2)
-		self.Scale.Scale = scale
+		-- Entrée « pop » : le menu jaillit puis se pose.
+		Theme.Pop(self.Panel, scale, 0.9)
 		local available = (viewport.Y - SCREEN_PADDING) / scale
 		self.Panel.Size = UDim2.fromOffset(PANEL_WIDTH, math.min(760, available))
-		if not self.TouchLayout then
+		self:_place()
+		if self:_usingGamepad() then
 			GuiService.SelectedObject = self.FirstButton
 		end
 	elseif GuiService.SelectedObject and GuiService.SelectedObject:IsDescendantOf(self.Gui) then
 		GuiService.SelectedObject = nil
 	end
+	self:_refreshHub()
 end
 
 function MainMenu:Toggle()

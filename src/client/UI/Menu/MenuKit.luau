@@ -21,6 +21,7 @@ local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local Widgets = require(script.Parent.Parent.Widgets)
 local Theme = require(script.Parent.Parent.Theme)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 local MenuKit = {}
 
@@ -54,6 +55,7 @@ export type Wallet = {
 	Equipped: { [string]: string },
 	Rolls: number?, -- tirages disponibles
 	Pity: number?, -- tirages depuis le dernier objet Usine ou plus
+	Perks: any?, -- avantages achetés (Perks.Snapshot : pass, boost, RandomRestricted...)
 }
 
 export type Context = {
@@ -92,18 +94,39 @@ function MenuKit.Builder(body: Instance): Builder
 		row.Parent = body
 		return row
 	end
-	-- Titre de section façon télévision : un pavé jaune, des capitales condensées.
+	-- Titre de section : un pavé rose penché, des capitales italiques, un
+	-- filet qui file vers la droite (comme une ligne de vitesse).
 	function builder.Section(b: Builder, text: string)
-		local row = b:Row(34)
+		local row = b:Row(38)
 		local mark = Instance.new("Frame")
 		mark.BorderSizePixel = 0
 		mark.BackgroundColor3 = Theme.ACCENT
-		mark.Position = UDim2.fromOffset(0, 12)
-		mark.Size = UDim2.fromOffset(6, 18)
+		mark.Position = UDim2.fromOffset(0, 13)
+		mark.Size = UDim2.fromOffset(14, 20)
 		mark.Parent = row
-		local label = Widgets.Label(row, string.upper(text), 19, Enum.Font.GothamBlack, Widgets.COLOR_TEXT)
-		label.Position = UDim2.fromOffset(14, 10)
-		label.Size = UDim2.new(1, -14, 0, 22)
+		Theme.Slant(mark, 20)
+		local label = Widgets.Label(row, Format.Upper(text), 19, Enum.Font.GothamBlack, Widgets.COLOR_TEXT)
+		label.Position = UDim2.fromOffset(20, 12)
+		label.Size = UDim2.fromOffset(0, 22)
+		label.AutomaticSize = Enum.AutomaticSize.X
+		local line = Instance.new("Frame")
+		line.BorderSizePixel = 0
+		line.BackgroundColor3 = Theme.LINE
+		line.AnchorPoint = Vector2.new(1, 0)
+		line.Position = UDim2.new(1, 0, 0, 24)
+		line.Size = UDim2.new(1, -40, 0, 1)
+		line.BackgroundTransparency = 0.7
+		line.Parent = row
+		-- Le filet commence après le titre (rapport de tailles à l'écran : la
+		-- mise à l'échelle du menu s'annule).
+		local function fit()
+			local width = row.AbsoluteSize.X
+			local taken = if width > 0 then label.AbsoluteSize.X / width else 0.5
+			line.Size = UDim2.new(math.max(0, 1 - taken), -32, 0, 1)
+		end
+		row:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+		label:GetPropertyChangedSignal("AbsoluteSize"):Connect(fit)
+		fit()
 	end
 	function builder.Text(b: Builder, text: string, textSize: number?, color: Color3?): TextLabel
 		local row = b:Row(20)

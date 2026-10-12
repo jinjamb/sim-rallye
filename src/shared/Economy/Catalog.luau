@@ -8,9 +8,9 @@
 	D'OÙ VIENT UN OBJET (un ou plusieurs à la fois) :
 		Free     possédé d'office ;
 		Credits  acheté en crédits (Credits.luau) ;
-		Robux    acheté en Robux : un produit de développeur à créer sur
-		         Roblox, dont l'identifiant va dans Robux.ProductId (0 tant
-		         qu'il n'existe pas : « bientôt ») ;
+		Robux    TOUT objet non gratuit s'achète aussi en Robux, au palier
+		         de sa rareté (Products.ForItem, MonetizationService) ;
+		Starter  exclusif au pack de démarrage (rien d'autre ne le donne) ;
 		Pass     récompense d'un palier du Rallye Pass (Pass.luau) ;
 		Roll     peut sortir d'un tirage (Rolls.luau), selon sa rareté.
 
@@ -30,7 +30,7 @@ local Catalog = {}
 export type Kind = ItemTypes.Kind
 export type Item = ItemTypes.Item
 
-local KINDS: { Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration" }
+local KINDS: { Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration", "Part" }
 Catalog.KINDS = KINDS
 
 Catalog.KIND_NAMES = {
@@ -39,6 +39,7 @@ Catalog.KIND_NAMES = {
 	Horn = "Klaxon",
 	Celebration = "Célébration",
 	Engine = "Son moteur",
+	Part = "Pièce",
 } :: { [Kind]: string }
 
 -- Les objets de chaque sorte, chacun dans son module (Items/).
@@ -48,6 +49,7 @@ local LISTS: { { Item } } = {
 	require(script.Parent.Items.Smokes),
 	require(script.Parent.Items.Horns),
 	require(script.Parent.Items.Celebrations),
+	require(script.Parent.Items.Parts),
 }
 
 Catalog.ITEMS = {} :: { Item }
@@ -94,6 +96,16 @@ function Catalog.IsAvailable(item: Item): boolean
 	return true
 end
 
+-- La pièce du catalogue qui débloque cette variante d'emplacement, s'il y en a une.
+function Catalog.PartItem(slot: string, option: number): Item?
+	for _, item in ipairs(Catalog.ITEMS) do
+		if item.Kind == "Part" and item.Slot == slot and item.Option == option then
+			return item
+		end
+	end
+	return nil
+end
+
 -- La voiture du catalogue d'une catégorie (CarClasses.luau).
 function Catalog.CarItem(classId: string): Item?
 	for _, item in ipairs(Catalog.ITEMS) do
@@ -122,7 +134,9 @@ function Catalog.SourceText(item: Item): string
 	if item.Credits then
 		table.insert(parts, tostring(item.Credits) .. " CR")
 	end
-	if item.Robux then
+	if item.Starter then
+		table.insert(parts, "pack de démarrage")
+	elseif not item.Free then
 		table.insert(parts, "Robux")
 	end
 	if item.Pass then

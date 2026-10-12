@@ -9,8 +9,9 @@
 	cosmétique débloqué).
 
 	DOUBLE XP (XpEvents.luau) : pendant un événement, l'XP gagnée est
-	multipliée. Le surplus va dans un compteur du profil (BonusXp), compté
-	dans l'XP comme le reste.
+	multipliée ; de même avec le pass VIP et le boost d'XP acheté (Perks.luau),
+	qui se cumulent. Le surplus va dans un compteur du profil (BonusXp),
+	compté dans l'XP comme le reste.
 
 	Un niveau gagné ou une nouvelle médaille rapportent aussi des crédits
 	(Credits.luau), et un niveau un tirage (Rolls.luau), une fois : à la
@@ -27,6 +28,7 @@ local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
@@ -35,21 +37,26 @@ local PassService = require(script.Parent.PassService)
 local TeamService = require(script.Parent.TeamService)
 local AchievementService = require(script.Parent.AchievementService)
 local AnnounceService = require(script.Parent.AnnounceService)
+local Perks = require(script.Parent.Perks)
 
 local ProgressService = {}
 
 local lastProgress: { [Player]: Progression.Snapshot } = {}
 
 --[[
-	Palier de médaille par tracé : "stage" pour la spéciale, l'id du circuit
-	sinon. Le meilleur des catégories de voitures (chacune a ses seuils) :
-	changer de voiture ne fait pas regagner l'XP d'une médaille déjà acquise.
+	Palier de médaille par tracé : "stage" pour les spéciales (la meilleure
+	des spéciales : les déblocages demandent « une médaille en spéciale »),
+	l'id du circuit sinon. Le meilleur des catégories de voitures (chacune a
+	ses seuils) : changer de voiture ne fait pas regagner l'XP d'une médaille
+	déjà acquise.
 ]]
 local function medalsOf(profile: ProfileSchema.Profile): { [string]: number }
 	local medals: { [string]: number } = { stage = 0 }
 	for _, class in ipairs(CarClasses.LIST) do
-		local stage = profile.Records[ProfileSchema.StageKey(class.Id)]
-		medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id)))
+		for _, stageId in ipairs(Stages.List()) do
+			local stage = profile.Records[ProfileSchema.StageKey(class.Id, stageId)]
+			medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id, stageId)))
+		end
 		for _, id in ipairs(Tracks.List()) do
 			local circuit = Tracks.Get(id)
 			if circuit then
@@ -116,8 +123,8 @@ function ProgressService.Push(player: Player, announce: boolean)
 	end
 	local snapshot = ProgressService.SnapshotOf(profile)
 	local previous = lastProgress[player]
-	-- Double XP : le surplus de ce qui vient d'être gagné.
-	local multiplier = XpEvents.Multiplier(os.time())
+	-- Double XP, VIP, boost : le surplus de ce qui vient d'être gagné.
+	local multiplier = XpEvents.Multiplier(os.time()) * Perks.XpMultiplier(player)
 	if announce and previous and multiplier > 1 and snapshot.Xp > previous.Xp then
 		local bonus = math.floor((snapshot.Xp - previous.Xp) * (multiplier - 1))
 		if bonus > 0 then

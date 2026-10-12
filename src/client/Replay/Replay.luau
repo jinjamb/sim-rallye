@@ -35,6 +35,7 @@ local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 
+local Stages = require(game:GetService("ReplicatedStorage").Shared.Stage.Stages)
 local StageTrack = require(game:GetService("ReplicatedStorage").Shared.Stage.StageTrack)
 local LiveryPainter = require(game:GetService("ReplicatedStorage").Shared.Cosmetics.LiveryPainter)
 local Livery = require(game:GetService("ReplicatedStorage").Shared.Cosmetics.Livery)
@@ -72,6 +73,7 @@ export type Replay = typeof(setmetatable({}, Replay)) & {
 	Model: Model?,
 	Hint: number,
 	TvCameras: { TvCamera },
+	Track: StageTrack.Track, -- la spéciale du passage rejoué
 	SmoothFov: number,
 	LastStreamAt: number,
 	HiddenGuis: { [ScreenGui]: boolean },
@@ -99,7 +101,7 @@ export type Replay = typeof(setmetatable({}, Replay)) & {
 local SPEEDS = { 1, 0.5, 0.25 }
 local SEEK_STEP = 5
 local TV_SPACING = 180 -- studs entre deux caméras TV
-local TV_SIDE = StageTrack.ROAD_WIDTH / 2 + 18
+local TV_SIDE_MARGIN = 18 -- studs au-delà du bord de la route
 local TV_HEIGHT = 7
 local TV_SWITCH_BEHIND = 25 -- on garde la caméra encore ce peu après le passage
 local STREAM_INTERVAL = 2
@@ -116,17 +118,18 @@ local FILTERS: { Filter } = {
 	{ Name = "Coucher de soleil", Saturation = 0.15, Contrast = 0.1, Brightness = 0.03, Tint = Color3.fromRGB(255, 214, 178) },
 }
 
--- Caméras TV le long de la spéciale, d'un côté puis de l'autre.
-local function buildTvCameras(): { TvCamera }
+-- Caméras TV le long d'une spéciale, d'un côté puis de l'autre.
+local function buildTvCameras(track: StageTrack.Track): { TvCamera }
 	local cameras: { TvCamera } = {}
 	local side = 1
-	local distance = StageTrack.START_DISTANCE + 60
-	local finish = StageTrack.GetFinishDistance()
+	local distance = track.START_DISTANCE + 60
+	local finish = track.GetFinishDistance()
+	local tvSide = track.ROAD_WIDTH / 2 + TV_SIDE_MARGIN
 	while distance < finish + 60 do
-		local sample = StageTrack.SampleAt(distance)
+		local sample = track.SampleAt(distance)
 		table.insert(cameras, {
 			Distance = distance,
-			Position = sample.Position + sample.Left * side * TV_SIDE + Vector3.new(0, TV_HEIGHT, 0),
+			Position = sample.Position + sample.Left * side * tvSide + Vector3.new(0, TV_HEIGHT, 0),
 		})
 		side = -side
 		distance += TV_SPACING
@@ -157,6 +160,7 @@ function Replay.new(playerGui: Instance, camera: Camera, onExit: () -> ()): Repl
 	self.Model = nil
 	self.Hint = 0
 	self.TvCameras = {}
+	self.Track = Stages.Get()
 	self.SmoothFov = 50
 	self.LastStreamAt = 0
 	self.HiddenGuis = {}
@@ -176,14 +180,11 @@ function Replay.new(playerGui: Instance, camera: Camera, onExit: () -> ()): Repl
 	bar.AnchorPoint = Vector2.new(0.5, 1)
 	bar.Position = UDim2.new(0.5, 0, 1, -20)
 	bar.Size = UDim2.fromOffset(BAR_WIDTH, 132)
-	bar.BackgroundColor3 = Theme.PANEL
-	bar.BackgroundTransparency = 0.1
-	bar.BorderSizePixel = 0
-	Theme.Corner(bar)
-	Theme.Shade(bar)
-	Theme.AccentBar(bar)
-	local checker = Theme.Checker(bar, BAR_WIDTH, 3, 2)
-	checker.BackgroundTransparency = 0.4
+	Theme.Card(bar, 0.1)
+	-- Filigrane « リプレイ » (ralenti), à droite derrière les commandes.
+	local kana = Theme.Kana(bar, "リプレイ", 44, 0.92)
+	kana.Position = UDim2.fromOffset(-14, 60)
+	kana.Size = UDim2.new(1, 0, 0, 60)
 	local scale = Instance.new("UIScale")
 	scale.Parent = bar
 	bar.Parent = gui
@@ -356,9 +357,10 @@ end
 --[[
 	Commence le ralenti d'un passage. `livery` : celle de la voiture rejouée
 	(nil : celle du gabarit, pour le fantôme d'un autre pilote) ; `classId` :
-	sa catégorie (carrosserie, BodyKits.luau).
+	sa catégorie (carrosserie, BodyKits.luau) ; `stageId` : la spéciale du
+	passage (Stages.luau), pour les caméras TV.
 ]]
-function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Livery?, classId: string?)
+function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Livery?, classId: string?, stageId: string?)
 	if self.Active then
 		self:Stop()
 	end
@@ -377,8 +379,10 @@ function Replay:Start(data: Ghost.GhostData, title: string, livery: Livery.Liver
 	self.Photo = false
 	self.UiHidden = false
 	self.Hint = 0
-	if #self.TvCameras == 0 then
-		self.TvCameras = buildTvCameras()
+	local track = Stages.Get(stageId)
+	if self.Track ~= track or #self.TvCameras == 0 then
+		self.Track = track
+		self.TvCameras = buildTvCameras(track)
 	end
 
 	-- La voiture, à la livrée voulue ; ensuite, plus rien ne la touche.
@@ -557,7 +561,7 @@ function Replay:_refreshButtons()
 		self.PhotoButton.BackgroundColor3 = Theme.PANEL_2
 		self.PhotoButton.TextColor3 = Theme.TEXT
 	end
-	self.FilterButton.Text = "FILTRE : " .. string.upper(FILTERS[self.FilterIndex].Name)
+	self.FilterButton.Text = "FILTRE : " .. Format.Upper(FILTERS[self.FilterIndex].Name)
 	self.HintLabel.Text = if self.Photo
 		then "Glisser : tourner autour · molette : distance · A/D, W/S, Q/E au clavier · F : filtre · U : masquer l'interface · capture : Impr. écran"
 		else "Espace : pause · ←/→ : 5 s · ↑/↓ : vitesse · 1 à 4 : caméras · P : photo · Retour arrière : quitter"
@@ -690,9 +694,9 @@ function Replay:UpdateCamera(dt: number): boolean
 		-- (Pas d'expression « if » ici : elle ne garderait que la première valeur.)
 		local sample, progress
 		if self.Hint > 0 then
-			sample, progress = StageTrack.LocateNear(pose.Position, self.Hint, 30)
+			sample, progress = self.Track.LocateNear(pose.Position, self.Hint, 30)
 		else
-			sample, progress = StageTrack.Locate(pose.Position)
+			sample, progress = self.Track.Locate(pose.Position)
 		end
 		self.Hint = sample.Index
 		local chosen = self.TvCameras[#self.TvCameras]

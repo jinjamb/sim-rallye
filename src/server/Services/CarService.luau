@@ -454,6 +454,11 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	end)
 
 	car.Parent = workspace
+	-- Masse attendue de la voiture complète : le client attend de l'avoir
+	-- reçue en entier avant de calibrer sa suspension (sinon, lest pas encore
+	-- arrivé, il la calibre pour une voiture trop légère : elle s'écrase de
+	-- travers et n'avance pas).
+	car:SetAttribute("SpawnMass", chassis.AssemblyMass)
 	-- Couleur et numéro du joueur (les rayons qui placent les numéros exigent
 	-- une voiture dans le monde).
 	LiveryPainter.Apply(car, liveryOf(player))

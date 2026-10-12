@@ -17,7 +17,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
-local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
@@ -25,11 +25,13 @@ local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 
 local ProfileSchema = {}
 
--- Clé de la spéciale dans les records du profil (Rally2 ; StageKey pour une catégorie).
-ProfileSchema.STAGE_ID = "s1_" .. tostring(math.floor(StageTrack.GetLength()))
+-- Clé de la spéciale par défaut dans les records du profil (défi de la semaine).
+ProfileSchema.STAGE_ID = Stages.Get(Stages.DEFAULT).RecordId
 
-function ProfileSchema.StageKey(classId: string): string
-	return CarClasses.RecordKey(ProfileSchema.STAGE_ID, classId)
+-- Clé d'un record : la spéciale (son RecordId, Stages.luau ; la spéciale par
+-- défaut sans argument) et la catégorie de voiture.
+function ProfileSchema.StageKey(classId: string, stageId: string?): string
+	return CarClasses.RecordKey(Stages.Get(stageId).RecordId, classId)
 end
 
 -- Clé d'un circuit dans les records du tour (Circuit.Key, par catégorie).
@@ -78,6 +80,7 @@ export type Profile = {
 	UseTeamColors: boolean, -- porte les couleurs de son écurie
 	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
 	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
+	XpBoostUntil: number, -- boost d'XP ×2 acheté (Products.luau) : actif jusqu'à cette date (os.time)
 }
 
 export type PassState = {
@@ -123,6 +126,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		UseTeamColors = false,
 		Achievements = {},
 		Badges = {},
+		XpBoostUntil = 0,
 	}
 end
 
@@ -208,6 +212,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.RollPity = count(data.RollPity)
 	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
 	profile.UseTeamColors = data.UseTeamColors == true
+	profile.XpBoostUntil = count(data.XpBoostUntil)
 	-- Trophées : gardés même s'ils ont quitté la liste (un exploit ne se perd pas).
 	if type(data.Achievements) == "table" then
 		for id, at in pairs(data.Achievements) do

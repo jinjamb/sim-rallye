@@ -30,7 +30,7 @@ function ChallengesPage.Weekly(ctx: Context, b: Builder)
 	local width = MenuKit.CONTENT_WIDTH
 	b:Section("Défi de la semaine")
 	local row = b:Row(28)
-	local tag = Theme.Tag(row, string.upper(modifier.Name), Theme.ACCENT, Theme.ON_ACCENT, 16)
+	local tag = Theme.Tag(row, Format.Upper(modifier.Name), Theme.ACCENT, Theme.ON_ACCENT, 16)
 	tag.Position = UDim2.fromOffset(0, 2)
 	local remaining = Widgets.Label(
 		row,
@@ -90,7 +90,7 @@ function ChallengesPage.Daily(ctx: Context, b: Builder)
 		box.Size = UDim2.fromOffset(22, 22)
 		box.BackgroundColor3 = if done then Theme.GREEN else Theme.PANEL_2
 		box.Text = if done then "✓" else ""
-		box.TextColor3 = Theme.ON_ACCENT
+		box.TextColor3 = Theme.INK
 		box.FontFace = Theme.HEADLINE
 		box.TextSize = 16
 		Theme.Corner(box, 2)

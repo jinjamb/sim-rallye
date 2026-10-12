@@ -39,6 +39,7 @@ local StageModifier = require(script.Parent.Parent.Stage.StageModifier)
 local DrivingSchool = require(script.Parent.Parent.School.DrivingSchool)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarContact = require(script.Parent.CarContact)
 
@@ -70,6 +71,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Car: CarClass.Car,
 	ClassId: string, -- catégorie de la voiture (attribut CarClass)
 	RaceId: string?,
+	StageId: string, -- la spéciale (Stages.luau) : attribut Stage de la voiture
 	Dashboard: Dashboard.Dashboard,
 	Audio: CarAudio.CarAudio,
 	Effects: CarEffects.CarEffects,
@@ -95,6 +97,9 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 
 local CAR_TAG = "RallyCar"
 local RACE_RECOVER_COOLDOWN = 3 -- secondes entre deux remises en piste en course
+-- En course, la remise en piste n'est permise qu'à l'arrêt (~3 km/h) : on ne
+-- s'en sert pas pour couper un virage raté à pleine vitesse.
+local RACE_RECOVER_MAX_SPEED = 3 -- studs/s
 
 function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local self = (setmetatable({}, DrivingSession) :: any) :: DrivingSession
@@ -114,6 +119,11 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local lesson = if self.RaceId == nil and type(lessonId) == "string" then Lessons.Get(lessonId) else nil
 
 	self.ClassId = CarClasses.Get(model:GetAttribute("CarClass")).Id
+	-- La spéciale : posée par le serveur au lancement (attribut Stage), sinon
+	-- celle dont le couloir passe par la voiture, sinon la spéciale par défaut.
+	local stageAttribute = model:GetAttribute("Stage")
+	local track = if Stages.Exists(stageAttribute) then Stages.Get(stageAttribute :: string) else (Stages.FindAt(self.Chassis.Position) or Stages.Get())
+	self.StageId = track.Id
 	local car = CarClass.new(self.Chassis, self.ClassId)
 	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))
 	self.Car = car
@@ -150,18 +160,18 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 		self.School = school
 	elseif self.RaceId == nil then
 		-- Au paddock : la spéciale, son chrono, son copilote, son fantôme.
-		local timer = StageTimer.new(car, context.PlayerGui)
-		local copilot = Copilot.new(car, context.PlayerGui)
-		local ghost = Ghost.new(self.Chassis)
+		local timer = StageTimer.new(car, context.PlayerGui, track)
+		local copilot = Copilot.new(car, context.PlayerGui, track.Id)
+		local ghost = Ghost.new(self.Chassis, track)
 		if context.TouchLayout then
 			timer:SetTouchLayout(true)
 			copilot:SetTouchLayout(true)
 		end
-		local best: StageBest = context.StageBests[self.ClassId] or { Ms = nil, Ghost = nil }
+		local best: StageBest = context.StageBests[Stages.BoardKey(track.Id, self.ClassId)] or { Ms = nil, Ghost = nil }
 		timer:SetClass(self.ClassId)
 		timer:SetPersonalBest(best.Ms)
 		ghost:SetBest(best.Ghost)
-		ghost:SetOpponent(context.GhostOpponent)
+		ghost:SetOpponent(self:_opponentFor(context.GhostOpponent))
 		ghost:SetHidden(context.GhostHidden)
 		timer:SetGhost(ghost)
 		-- Défi de la semaine : la contrainte, sans fantôme (il a roulé sans elle).
@@ -262,10 +272,18 @@ function DrivingSession:SetControl(granted: boolean)
 	end
 end
 
+-- L'adversaire choisi, s'il a roulé sur cette spéciale (sinon : son propre record).
+function DrivingSession:_opponentFor(opponent: Ghost.Opponent?): Ghost.Opponent?
+	if opponent and (opponent.StageId or Stages.DEFAULT) == self.StageId then
+		return opponent
+	end
+	return nil
+end
+
 -- Profil chargé après la création de la session (meilleur temps, fantôme).
--- Records chargés après la voiture : ceux de sa catégorie.
+-- Records chargés après la voiture : ceux de sa spéciale et de sa catégorie.
 function DrivingSession:SetStageProfile(bests: { [string]: StageBest })
-	local best = bests[self.ClassId]
+	local best = bests[Stages.BoardKey(self.StageId, self.ClassId)]
 	if not best then
 		return
 	end
@@ -282,7 +300,7 @@ end
 function DrivingSession:SetGhostChoice(opponent: Ghost.Opponent?, hidden: boolean)
 	local ghost = self.Ghost
 	if ghost then
-		ghost:SetOpponent(opponent)
+		ghost:SetOpponent(self:_opponentFor(opponent))
 		-- Au défi de la semaine, le fantôme reste masqué quoi qu'on choisisse.
 		ghost:SetHidden(hidden or self.Weekly ~= nil)
 	end
@@ -328,15 +346,16 @@ function DrivingSession:_otherCarPositions(): { Vector3 }
 end
 
 -- Remise en piste : sur la spéciale au paddock, sur le circuit en course.
-function DrivingSession:Recover()
+-- Renvoie la raison d'un refus ("moving" : la voiture roule encore, en course).
+function DrivingSession:Recover(): string?
 	if not self.HasControl or self.Car.Held then
-		return
+		return nil
 	end
 	local school = self.School
 	if school then
 		self.Style:Reset()
 		school:Recover()
-		return
+		return nil
 	end
 	local timer = self.StageTimer
 	if timer then
@@ -344,18 +363,22 @@ function DrivingSession:Recover()
 		timer:Recover()
 		-- Le serveur note que ce passage n'est plus « sans remise en piste ».
 		Remotes.Recovered:FireServer()
-		return
+		return nil
 	end
 	local now = os.clock()
 	if now - self.LastRecoverAt < RACE_RECOVER_COOLDOWN then
-		return
+		return nil
 	end
 	local circuit = Tracks.FindAt(self.Chassis.Position)
 	if circuit then
+		if self.Chassis.AssemblyLinearVelocity.Magnitude > RACE_RECOVER_MAX_SPEED then
+			return "moving"
+		end
 		self.LastRecoverAt = now
 		self.Style:Reset()
 		self.Car:Teleport(circuit:RecoverFrame(self.Chassis.Position, self:_otherCarPositions()))
 	end
+	return nil
 end
 
 -- Retour au départ de la spéciale (au paddock seulement).

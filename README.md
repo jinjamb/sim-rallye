@@ -1,6 +1,6 @@
 # Sim Rallye
 
-Jeu Roblox de rallye : une spéciale chronométrée (terre et asphalte, sauts, épingles) et des courses de rallycross jusqu'à six pilotes, avec une physique de voiture faite maison.
+Jeu Roblox de rallye : des spéciales chronométrées (forêt, neige) et des courses de rallycross jusqu'à six pilotes, avec une physique de voiture faite maison, trois catégories de voitures, une progression (défis, école, trophées, Rallye Pass) et des écuries entre amis.
 
 L'organisation du code est décrite dans [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -19,4 +19,4 @@ Dans Studio, les sauvegardes demandent d'activer l'accès aux services d'API : *
 
 ## Outils
 
-Le dossier `tools/` contient des scripts à lancer dans la barre de commande de Studio. Ils construisent la spéciale, les circuits, la piste d'essai et le gabarit de la voiture.
+Le dossier `tools/` contient des scripts à lancer dans la barre de commande de Studio, avec `rojo serve` actif. Ils construisent les spéciales (`build-stage.luau`), les circuits (`build-circuit.luau`), l'ambiance (`setup-ambiance.luau`), la piste d'essai et le gabarit de la voiture. Rojo les range dans `ServerStorage.Tools` : ils ne tournent jamais en jeu.

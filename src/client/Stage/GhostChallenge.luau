@@ -31,6 +31,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Ghost = require(script.Parent.Ghost)
 local Banner = require(script.Parent.Parent.UI.Banner)
@@ -45,6 +46,7 @@ export type GhostChallenge = typeof(setmetatable({}, GhostChallenge)) & {
 	Mode: Mode,
 	-- Catégorie de la voiture conduite : on affronte les pilotes de celle-ci.
 	ClassId: string,
+	StageId: string, -- la spéciale de l'adversaire cherché (Stages.luau)
 	Opponent: Ghost.Opponent?,
 	-- Pilote visé en mode Player.
 	TargetUserId: number?,
@@ -77,6 +79,7 @@ function GhostChallenge.new(onChanged: (GhostChallenge) -> ()): GhostChallenge
 	local self = (setmetatable({}, GhostChallenge) :: any) :: GhostChallenge
 	self.Mode = "Perso"
 	self.ClassId = CarClasses.DEFAULT
+	self.StageId = Stages.DEFAULT
 	self.Opponent = nil
 	self.TargetUserId = nil
 	self.RequestToken = 0
@@ -98,6 +101,22 @@ function GhostChallenge:SetClass(classId: string)
 		return
 	end
 	self.ClassId = classId
+	if self.Opponent then
+		self.Opponent = nil
+		self.OnChanged(self)
+	end
+	if self.Mode == "Rival" or self.Mode == "Record" or self.Mode == "Player" then
+		self.RequestToken += 1
+		self:_request()
+	end
+end
+
+-- Autre spéciale : un adversaire d'une autre spéciale ne vaut plus.
+function GhostChallenge:SetStage(stageId: string)
+	if stageId == self.StageId then
+		return
+	end
+	self.StageId = stageId
 	if self.Opponent then
 		self.Opponent = nil
 		self.OnChanged(self)
@@ -166,13 +185,15 @@ function GhostChallenge:_request()
 			return
 		end
 		self.LastRequestAt = os.clock()
-		Remotes.RequestGhost:FireServer(self.Mode, if self.Mode == "Player" then self.TargetUserId else nil, self.ClassId)
+		Remotes.RequestGhost:FireServer(self.Mode, if self.Mode == "Player" then self.TargetUserId else nil, self.ClassId, self.StageId)
 	end)
 end
 
 function GhostChallenge:_onOpponent(payload: any)
-	if payload.Mode ~= self.Mode or (payload.ClassId ~= nil and payload.ClassId ~= self.ClassId) then
-		return -- réponse à une demande dépassée (autre mode, autre voiture)
+	if payload.Mode ~= self.Mode
+		or (payload.ClassId ~= nil and payload.ClassId ~= self.ClassId)
+		or (payload.StageId ~= nil and payload.StageId ~= self.StageId) then
+		return -- réponse à une demande dépassée (autre mode, autre voiture, autre spéciale)
 	end
 	local beaten = self.BeatenName
 	self.BeatenName = nil
@@ -192,7 +213,7 @@ function GhostChallenge:_onOpponent(payload: any)
 		self.Opponent = nil
 		local reason = if type(payload.Error) == "string" then payload.Error else "Fantôme indisponible."
 		if beaten then
-			Banner.Show("RIVAL BATTU : " .. string.upper(beaten), reason, COLOR_BEATEN, 4, true)
+			Banner.Show("RIVAL BATTU : " .. Format.Upper(beaten), reason, COLOR_BEATEN, 4, true)
 		else
 			Banner.Show(MODE_TITLES[self.Mode], reason .. "  ·  Ton record à la place", COLOR_ERROR, 3.5)
 		end
@@ -205,10 +226,11 @@ function GhostChallenge:_onOpponent(payload: any)
 		Name = payload.Name,
 		Ms = payload.Ms,
 		Data = { Rate = ghost.Rate, Frames = ghost.Frames },
+		StageId = self.StageId,
 	}
 	local line = string.format("%s — %s", payload.Name, Format.Ms(payload.Ms))
 	if beaten then
-		Banner.Show("RIVAL BATTU : " .. string.upper(beaten), "Prochain rival : " .. line, COLOR_BEATEN, 4, true)
+		Banner.Show("RIVAL BATTU : " .. Format.Upper(beaten), "Prochain rival : " .. line, COLOR_BEATEN, 4, true)
 	else
 		Banner.Show(MODE_TITLES[self.Mode], line, COLOR_OPPONENT, 3)
 	end
@@ -238,7 +260,7 @@ function GhostChallenge:OnRunValidated(result: any)
 	else
 		task.delay(BEATEN_DELAY, function()
 			if self.Opponent == opponent then
-				Banner.Show("FANTÔME BATTU : " .. string.upper(opponent.Name), Format.Ms(result.Ms) .. " contre " .. Format.Ms(opponent.Ms), COLOR_BEATEN, 4, true)
+				Banner.Show("FANTÔME BATTU : " .. Format.Upper(opponent.Name), Format.Ms(result.Ms) .. " contre " .. Format.Ms(opponent.Ms), COLOR_BEATEN, 4, true)
 			end
 		end)
 	end

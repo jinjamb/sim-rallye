@@ -51,12 +51,11 @@ local MAIN_SIZES = { 40, 26, 21 }
 local DETAIL_SIZES = { 22, 17, 15 }
 local LINE_TRANSPARENCY = { 0, 0.35, 0.55 }
 
-local COLOR_PANEL = Theme.PANEL
-
-function Copilot.new(car: CarClass.Car, playerGui: Instance): Copilot
+-- `stageId` : la spéciale courue (Stages.luau) ; ses notes.
+function Copilot.new(car: CarClass.Car, playerGui: Instance, stageId: string?): Copilot
 	local self = (setmetatable({}, Copilot) :: any) :: Copilot
 	self.Car = car
-	self.Notes = Pacenotes.Generate()
+	self.Notes = Pacenotes.Generate(stageId)
 	self.NextIndex = 1
 	self.Called = {}
 	self.LastProgress = nil
@@ -76,13 +75,16 @@ function Copilot.new(car: CarClass.Car, playerGui: Instance): Copilot
 	panel.AnchorPoint = Vector2.new(0.5, 0)
 	panel.Position = UDim2.new(0.5, 0, 0, 16)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, totalHeight)
-	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.25
-	panel.BorderSizePixel = 0
+	Theme.Card(panel, 0.2)
 	panel.Visible = false
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
+	-- Pavé rose penché devant la note immédiate : c'est elle qu'on écoute.
+	local mark = Instance.new("Frame")
+	mark.BorderSizePixel = 0
+	mark.BackgroundColor3 = Theme.ACCENT
+	mark.Position = UDim2.fromOffset(10, 14)
+	mark.Size = UDim2.fromOffset(16, LINE_HEIGHTS[1] - 12)
+	mark.Parent = panel
+	Theme.Slant(mark, 20)
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	panel.Parent = gui
@@ -98,7 +100,10 @@ function Copilot.new(car: CarClass.Car, playerGui: Instance): Copilot
 		label.Size = UDim2.new(1, -24, 0, LINE_HEIGHTS[i])
 		label.RichText = true
 		label.Font = Enum.Font.GothamBold
-		label.TextColor3 = Color3.new(1, 1, 1)
+		if i == 1 then
+			label.FontFace = Theme.HEADLINE -- la note immédiate, en capitales italiques
+		end
+		label.TextColor3 = Theme.TEXT
 		label.TextTransparency = LINE_TRANSPARENCY[i]
 		label.TextSize = MAIN_SIZES[i]
 		label.Text = ""
@@ -157,7 +162,7 @@ local function lineText(note: Pacenotes.Note, line: number): string
 		return main
 	end
 	return string.format(
-		'%s  <font size="%d" color="#B4B8C2">%s</font>',
+		'%s  <font size="%d" color="#AAA4D4">%s</font>',
 		main,
 		DETAIL_SIZES[line],
 		note.Detail

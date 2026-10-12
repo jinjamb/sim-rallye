@@ -29,9 +29,9 @@ function XpEventNotice.Start()
 			if event then
 				local tag = "XP ×" .. event.Multiplier
 				local text = event.Name .. " · encore " .. Format.Remaining(event.EndsAt - now)
-				Announcer.SetEvent({ Tag = tag, Text = text, Color = Theme.ACCENT })
+				Announcer.SetEvent({ Tag = tag, Text = text, Color = Theme.YELLOW })
 				if id ~= shown then
-					Banner.Show(tag, text .. " · Rallye Pass et écurie compris", Theme.ACCENT, 5, true)
+					Banner.Show(tag, text .. " · Rallye Pass et écurie compris", Theme.YELLOW, 5, true)
 				end
 			elseif shown then
 				Announcer.SetEvent(nil)

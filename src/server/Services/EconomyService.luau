@@ -18,6 +18,12 @@
 	l'achat est gardé dans le profil : un achat rejoué n'est jamais accordé
 	deux fois. Sans DataStore (Studio), l'achat de test est accordé en
 	mémoire, pour la session.
+	Ce que donne un palier d'achat (objet ou déblocage demandé) ou un tirage
+	(remboursé en crédits là où c'est interdit) est décidé au moment de
+	l'achat par MonetizationService (ResolveGrant).
+
+	AVANTAGES (Perks.luau) : les crédits gagnés en jouant sont multipliés
+	(pass Crédits ×2, bonus Roblox Premium) ; les achats, eux, ne le sont pas.
 
 	PORTER (EquipItem) : un objet de chaque sorte, s'il est possédé. Les
 	objets portés sont montrés aux autres joueurs par la voiture
@@ -34,6 +40,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
+local Perks = require(script.Parent.Perks)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Stores = require(script.Parent.Parent.Data.Stores)
@@ -64,7 +71,9 @@ end
 local function sendWallet(player: Player, news: any?)
 	local profile = ProfileStore.Get(player)
 	if profile and player.Parent then
-		Remotes.Wallet:FireClient(player, walletOf(profile), news)
+		local wallet = walletOf(profile)
+		wallet.Perks = Perks.Snapshot(player)
+		Remotes.Wallet:FireClient(player, wallet, news)
 	end
 end
 EconomyService.SendWallet = sendWallet
@@ -83,12 +92,14 @@ end
 --------------------------------------------------------------------------------
 
 -- Crédits gagnés en jouant. `reason` : affiché au joueur ("Spéciale terminée").
+-- Multipliés par les avantages du joueur (Crédits ×2, Premium).
 function EconomyService.Earn(player: Player, amount: number, reason: string)
 	if amount <= 0 or not ProfileStore.Get(player) then
 		return
 	end
-	ProfileStore.AddCounter(player, "Credits", math.floor(amount))
-	sendWallet(player, { Gain = math.floor(amount), Reason = reason })
+	local gain = math.floor(amount * Perks.CreditMultiplier(player))
+	ProfileStore.AddCounter(player, "Credits", gain)
+	sendWallet(player, { Gain = gain, Reason = reason })
 end
 
 function EconomyService.GetCredits(player: Player): number
@@ -195,6 +206,19 @@ local function applyGrant(profile: Profile, grant: Products.Grant)
 	if grant.Item then
 		profile.Owned[grant.Item] = true
 	end
+	if grant.Unlock then
+		profile.Owned[grant.Unlock] = true
+	end
+	if grant.Starter then
+		profile.Owned[Products.STARTER_KEY] = true
+	end
+	if grant.Rolls then
+		profile.Rolls += grant.Rolls
+	end
+	if grant.XpBoostMinutes then
+		-- Cumulable : une heure de plus après celle en cours.
+		profile.XpBoostUntil = math.max(profile.XpBoostUntil, os.time()) + grant.XpBoostMinutes * 60
+	end
 	if grant.PassPremium then
 		-- Voie premium de la saison en cours (une saison passée repart de zéro).
 		local season = Pass.Current()
@@ -211,6 +235,17 @@ end
 -- connecté) : PassService donne les récompenses premium déjà atteintes.
 EconomyService.PassPremiumGranted = function(_player: Player) end
 
+--[[
+	Ce que donne vraiment un produit, au moment de l'achat : branchée par
+	MonetizationService (l'objet demandé pour un palier, un remboursement en
+	crédits...). `player` : nil si le joueur n'est plus connecté.
+]]
+EconomyService.ResolveGrant = function(_player: Player?, product: Products.Product): Products.Grant
+	return product.Grant
+end
+-- Achat accordé et sauvegardé (joueur connecté) : MonetizationService oublie la demande.
+EconomyService.ReceiptGranted = function(_player: Player, _product: Products.Product) end
+
 local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 	local product = Products.ByProductId(receipt.ProductId)
 	if not product then
@@ -225,17 +260,21 @@ local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 		-- Profil en cours de chargement : Roblox redemandera.
 		return Enum.ProductPurchaseDecision.NotProcessedYet
 	end
-	local grant = product.Grant
+	local grant = EconomyService.ResolveGrant(player, product)
 
 	-- Studio sans DataStore : achat de test accordé pour la session. (En
 	-- ligne, sans DataStore, on attend : Roblox redemandera.)
 	if not Stores.Available() and RunService:IsStudio() then
 		if player and profile then
 			applyGrant(profile, grant)
-			sendWallet(player, { Purchased = product.Key })
+			sendWallet(player, { Purchased = product.Key, Granted = grant })
+			if grant.Item or grant.Unlock then
+				EconomyService.EquippedChanged(player)
+			end
 			if grant.PassPremium then
 				EconomyService.PassPremiumGranted(player)
 			end
+			EconomyService.ReceiptGranted(player, product)
 			return Enum.ProductPurchaseDecision.PurchaseGranted
 		end
 		return Enum.ProductPurchaseDecision.NotProcessedYet
@@ -260,13 +299,16 @@ local function processReceipt(receipt: any): Enum.ProductPurchaseDecision
 	end
 	if player and profile and not alreadyGranted then
 		applyGrant(profile, grant) -- la copie en mémoire suit
-		sendWallet(player, { Purchased = product.Key })
-		if grant.Item then
+		sendWallet(player, { Purchased = product.Key, Granted = grant })
+		if grant.Item or grant.Unlock then
 			EconomyService.EquippedChanged(player)
 		end
 		if grant.PassPremium then
 			EconomyService.PassPremiumGranted(player)
 		end
+	end
+	if player then
+		EconomyService.ReceiptGranted(player, product)
 	end
 	return Enum.ProductPurchaseDecision.PurchaseGranted
 end

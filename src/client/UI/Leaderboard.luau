@@ -40,13 +40,12 @@ export type Leaderboard = typeof(setmetatable({}, Leaderboard)) & {
 local ROWS = 10
 local PANEL_WIDTH = 300
 local ROW_HEIGHT = 20
-local HEADER_HEIGHT = 38 -- titre et filet à damier
+local HEADER_HEIGHT = 38 -- titre et filet rose
 local FOOTER_HEIGHT = 34
 local DOT_SIZE = 10
 local SCREEN_MARGIN = 24
 local TOP_OFFSET = 64 -- sous la barre de Roblox
 
-local COLOR_PANEL = Theme.PANEL
 local COLOR_TEXT = Theme.TEXT
 local COLOR_DIM = Theme.DIM
 local COLOR_SELF = Theme.ACCENT
@@ -70,12 +69,7 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	panel.AnchorPoint = Vector2.new(1, 0)
 	panel.Position = UDim2.new(1, -SCREEN_MARGIN, 0, TOP_OFFSET)
 	panel.Size = UDim2.fromOffset(PANEL_WIDTH, HEADER_HEIGHT + ROWS * ROW_HEIGHT + FOOTER_HEIGHT + 6)
-	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.15
-	panel.BorderSizePixel = 0
-	Theme.Corner(panel)
-	Theme.Shade(panel)
-	Theme.AccentBar(panel)
+	Theme.Card(panel, 0.15)
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	panel.Parent = gui
@@ -93,10 +87,18 @@ function Leaderboard.new(playerGui: Instance, localUserId: number, onChallenge: 
 	title.Text = "CLASSEMENT · SPÉCIALE"
 	title.Parent = panel
 	self.Title = title
-	-- Filet à damier sous le titre, comme un tableau de chronométrage TV.
-	local checker = Theme.Checker(panel, PANEL_WIDTH, 3, 2)
-	checker.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 9)
-	checker.BackgroundTransparency = 0.4
+	-- Filet rose sous le titre, bandes de vitesse au bout, comme un tableau
+	-- de chronométrage TV dessiné à l'encre.
+	local rule = Instance.new("Frame")
+	rule.BorderSizePixel = 0
+	rule.BackgroundColor3 = Theme.ACCENT
+	rule.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 8)
+	rule.Size = UDim2.new(1, 0, 0, 2)
+	rule.Parent = panel
+	local stripes = Theme.Stripes(panel, Theme.ACCENT, 3)
+	stripes.AnchorPoint = Vector2.new(1, 0)
+	stripes.Position = UDim2.new(1, -10, 0, 8)
+	stripes.Size = UDim2.fromOffset(40, 16)
 
 	self.Rows = {}
 	self.Dots = {}
@@ -172,9 +174,10 @@ end
 
 -- `medals` : pastilles de médaille (la spéciale habituelle ; pas le défi).
 -- `medals` : pastilles de médaille de la catégorie `classId` (la spéciale habituelle).
-function Leaderboard:SetEntries(entries: { Entry }, medals: boolean?, classId: string?)
+-- `stageId` : la spéciale du classement (Stages.luau), pour ses seuils.
+function Leaderboard:SetEntries(entries: { Entry }, medals: boolean?, classId: string?, stageId: string?)
 	self.Empty.Visible = #entries == 0
-	local limits = Medals.ForStage(classId)
+	local limits = Medals.ForStage(classId, stageId)
 	for i, row in ipairs(self.Rows) do
 		local entry = entries[i]
 		local dot = self.Dots[i]

@@ -1,7 +1,8 @@
 --!strict
 --[[
 	PlayPage.luau
-	Rubriques du menu pour JOUER : la spéciale (et son ralenti), le
+	Rubriques du menu pour JOUER : les spéciales (une ligne chacune, et le
+	ralenti de son meilleur passage), le
 	rallycross (un bouton par circuit : on ouvre la salle d'attente, ou on
 	rejoint celle qui attend), les essais libres, le retour au paddock ; et
 	l'événement double XP en cours ou à venir (XpEvents.luau).
@@ -10,6 +11,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -88,17 +90,31 @@ function PlayPage.XpEvent(_ctx: Context, b: Builder)
 	end
 end
 
--- Spéciale : la lancer, et le ralenti de son meilleur passage.
+-- Les spéciales : une ligne chacune (nom, ce qui l'attend, LANCER), puis le
+-- ralenti de son meilleur passage.
 function PlayPage.Stage(ctx: Context, b: Builder)
 	local width = MenuKit.CONTENT_WIDTH
-	b:Section("Spéciale")
-	b:Text("1,6 km chronométrés, terre et asphalte, un saut et deux épingles. Bats ton record et grimpe au classement (L).", 13, Widgets.COLOR_DIM)
-	local stageRow = b:Row(40)
-	local stage = ctx.Button(stageRow, "LANCER UNE SPÉCIALE", 0, width, function()
-		ctx.Action("Play", { Mode = "Stage" })
-	end)
-	Widgets.Primary(stage)
-	stage.TextSize = 16
+	b:Section("Spéciales")
+	b:Text("Bats ton record sur chaque spéciale et grimpe au classement (L) : chacune a ses médailles et ses fantômes.", 13, Widgets.COLOR_DIM)
+	for index, id in ipairs(Stages.List()) do
+		local track = Stages.Get(id)
+		local row = b:Row(44)
+		local icon = if track.Theme == "Snow" then "❄ " else "🌲 "
+		local name = Widgets.Label(row, icon .. track.Name, 15, Enum.Font.GothamBold)
+		name.Position = UDim2.fromOffset(0, 2)
+		name.Size = UDim2.new(1, -176, 0, 18)
+		local info = Widgets.Label(row, track.Description, 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+		info.Position = UDim2.fromOffset(0, 21)
+		info.Size = UDim2.new(1, -176, 0, 22)
+		info.TextWrapped = true
+		info.TextTruncate = Enum.TextTruncate.AtEnd
+		local launch = ctx.Button(row, "LANCER", width - 168, 168, function()
+			ctx.Action("Play", { Mode = "Stage", TrackId = id })
+		end)
+		if index == 1 then
+			Widgets.Primary(launch)
+		end
+	end
 	-- Ralenti façon télévision, et mode photo.
 	local replayRow = b:Row(36)
 	local opponent = ctx.Data.ReplayOpponent
@@ -107,7 +123,7 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 		ctx.Action("Replay", { Which = "Own" } :: any)
 	end)
 	if opponent then
-		local other = ctx.Button(replayRow, "RALENTI : " .. string.upper(opponent), half + 8, half, function()
+		local other = ctx.Button(replayRow, "RALENTI : " .. Format.Upper(opponent), half + 8, half, function()
 			ctx.Action("Replay", { Which = "Opponent" } :: any)
 		end)
 		other.TextTruncate = Enum.TextTruncate.AtEnd

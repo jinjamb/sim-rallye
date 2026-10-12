@@ -25,6 +25,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Theme = require(script.Parent.Theme)
+local Widgets = require(script.Parent.Widgets)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 local SetupMenu = {}
 SetupMenu.__index = SetupMenu
@@ -52,8 +54,6 @@ local GROUP_HEIGHT = 24
 local SCREEN_PADDING = 24 -- marge haute + basse quand le menu est limité par l'écran
 local TOUCH_SCALE = 1.15 -- sur mobile : boutons plus gros, le contenu défile
 
-local COLOR_PANEL = Theme.PANEL
-local COLOR_BUTTON = Theme.PANEL_2
 local COLOR_TEXT = Theme.TEXT
 local COLOR_DIM = Theme.DIM
 local COLOR_ACCENT = Theme.ACCENT
@@ -72,22 +72,13 @@ local function makeLabel(parent: Instance, position: UDim2, size: UDim2, text: s
 	return label
 end
 
+-- Bouton du jeu (Widgets) : survol, sélection à la manette, appui. L'action
+-- est branchée par l'appelant (Activated).
 local function makeButton(parent: Instance, position: UDim2, size: UDim2, text: string): TextButton
-	local button = Instance.new("TextButton")
+	local button = Widgets.Button(parent, text, function() end)
 	button.Position = position
 	button.Size = size
-	button.Text = text
-	button.TextSize = 16
-	button.Font = Enum.Font.GothamBold
-	button.TextColor3 = COLOR_TEXT
-	button.BackgroundColor3 = COLOR_BUTTON
-	button.BorderSizePixel = 0
-	button.AutoButtonColor = true
-	button.Selectable = true -- navigation à la manette
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 5)
-	corner.Parent = button
-	button.Parent = parent
+	button.TextSize = 15
 	return button
 end
 
@@ -115,12 +106,14 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup, string) -
 	local panel = Instance.new("Frame")
 	panel.AnchorPoint = Vector2.new(0, 0.5)
 	panel.Position = UDim2.new(0, 24, 0.5, 0)
-	panel.BackgroundColor3 = COLOR_PANEL
-	panel.BackgroundTransparency = 0.1
-	panel.BorderSizePixel = 0
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0, 10)
-	corner.Parent = panel
+	Theme.Card(panel, 0.1)
+	-- Filet rose sous l'en-tête.
+	local rule = Instance.new("Frame")
+	rule.BorderSizePixel = 0
+	rule.BackgroundColor3 = Theme.ACCENT
+	rule.Position = UDim2.fromOffset(0, HEADER_HEIGHT - 4)
+	rule.Size = UDim2.new(1, 0, 0, 2)
+	rule.Parent = panel
 	local scale = Instance.new("UIScale")
 	scale.Parent = panel
 	panel.Parent = gui
@@ -129,7 +122,7 @@ function SetupMenu.new(playerGui: Instance, onChange: (CarSetup.Setup, string) -
 
 	-- En-tête fixe
 	self.Title = makeLabel(panel, UDim2.fromOffset(14, 10), UDim2.new(1, -60, 0, 22), "", 16, Enum.Font.GothamBlack, COLOR_TEXT, Enum.TextXAlignment.Left)
-	local close = makeButton(panel, UDim2.new(1, -40, 0, 8), UDim2.fromOffset(28, 26), "×")
+	local close = makeButton(panel, UDim2.new(1, -40, 0, 8), UDim2.fromOffset(30, 26), "X")
 	close.Activated:Connect(function()
 		self:SetOpen(false)
 	end)
@@ -158,7 +151,7 @@ function SetupMenu:_build()
 	end
 	self.ValueLabels = {}
 	self.FirstButton = nil
-	self.Title.Text = "RÉGLAGES · " .. string.upper(CarClasses.Get(self.ClassId).Name)
+	self.Title.Text = "RÉGLAGES · " .. Format.Upper(CarClasses.Get(self.ClassId).Name)
 	local fields = CarSetup.FieldsFor(self.ClassId)
 
 	local groups: { string } = {}
@@ -174,7 +167,7 @@ function SetupMenu:_build()
 	local y = 0
 	local presetWidth = (PANEL_WIDTH - 28 - (#CarSetup.PRESETS - 1) * 8) / #CarSetup.PRESETS
 	for i, preset in ipairs(CarSetup.PRESETS) do
-		local button = makeButton(body, UDim2.fromOffset(14 + (i - 1) * (presetWidth + 8), y), UDim2.fromOffset(presetWidth, 28), string.upper(preset.Name))
+		local button = makeButton(body, UDim2.fromOffset(14 + (i - 1) * (presetWidth + 8), y), UDim2.fromOffset(presetWidth, 28), Format.Upper(preset.Name))
 		button.TextSize = 13
 		button.Activated:Connect(function()
 			self:_set(CarSetup.WithPreset(preset.Name, self.ClassId), "Préréglage « " .. preset.Name .. " » appliqué.")
@@ -187,7 +180,7 @@ function SetupMenu:_build()
 
 	-- Réglages, par groupe
 	for _, group in ipairs(groups) do
-		makeLabel(body, UDim2.fromOffset(14, y), UDim2.new(1, -28, 0, GROUP_HEIGHT), string.upper(group), 12, Enum.Font.GothamBold, COLOR_ACCENT, Enum.TextXAlignment.Left)
+		makeLabel(body, UDim2.fromOffset(14, y), UDim2.new(1, -28, 0, GROUP_HEIGHT), Format.Upper(group), 12, Enum.Font.GothamBold, COLOR_ACCENT, Enum.TextXAlignment.Left)
 		y += GROUP_HEIGHT
 		for _, field in ipairs(fields) do
 			if field.Group == group then

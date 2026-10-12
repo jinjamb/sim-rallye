@@ -74,23 +74,30 @@ function Toast.Show(text: string, color: Color3?)
 		oldest:Destroy()
 	end
 	order += 1
+	local tone = color or Theme.ACCENT
+	-- Le groupe (fondu) est un peu plus grand que la carte : son ombre portée,
+	-- de la couleur de la notification, tient dedans.
 	local toast = Instance.new("CanvasGroup")
-	toast.Size = UDim2.fromOffset(WIDTH, HEIGHT)
-	toast.BackgroundColor3 = Theme.PANEL
-	toast.BackgroundTransparency = 0.1
-	toast.BorderSizePixel = 0
+	toast.Size = UDim2.fromOffset(WIDTH + Theme.SHADOW, HEIGHT + Theme.SHADOW)
+	toast.BackgroundTransparency = 1
 	toast.GroupTransparency = 1
 	toast.LayoutOrder = order
-	Theme.Corner(toast)
+	local card = Instance.new("Frame")
+	card.Size = UDim2.fromOffset(WIDTH, HEIGHT)
+	Theme.Card(card, 0.08, tone)
+	card.Parent = toast
+	-- Pastille penchée de la couleur de la notification, à gauche.
 	local block = Instance.new("Frame")
 	block.BorderSizePixel = 0
-	block.BackgroundColor3 = color or Theme.ACCENT
-	block.Size = UDim2.new(0, 6, 1, 0)
-	block.Parent = toast
+	block.BackgroundColor3 = tone
+	block.Position = UDim2.fromOffset(4, 6)
+	block.Size = UDim2.new(0, 14, 1, -12)
+	block.Parent = card
+	Theme.Slant(block, 20)
 	local label = Instance.new("TextLabel")
 	label.BackgroundTransparency = 1
-	label.Position = UDim2.fromOffset(14, 0)
-	label.Size = UDim2.new(1, -20, 1, 0)
+	label.Position = UDim2.fromOffset(24, 0)
+	label.Size = UDim2.new(1, -30, 1, 0)
 	label.FontFace = Theme.BODY_BOLD
 	label.TextSize = 15
 	label.TextColor3 = Theme.TEXT
@@ -98,9 +105,13 @@ function Toast.Show(text: string, color: Color3?)
 	label.TextTruncate = Enum.TextTruncate.AtEnd
 	label.RichText = true
 	label.Text = text
-	label.Parent = toast
+	label.Parent = card
 	toast.Parent = parent
 	table.insert(shown, toast)
+	-- Entrée : glisse depuis la droite en apparaissant.
+	card.Position = UDim2.fromOffset(40, 0)
+	local info = TweenInfo.new(FADE_TIME, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
+	TweenService:Create(card, info, { Position = UDim2.fromOffset(0, 0) }):Play()
 	TweenService:Create(toast, TweenInfo.new(FADE_TIME), { GroupTransparency = 0 }):Play()
 	task.delay(DURATION, function()
 		if toast.Parent then

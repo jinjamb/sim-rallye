@@ -12,6 +12,7 @@ local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Theme = require(script.Parent.Parent.Theme)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
 
 type Context = MenuKit.Context
 type Builder = MenuKit.Builder
@@ -27,7 +28,7 @@ function SchoolPage.School(ctx: Context, b: Builder)
 	b:Text("Quatre leçons courtes sur la spéciale, notées de bronze à platine. Le meilleur moyen de progresser (et de l'XP).", 13, Widgets.COLOR_DIM)
 	for _, lesson in ipairs(Lessons.LIST) do
 		local row = b:Row(40)
-		local name = Widgets.Label(row, string.upper(lesson.Name), 16, Enum.Font.GothamBlack)
+		local name = Widgets.Label(row, Format.Upper(lesson.Name), 16, Enum.Font.GothamBlack)
 		name.Position = UDim2.fromOffset(0, 0)
 		name.Size = UDim2.new(1, -150, 0, 20)
 		local goal = Widgets.Label(row, lesson.Goal, 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
@@ -37,7 +38,7 @@ function SchoolPage.School(ctx: Context, b: Builder)
 		local tier = bests[lesson.Id] or 0
 		local medal = Medals.Get(tier)
 		if medal then
-			local tag = Theme.Tag(row, medal.Short, medal.Color, Theme.ON_ACCENT, 12)
+			local tag = Theme.Tag(row, medal.Short, medal.Color, Theme.INK, 12) -- encre : lisible sur l'or comme sur l'argent
 			tag.AnchorPoint = Vector2.new(1, 0)
 			tag.Position = UDim2.new(1, -112, 0, 9)
 		end

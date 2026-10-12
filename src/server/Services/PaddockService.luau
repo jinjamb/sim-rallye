@@ -45,7 +45,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
-local StageTrack = require(ReplicatedStorage.Shared.Stage.StageTrack)
+local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -57,6 +57,7 @@ local RaceService = require(script.Parent.RaceService)
 local RecordService = require(script.Parent.RecordService)
 local EconomyService = require(script.Parent.EconomyService)
 local GarageService = require(script.Parent.GarageService)
+local PaddockScenery = require(script.Parent.Parent.World.PaddockScenery)
 
 local PaddockService = {}
 
@@ -215,7 +216,7 @@ local function buildPaddock()
 	padRing(folder, carPad)
 	local _, carFrame = board(folder, carPad.Position + Vector3.new(0, 4, -carPad.Radius - 4), Vector2.new(16, 7), carPad.Color)
 	label(carFrame, "TA VOITURE", 30, 90, Enum.Font.GothamBlack, carPad.Color)
-	label(carFrame, "Essais libres, piste d'essai, spéciale chronométrée", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
+	label(carFrame, "Essais libres sur la piste d'essai · spéciale : menu C", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
 	label(carFrame, "Entre à pied dans la zone · E : monter · Q : descendre", 230, 60, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
 
 	-- Garage : zone, plaque tournante (la voiture y est posée par chaque client,
@@ -280,6 +281,9 @@ local function buildPaddock()
 		emitter.Parent = anchor
 		table.insert(confetti, emitter)
 	end
+
+	-- Décor : stands, tribunes, arbres, tentes... et la vue fermée sur l'accueil.
+	PaddockScenery.Build(folder)
 
 	folder.Parent = workspace
 end
@@ -400,7 +404,12 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
 			return
 		end
-	elseif mode ~= "Stage" and mode ~= "Practice" and mode ~= "Weekly" then
+	elseif mode == "Stage" then
+		-- trackId : la spéciale choisie (Stages.luau) ; la spéciale par défaut sinon.
+		if trackId ~= nil and not Stages.Exists(trackId) then
+			return
+		end
+	elseif mode ~= "Practice" and mode ~= "Weekly" then
 		return
 	end
 	local ok, reason = RaceService.ReleaseForMode(player)
@@ -411,15 +420,17 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 	lastPlayAt[player] = now
 
 	if mode == "Stage" then
-		CarService.Spawn(player, StageTrack.StartFrame(), nil)
+		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
+		CarService.Spawn(player, track.StartFrame(), { Attributes = { Stage = track.Id } })
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
 		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
 		CarService.Spawn(player, Lessons.StartFrame(lesson), { Attributes = { Lesson = lesson.Id }, CarClass = "Rally2" })
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
-		CarService.Spawn(player, StageTrack.StartFrame(), {
-			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id },
+		local track = Stages.Get(Stages.DEFAULT)
+		CarService.Spawn(player, track.StartFrame(), {
+			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id },
 			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
 		})
 	elseif mode == "Practice" then
@@ -475,12 +486,23 @@ function PaddockService.Podium(players: { Player }, rows: { PodiumRow })
 		table.insert(names, row.Name)
 	end
 	for _, player in ipairs(players) do
-		Remotes.RaceEvent:FireClient(player, "Podium", {
-			Names = names,
-			Duration = PODIUM_DURATION,
-			Eye = PaddockLayout.PODIUM_CAMERA_EYE,
-			Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
-		})
+		-- Avec le streaming, le paddock n'est pas chargé chez un pilote resté sur
+		-- le circuit : on le fait charger avant de montrer la cérémonie.
+		task.spawn(function()
+			if workspace.StreamingEnabled then
+				pcall(function()
+					player:RequestStreamAroundAsync(PaddockLayout.PODIUM_CENTER, 4)
+				end)
+			end
+			if player.Parent then
+				Remotes.RaceEvent:FireClient(player, "Podium", {
+					Names = names,
+					Duration = PODIUM_DURATION,
+					Eye = PaddockLayout.PODIUM_CAMERA_EYE,
+					Focus = PaddockLayout.PODIUM_CAMERA_FOCUS,
+				})
+			end
+		end)
 	end
 	task.delay(PODIUM_DURATION, function()
 		if podiumToken == token then

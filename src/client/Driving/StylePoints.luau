@@ -45,6 +45,7 @@ export type StylePoints = typeof(setmetatable({}, StylePoints)) & {
 	Scale: UIScale,
 	ComboLabel: TextLabel,
 	BankLabel: TextLabel,
+	BankInk: UIStroke, -- contour encré, effacé avec le texte
 	TotalLabel: TextLabel,
 
 	-- Combinaison en cours
@@ -85,12 +86,13 @@ local COUNTING_GRACE = 4 -- s après l'arrivée où une combinaison finie compte
 local COLOR_TEXT = Theme.TEXT
 local COLOR_DIM = Theme.DIM
 local COLOR_LOST = Theme.RED
+-- Du blanc au rose sakura : plus la combinaison monte, plus elle « chauffe ».
 local MULTIPLIER_COLORS = {
-	Color3.fromRGB(235, 236, 240),
-	Color3.fromRGB(120, 210, 255),
-	Color3.fromRGB(110, 230, 120),
-	Color3.fromRGB(255, 200, 60),
-	Color3.fromRGB(255, 110, 60),
+	Theme.TEXT,
+	Theme.CYAN,
+	Theme.GREEN,
+	Theme.YELLOW,
+	Theme.ACCENT,
 }
 
 local function label(parent: Instance, y: number, height: number, size: number, font: Enum.Font, color: Color3): TextLabel
@@ -102,7 +104,6 @@ local function label(parent: Instance, y: number, height: number, size: number, 
 	text.Font = font
 	text.TextSize = size
 	text.TextColor3 = color
-	text.TextStrokeTransparency = 0.5
 	text.Text = ""
 	text.Parent = parent
 	return text
@@ -144,9 +145,18 @@ function StylePoints.new(car: CarClass.Car, playerGui: Instance): StylePoints
 	local scale = Instance.new("UIScale")
 	scale.Parent = root
 	self.Scale = scale
-	self.ComboLabel = label(root, 0, 34, 28, Enum.Font.GothamBlack, COLOR_TEXT)
-	self.BankLabel = label(root, 36, 28, 22, Enum.Font.GothamBlack, COLOR_TEXT)
-	self.TotalLabel = label(root, 66, 18, 13, Enum.Font.GothamBold, COLOR_DIM)
+	-- Lettrage de manga encré : la combinaison et ce qu'on encaisse.
+	self.ComboLabel = label(root, 0, 36, 34, Enum.Font.GothamBlack, COLOR_TEXT)
+	self.ComboLabel.FontFace = Theme.SFX
+	self.ComboLabel.Rotation = -3
+	Theme.TextInk(self.ComboLabel, 3)
+	self.BankLabel = label(root, 38, 28, 26, Enum.Font.GothamBlack, COLOR_TEXT)
+	self.BankLabel.FontFace = Theme.SFX
+	self.BankLabel.Rotation = -3
+	local bankInk = Theme.TextInk(self.BankLabel, 2.5)
+	self.TotalLabel = label(root, 68, 18, 13, Enum.Font.GothamBlack, COLOR_DIM)
+	Theme.TextInk(self.TotalLabel, 1.5)
+	self.BankInk = bankInk
 	gui.Parent = playerGui
 	return self
 end
@@ -167,11 +177,13 @@ function StylePoints:_flash(text: string, color: Color3)
 	bank.Text = text
 	bank.TextColor3 = color
 	bank.TextTransparency = 0
-	bank.TextStrokeTransparency = 0.5
+	self.BankInk.Transparency = 0
+	Theme.Pop(bank, 1, 0.5)
 	task.delay(1.6, function()
 		if token == self.BankToken then
 			local info = TweenInfo.new(0.4)
-			TweenService:Create(bank, info, { TextTransparency = 1, TextStrokeTransparency = 1 }):Play()
+			TweenService:Create(bank, info, { TextTransparency = 1 }):Play()
+			TweenService:Create(self.BankInk, info, { Transparency = 1 }):Play()
 		end
 	end)
 end

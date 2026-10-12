@@ -5,7 +5,12 @@
 
 		EN HAUT AU CENTRE : position (P2/6), tour (2/4), chrono du tour en cours,
 		meilleur et dernier tour, état du joker, pénalités.
-		À GAUCHE : classement en direct, écarts au leader (masqué sur mobile).
+		À GAUCHE : classement en direct, écarts au leader (masqué sur mobile) ;
+		au bout de chaque ligne, le badge du joker (vert « J ✓ » fait,
+		orange « J » à faire), légende en pied.
+		JOKER : tant que le sien est à faire, son témoin clignote, la branche
+		joker est orange vif sur la mini-carte, et à l'approche de l'entrée
+		une grande alerte dit de quel côté il part.
 		MINI-CARTE : en bas à gauche (en haut à gauche sur mobile : le volant
 		tactile occupe le bas).
 		FEUX DE DÉPART : cinq feux rouges qui s'allument un à un ; leur
@@ -61,6 +66,10 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 
 	Standings: Frame,
 	StandingRows: { TextLabel },
+	JokerBadges: { TextLabel }, -- au bout de chaque ligne : joker fait (vert) ou à faire (orange)
+	JokerPrompt: TextLabel, -- « JOKER → » à l'approche de l'entrée du joker, s'il reste à faire
+	JokerSide: { [string]: number }, -- côté de la branche joker par circuit (+1 gauche, -1 droite)
+	JokerHint: Circuit.Location?, -- dernière position sur le tracé (recherche locale)
 
 	MinimapHolder: Frame,
 	Minimap: Minimap.Minimap?,
@@ -96,19 +105,23 @@ export type RaceHud = typeof(setmetatable({}, RaceHud)) & {
 }
 
 local INFO_WIDTH, INFO_HEIGHT = 470, 108
-local STANDINGS_WIDTH = 270
+local STANDINGS_WIDTH = 290
 local ROW_HEIGHT = 22
 local MAX_ROWS = 6
 local LIGHT_SIZE = 46
 local MESSAGE_TIME = 2.5
+local JOKER_PROMPT_DISTANCE = 260 -- studs avant l'entrée du joker où l'alerte s'affiche
+local JOKER_LEGEND_HEIGHT = 20
+local COLOR_JOKER_DUE = Theme.ORANGE
+local COLOR_JOKER_DONE = Theme.GREEN
 
-local COLOR_LIGHT_OFF = Color3.fromRGB(45, 20, 20)
+local COLOR_LIGHT_OFF = Color3.fromRGB(44, 24, 56)
 local COLOR_LIGHT_RED = Color3.fromRGB(240, 30, 30)
 local COLOR_LIGHT_GREEN = Color3.fromRGB(40, 230, 80)
 
--- « P2/6 » dans la case jaune : le nombre de pilotes plus petit, en gris foncé.
+-- « P2/6 » dans la case jaune : le nombre de pilotes plus petit, plus pâle.
 local function positionText(position: number, count: number): string
-	return string.format('P%d<font size="24" color="#4A4A52">/%d</font>', position, count)
+	return string.format('P%d<font size="24" color="#7A6420">/%d</font>', position, count)
 end
 
 function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callbacks): RaceHud
@@ -150,21 +163,21 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	self.RoundLabel.Size = UDim2.new(1, -28, 0, 16)
 
 	-- Position : la case jaune des retransmissions.
-	self.PositionLabel = Widgets.Label(info, "", 50, Enum.Font.GothamBlack, Theme.ON_ACCENT)
+	self.PositionLabel = Widgets.Label(info, "", 46, Enum.Font.GothamBlack, Theme.ON_YELLOW)
 	self.PositionLabel.RichText = true
 	self.PositionLabel.BackgroundTransparency = 0
-	self.PositionLabel.BackgroundColor3 = Theme.ACCENT
+	self.PositionLabel.BackgroundColor3 = Theme.YELLOW
 	self.PositionLabel.TextXAlignment = Enum.TextXAlignment.Center
 	self.PositionLabel.Position = UDim2.fromOffset(14, 24)
 	self.PositionLabel.Size = UDim2.fromOffset(126, 56)
-	Theme.Corner(self.PositionLabel, 2)
+	Theme.Slant(self.PositionLabel, 12) -- case penchée
 
 	self.LapLabel = Widgets.Label(info, "", 15, Enum.Font.GothamBold, Widgets.COLOR_DIM)
-	self.LapLabel.Position = UDim2.fromOffset(150, 24)
+	self.LapLabel.Position = UDim2.fromOffset(164, 24)
 	self.LapLabel.Size = UDim2.fromOffset(170, 18)
 
 	self.LapTimeLabel = Widgets.Label(info, "", 34, Enum.Font.RobotoMono)
-	self.LapTimeLabel.Position = UDim2.fromOffset(150, 42)
+	self.LapTimeLabel.Position = UDim2.fromOffset(164, 42)
 	self.LapTimeLabel.Size = UDim2.fromOffset(170, 36)
 
 	local function chip(y: number, height: number): TextLabel
@@ -173,12 +186,13 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 		label.BackgroundTransparency = 0
 		label.Position = UDim2.fromOffset(INFO_WIDTH - 140, y)
 		label.Size = UDim2.fromOffset(126, height)
-		Widgets.Corner(label, 4)
+		Theme.Slant(label)
 		return label
 	end
 	self.JokerChip = chip(26, 24)
 	self.PenaltyChip = chip(56, 20)
 	self.PenaltyChip.BackgroundColor3 = Widgets.COLOR_RED
+	self.PenaltyChip.TextColor3 = Theme.TEXT
 
 	self.BottomLabel = Widgets.Label(info, "", 14, Enum.Font.RobotoMono, Widgets.COLOR_DIM)
 	self.BottomLabel.Position = UDim2.fromOffset(14, 84)
@@ -187,28 +201,61 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 	-- Classement ------------------------------------------------------------------
 	local standings = Widgets.Panel(root, 0.3)
 	standings.Position = UDim2.fromOffset(16, 64)
-	standings.Size = UDim2.fromOffset(STANDINGS_WIDTH, 34 + MAX_ROWS * ROW_HEIGHT + 8)
+	standings.Size = UDim2.fromOffset(STANDINGS_WIDTH, 34 + MAX_ROWS * ROW_HEIGHT + 8 + JOKER_LEGEND_HEIGHT)
 	self.Standings = standings
 	local header = Widgets.Label(standings, "CLASSEMENT", 16, Enum.Font.GothamBlack)
 	header.Position = UDim2.fromOffset(12, 4)
 	header.Size = UDim2.new(1, -24, 0, 20)
-	local headerChecker = Theme.Checker(standings, STANDINGS_WIDTH, 3, 2)
-	headerChecker.Position = UDim2.fromOffset(0, 24)
-	headerChecker.BackgroundTransparency = 0.4
+	local headerStripes = Theme.Stripes(standings, Theme.ACCENT, 4)
+	headerStripes.AnchorPoint = Vector2.new(1, 0)
+	headerStripes.Position = UDim2.new(1, -10, 0, 7)
+	headerStripes.Size = UDim2.fromOffset(56, 16)
+	local headerRule = Instance.new("Frame")
+	headerRule.BorderSizePixel = 0
+	headerRule.BackgroundColor3 = Theme.ACCENT
+	headerRule.Position = UDim2.fromOffset(0, 27)
+	headerRule.Size = UDim2.new(1, 0, 0, 2)
+	headerRule.Parent = standings
 	self.StandingRows = {}
+	self.JokerBadges = {}
 	for i = 1, MAX_ROWS do
 		local row = Widgets.Label(standings, "", 15, Enum.Font.RobotoMono)
 		row.Position = UDim2.fromOffset(8, 32 + (i - 1) * ROW_HEIGHT)
 		row.Size = UDim2.new(1, -16, 0, ROW_HEIGHT)
 		row.RichText = true
-		-- Sa propre ligne : surlignée en jaune (voir Update).
+		-- Sa propre ligne : surlignée en rose (voir Update).
 		row.BackgroundColor3 = Theme.ACCENT
 		row.BackgroundTransparency = 1
 		local padding = Instance.new("UIPadding")
 		padding.PaddingLeft = UDim.new(0, 4)
 		padding.Parent = row
 		self.StandingRows[i] = row
+		-- Badge du joker, au bout de la ligne : on voit d'un coup d'œil qui
+		-- l'a déjà fait et qui devra encore faire le détour.
+		local badge = Instance.new("TextLabel")
+		badge.AnchorPoint = Vector2.new(1, 0.5)
+		badge.Position = UDim2.new(1, -14, 0, 32 + (i - 1) * ROW_HEIGHT + ROW_HEIGHT / 2)
+		badge.Size = UDim2.fromOffset(38, ROW_HEIGHT - 6)
+		badge.BorderSizePixel = 0
+		badge.FontFace = Theme.HEADLINE
+		badge.TextSize = 11
+		badge.TextColor3 = Theme.INK
+		badge.Visible = false
+		badge.Parent = standings
+		Theme.Slant(badge)
+		self.JokerBadges[i] = badge
 	end
+	-- Légende des badges, en pied du classement.
+	local legend = Widgets.Label(standings, "", 11, Enum.Font.GothamBold, Widgets.COLOR_DIM)
+	legend.RichText = true
+	legend.Text = string.format(
+		'<font color="%s"><b>J ✓</b></font> joker fait   <font color="%s"><b>J</b></font> joker à faire',
+		Theme.Hex(COLOR_JOKER_DONE),
+		Theme.Hex(COLOR_JOKER_DUE)
+	)
+	legend.AnchorPoint = Vector2.new(0, 1)
+	legend.Position = UDim2.new(0, 12, 1, -4)
+	legend.Size = UDim2.new(1, -24, 0, JOKER_LEGEND_HEIGHT - 4)
 
 	-- Mini-carte (construite à la première course) ------------------------------------
 	local holder = Instance.new("Frame")
@@ -240,17 +287,41 @@ function RaceHud.new(playerGui: Instance, localUserId: number, callbacks: Callba
 		self.LightDots[i] = dot
 	end
 
+	-- Alerte du joker : à l'approche de l'entrée, tant qu'il reste à faire.
+	local prompt = Widgets.Label(root, "", 40, Enum.Font.GothamBlack, Theme.TEXT)
+	prompt.FontFace = Theme.SFX
+	prompt.AnchorPoint = Vector2.new(0.5, 0.5)
+	prompt.Position = UDim2.fromScale(0.5, 0.28)
+	prompt.Size = UDim2.fromOffset(0, 54)
+	prompt.AutomaticSize = Enum.AutomaticSize.X
+	prompt.TextXAlignment = Enum.TextXAlignment.Center
+	prompt.BackgroundColor3 = COLOR_JOKER_DUE
+	prompt.BackgroundTransparency = 0
+	prompt.Rotation = -2
+	prompt.Visible = false
+	local promptPadding = Instance.new("UIPadding")
+	promptPadding.PaddingLeft = UDim.new(0, 18)
+	promptPadding.PaddingRight = UDim.new(0, 18)
+	promptPadding.Parent = prompt
+	Theme.TextInk(prompt, 3)
+	Theme.Slant(prompt)
+	self.JokerPrompt = prompt
+	self.JokerSide = {}
+
 	-- Message ---------------------------------------------------------------------
-	local message = Widgets.Label(root, "", 36, Enum.Font.GothamBlack)
+	-- Lettrage de manga encré : « DERNIER TOUR ! », « DRAPEAU À DAMIER ».
+	local message = Widgets.Label(root, "", 52, Enum.Font.GothamBlack)
+	message.FontFace = Theme.SFX
+	message.Rotation = -2
+	Theme.TextInk(message, 3)
 	message.AnchorPoint = Vector2.new(0.5, 0.5)
 	message.Position = UDim2.fromScale(0.5, 0.36)
-	message.Size = UDim2.fromOffset(900, 50)
+	message.Size = UDim2.fromOffset(900, 64)
 	message.TextXAlignment = Enum.TextXAlignment.Center
-	message.TextStrokeTransparency = 0.3
 	-- Messages longs (arrivée, podium) : réduits pour tenir sur une ligne.
 	message.TextScaled = true
 	local sizeLimit = Instance.new("UITextSizeConstraint")
-	sizeLimit.MaxTextSize = 36
+	sizeLimit.MaxTextSize = 52
 	sizeLimit.Parent = message
 	message.Visible = false
 	self.Message = message
@@ -376,8 +447,11 @@ end
 --------------------------------------------------------------------------------
 
 function RaceHud:_gantryLights(trackId: string): { BasePart }
-	if self.GantryTrack == trackId then
-		return self.GantryLights
+	-- Avec le streaming, le portique peut ne pas être encore chargé (ou avoir été
+	-- déchargé) : on ne garde la liste que si les cinq feux sont bien là.
+	local cached = self.GantryLights
+	if self.GantryTrack == trackId and #cached == 5 and cached[1].Parent ~= nil then
+		return cached
 	end
 	self.GantryTrack = trackId
 	self.GantryLights = {}
@@ -399,6 +473,8 @@ end
 function RaceHud:SetRace(race: RaceTypes.RaceSnapshot?)
 	self.Race = race
 	self.Gui.Enabled = race ~= nil or os.clock() < self.PodiumUntil
+	self.JokerPrompt.Visible = false
+	self.JokerHint = nil
 	if not race then
 		self.Live = nil
 		self:HideResults()
@@ -442,8 +518,11 @@ function RaceHud:SetLive(payload: RaceTypes.LivePayload)
 end
 
 function RaceHud:ShowMessage(text: string, color: Color3?, duration: number?)
-	self.Message.Text = text
 	self.Message.TextColor3 = color or Widgets.COLOR_TEXT
+	if not self.Message.Visible or self.Message.Text ~= text then
+		Theme.Pop(self.Message, 1, 0.5) -- le message jaillit
+	end
+	self.Message.Text = text
 	self.Message.Visible = true
 	self.MessageUntil = os.clock() + (duration or MESSAGE_TIME)
 end
@@ -453,7 +532,7 @@ function RaceHud:ShowResults(results: RaceTypes.Results)
 	local trackName = ""
 	local circuit = Tracks.Get(results.TrackId)
 	if circuit then
-		trackName = " · " .. string.upper(circuit.Name)
+		trackName = " · " .. Format.Upper(circuit.Name)
 	end
 	self.ResultsTitle.Text = (if results.Final then "RÉSULTATS — " else "") .. results.RoundName .. trackName
 	for _, child in ipairs(self.ResultsRows:GetChildren()) do
@@ -467,10 +546,10 @@ function RaceHud:ShowResults(results: RaceTypes.Results)
 		label.Position = UDim2.fromOffset(0, (index - 1) * 30)
 		label.Size = UDim2.new(1, 0, 0, 28)
 		label.RichText = true
-		-- Lignes alternées, la sienne surlignée en jaune.
+		-- Lignes alternées, la sienne surlignée en rose.
 		local mine = row.UserId == self.LocalUserId
 		label.BackgroundColor3 = if mine then Theme.ACCENT else Theme.PANEL_2
-		label.BackgroundTransparency = if mine then 0.75 elseif index % 2 == 1 then 0.55 else 1
+		label.BackgroundTransparency = if mine then 0.45 elseif index % 2 == 1 then 0.55 else 1
 		local padding = Instance.new("UIPadding")
 		padding.PaddingLeft = UDim.new(0, 6)
 		padding.Parent = label
@@ -480,12 +559,12 @@ function RaceHud:ShowResults(results: RaceTypes.Results)
 			name = (if cut then string.sub(name, 1, cut - 1) else name) .. "…"
 		end
 		local padding = string.rep(" ", math.max(0, 15 - (utf8.len(name) or #name)))
-		local timeText = if row.Dnf then string.upper(row.DnfReason or "abandon") else Format.Time(row.TotalTime)
+		local timeText = if row.Dnf then Format.Upper(row.DnfReason or "abandon") else Format.Time(row.TotalTime)
 		local penalty = if row.Penalty > 0 and not row.Dnf then string.format(" (+%gs)", row.Penalty) else ""
 		local best = if row.BestLap then "  t. " .. Format.Time(row.BestLap) else ""
 		local points = if results.Final and row.Points > 0 then string.format("  +%d pts", row.Points) else ""
 		label.Text = string.format("%d. %s%s%s%s%s%s", row.Position, name, padding, timeText, penalty, best, points)
-		label.TextColor3 = if row.UserId == self.LocalUserId then Widgets.COLOR_ACCENT else Widgets.COLOR_TEXT
+		label.TextColor3 = Widgets.COLOR_TEXT
 	end
 	self.Results.Size = UDim2.fromOffset(560, 96 + math.min(#results.Rows, MAX_ROWS) * 30)
 	self.Results.Visible = true
@@ -569,6 +648,72 @@ function RaceHud:_updateLights(race: RaceTypes.RaceSnapshot, serverNow: number)
 	end
 end
 
+-- Son joker : vert une fois fait ; tant qu'il reste à faire, orange et clignotant.
+function RaceHud:_setJokerChip(done: boolean)
+	local chip = self.JokerChip
+	if done then
+		chip.Text = "JOKER ✓"
+		chip.BackgroundColor3 = COLOR_JOKER_DONE
+		chip.BackgroundTransparency = 0
+	else
+		chip.Text = "⚠ JOKER À FAIRE"
+		chip.BackgroundColor3 = COLOR_JOKER_DUE
+		chip.BackgroundTransparency = if (os.clock() * 2) % 1 < 0.5 then 0 else 0.45
+	end
+end
+
+-- Côté de la branche joker par rapport à la boucle, à son entrée (+1 gauche, -1 droite).
+function RaceHud:_jokerSide(trackId: string, circuit: Circuit.Circuit): number
+	local known = self.JokerSide[trackId]
+	if known then
+		return known
+	end
+	local main = circuit:SampleAt(circuit.JokerStartProgress)
+	local joker = circuit.JokerSamples[math.min(#circuit.JokerSamples, 12)]
+	local side = if joker and (joker.Position - main.Position):Dot(main.Left) < 0 then -1 else 1
+	self.JokerSide[trackId] = side
+	return side
+end
+
+--[[
+	Alerte du joker : tant qu'on ne l'a pas fait, à l'approche de son entrée
+	(JOKER_PROMPT_DISTANCE studs avant), une grande étiquette orange dit de
+	quel côté il part ; sur la branche, « JOKER EN COURS ».
+]]
+function RaceHud:_updateJokerPrompt(race: RaceTypes.RaceSnapshot, cars: { Minimap.CarDot }, me: RaceTypes.LiveRow?)
+	local prompt = self.JokerPrompt
+	local position: Vector3? = nil
+	for _, car in ipairs(cars) do
+		if car.Me then
+			position = car.Position
+		end
+	end
+	local circuit = Tracks.Get(race.TrackId)
+	if race.State ~= "Racing" or not me or me.J > 0 or me.F or me.D or not position or not circuit then
+		prompt.Visible = false
+		return
+	end
+	local location = circuit:Locate(position :: Vector3, self.JokerHint)
+	self.JokerHint = location
+	local text: string? = nil
+	if location.OnJoker then
+		text = "JOKER EN COURS"
+	else
+		local ahead = (circuit.JokerStartProgress - location.Progress) % circuit.Length
+		if ahead <= JOKER_PROMPT_DISTANCE then
+			local lastLap = me.L + 1 >= race.Laps
+			local side = if self:_jokerSide(race.TrackId, circuit) > 0 then "← JOKER À GAUCHE" else "JOKER À DROITE →"
+			text = (if lastLap then "DERNIÈRE CHANCE · " else "") .. side
+		end
+	end
+	prompt.Visible = text ~= nil
+	if text then
+		prompt.Text = text
+		-- Clignote entre l'orange et le jaune : impossible à rater.
+		prompt.BackgroundColor3 = if (os.clock() * 3) % 1 < 0.5 then COLOR_JOKER_DUE else Theme.YELLOW
+	end
+end
+
 function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number)
 	local viewport = workspace.CurrentCamera.ViewportSize
 	local scale = if self.TouchLayout
@@ -591,7 +736,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 	end
 	if race.State == "Lobby" then
 		local circuit = Tracks.Get(race.TrackId)
-		local name = if circuit then string.upper(circuit.Name) else race.TrackId
+		local name = if circuit then Format.Upper(circuit.Name) else race.TrackId
 		local countdown = if race.AutoStartAt
 			then string.format("départ dans <b>%d s</b>", math.max(0, math.ceil((race.AutoStartAt :: number) - serverNow)))
 			else string.format("en attente d'un %de pilote", race.MinPlayers)
@@ -614,7 +759,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 	end
 
 	local circuit = Tracks.Get(race.TrackId)
-	local roundText = race.RoundName .. (if circuit then " · " .. string.upper(circuit.Name) else "")
+	local roundText = race.RoundName .. (if circuit then " · " .. Format.Upper(circuit.Name) else "")
 	if race.RoundCount > 1 then
 		roundText ..= string.format(" · MANCHE %d/%d", race.Round, race.RoundCount)
 	end
@@ -634,8 +779,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 		else
 			self.LapTimeLabel.Text = Format.Time(0)
 		end
-		self.JokerChip.Text = if me.J > 0 then "JOKER ✓" else "JOKER À FAIRE"
-		self.JokerChip.BackgroundColor3 = if me.J > 0 then Widgets.COLOR_GREEN else Widgets.COLOR_ORANGE
+		self:_setJokerChip(me.J > 0 or me.F)
 		self.PenaltyChip.Visible = me.PEN > 0
 		self.PenaltyChip.Text = string.format("PÉNALITÉ +%g s", me.PEN)
 		self.BottomLabel.Text = string.format("MEILLEUR %s   DERNIER %s", Format.Time(me.B), Format.Time(me.LL))
@@ -643,8 +787,7 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 		self.PositionLabel.Text = positionText(0, count)
 		self.LapLabel.Text = string.format("TOUR 1/%d", race.Laps)
 		self.LapTimeLabel.Text = Format.Time(0)
-		self.JokerChip.Text = "JOKER À FAIRE"
-		self.JokerChip.BackgroundColor3 = Widgets.COLOR_ORANGE
+		self:_setJokerChip(false)
 		self.PenaltyChip.Visible = false
 		self.BottomLabel.Text = ""
 	end
@@ -673,15 +816,26 @@ function RaceHud:Update(_dt: number, cars: { Minimap.CarDot }, serverNow: number
 			else
 				gap = "—"
 			end
-			local joker = if row.J > 0 then "" else ' <font color="#FF8C28">J</font>'
-			label.Text = string.format("%d %s%s%s%s", row.P, name, padding, gap, joker)
+			label.Text = string.format("%d %s%s%s", row.P, name, padding, gap)
 			local mine = row.U == self.LocalUserId
-			label.TextColor3 = if mine then Widgets.COLOR_ACCENT else Widgets.COLOR_TEXT
-			label.BackgroundTransparency = if mine then 0.82 else 1
+			label.TextColor3 = Widgets.COLOR_TEXT
+			label.BackgroundTransparency = if mine then 0.45 else 1
+			-- Joker : fait (vert), à faire (orange) ; rien après un abandon.
+			local badge = self.JokerBadges[i]
+			badge.Visible = not row.D
+			badge.Text = if row.J > 0 then "J ✓" else "J"
+			badge.BackgroundColor3 = if row.J > 0 then COLOR_JOKER_DONE else COLOR_JOKER_DUE
 		else
 			label.Text = ""
 			label.BackgroundTransparency = 1
+			self.JokerBadges[i].Visible = false
 		end
+	end
+
+	self:_updateJokerPrompt(race, cars, me)
+	local map = self.Minimap
+	if map then
+		map:SetJokerDone(me ~= nil and me.J > 0)
 	end
 
 	local results = self.ResultsData

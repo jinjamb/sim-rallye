@@ -26,7 +26,8 @@
 	résultat de chaque essai : [École] ...).
 ]]
 
-local StageTrack = require(script.Parent.Parent.Stage.StageTrack)
+-- Les leçons se donnent sur la spéciale par défaut (la forêt).
+local StageTrack = require(script.Parent.Parent.Stage.Stages).Get()
 
 local Lessons = {}
 

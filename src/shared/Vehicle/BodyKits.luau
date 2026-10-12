@@ -64,6 +64,13 @@ function BodyKits.Apply(car: Model, kitId: string)
 	if old then
 		old:Destroy()
 	end
+	-- Retenu pour CarBodies : revenir à la carrosserie d'origine remet le kit.
+	car:SetAttribute("KitId", kitId)
+	-- Un modèle construit par le jeu (CarBodies) a ses propres pièces : le kit
+	-- de la catégorie, taillé pour la carrosserie d'origine, n'y tomberait pas.
+	if car:GetAttribute("CustomBody") == true then
+		return
+	end
 
 	local hidden: { [string]: boolean } = {}
 	for _, name in ipairs(kit.Hide) do

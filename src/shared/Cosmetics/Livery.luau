@@ -7,6 +7,11 @@
 	menu C), sauvegardée dans le profil (GarageService), appliquée à chaque
 	apparition de la voiture (LiveryPainter) : tout le monde la voit.
 
+	ELLE PORTE AUSSI LE MODÈLE ET SES PIÈCES (CarBodies.luau) : Body (le
+	modèle), Wing, Bumper, Hood, Flares, Rims (une variante par
+	emplacement, 1 = de série). Même chemin que la couleur : sauvegardé,
+	vérifié, débloqué en jouant (Progression.luau), posé par LiveryPainter.
+
 	Une palette plutôt qu'une couleur libre : des teintes franches, qui se
 	distinguent bien de loin et dans la poussière.
 
@@ -16,6 +21,8 @@
 	verrouillé.
 ]]
 
+local CarBodies = require(script.Parent.Parent.Vehicle.CarBodies)
+
 local Livery = {}
 
 export type Livery = {
@@ -24,6 +31,13 @@ export type Livery = {
 	Stripes: number, -- Livery.STRIPES (1 = aucune)
 	StripeColor: number, -- Livery.COLORS
 	Plate: number, -- Livery.PLATES : style du rond du numéro
+	-- Modèle et pièces (CarBodies.luau) : indices, 1 = de série.
+	Body: number,
+	Wing: number,
+	Bumper: number,
+	Hood: number,
+	Flares: number,
+	Rims: number,
 }
 export type Swatch = { Name: string, Color: Color3 }
 -- Une bande : décalage latéral de son axe et largeur (studs, repère du châssis).
@@ -84,6 +98,12 @@ function Livery.Default(userId: number): Livery
 		Stripes = 1,
 		StripeColor = 3, -- blanc
 		Plate = 1,
+		Body = 2, -- Kaze : une voiture du jeu (l'Origine reste au choix)
+		Wing = 1,
+		Bumper = 1,
+		Hood = 1,
+		Flares = 1,
+		Rims = 1,
 	}
 end
 
@@ -106,6 +126,10 @@ function Livery.Sanitize(input: any, userId: number): Livery
 	result.Stripes = index(input.Stripes, #Livery.STRIPES) or result.Stripes
 	result.StripeColor = index(input.StripeColor, #Livery.COLORS) or result.StripeColor
 	result.Plate = index(input.Plate, #Livery.PLATES) or result.Plate
+	result.Body = index(input.Body, #CarBodies.LIST) or result.Body
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		(result :: any)[slot.Key] = index(input[slot.Key], #slot.Options) or 1
+	end
 	return result
 end
 
@@ -122,8 +146,7 @@ function Livery.StripeColorOf(livery: Livery): Color3
 end
 
 function Livery.Equals(a: Livery, b: Livery): boolean
-	return a.Color == b.Color and a.Number == b.Number and a.Stripes == b.Stripes
-		and a.StripeColor == b.StripeColor and a.Plate == b.Plate
+	return Livery.Key(a) == Livery.Key(b)
 end
 
 -- Nom lisible d'un élément de livrée (Progression.Kind) : "Couleur Or".
@@ -137,13 +160,34 @@ function Livery.ItemName(kind: string, index: number): string
 	elseif kind == "Plate" then
 		local plate = Livery.PLATES[index]
 		return "Numéro " .. (if plate then plate.Name else "?")
+	elseif kind == "Body" then
+		local body = CarBodies.LIST[index]
+		return "Modèle " .. (if body then body.Name else "?")
+	end
+	local slot = CarBodies.Slot(kind)
+	if slot then
+		local option = slot.Options[index]
+		return slot.Name .. " : " .. (if option then option.Name else "?")
 	end
 	return "?"
 end
 
 -- Clé courte de la livrée (repeindre seulement si elle change).
 function Livery.Key(livery: Livery): string
-	return string.format("%d/%d/%d/%d/%d", livery.Color, livery.Number, livery.Stripes, livery.StripeColor, livery.Plate)
+	return string.format(
+		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d",
+		livery.Color,
+		livery.Number,
+		livery.Stripes,
+		livery.StripeColor,
+		livery.Plate,
+		livery.Body or 1,
+		livery.Wing or 1,
+		livery.Bumper or 1,
+		livery.Hood or 1,
+		livery.Flares or 1,
+		livery.Rims or 1
+	)
 end
 
 -- Couleur du texte lisible sur une teinte donnée (numéro, puce du menu).

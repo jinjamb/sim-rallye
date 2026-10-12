@@ -19,6 +19,8 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
 local Theme = require(script.Parent.Theme)
+local Format = require(ReplicatedStorage.Shared.Util.Format)
+local ItemArt = require(script.Parent.ItemArt)
 
 local RollReveal = {}
 RollReveal.__index = RollReveal
@@ -33,6 +35,8 @@ export type RollReveal = typeof(setmetatable({}, RollReveal)) & {
 }
 
 local CARD_WIDTH = 150
+local CARD_HEIGHT = 190
+local ART_HEIGHT = 86 -- vignette de l'objet (ItemArt), en haut de la carte
 local CARD_GAP = 8
 local CARD_COUNT = 34
 local RESULT_INDEX = 30 -- la carte de l'objet tiré
@@ -41,37 +45,42 @@ local SPIN_TIME = 3.2
 local function card(parent: Instance, item: Catalog.Item, index: number): Frame
 	local info = Rarity.Get(item.Rarity)
 	local frame = Instance.new("Frame")
-	frame.Size = UDim2.fromOffset(CARD_WIDTH, 120)
+	frame.Size = UDim2.fromOffset(CARD_WIDTH, CARD_HEIGHT)
 	frame.Position = UDim2.fromOffset((index - 1) * (CARD_WIDTH + CARD_GAP), 0)
 	frame.BackgroundColor3 = Theme.PANEL_2
 	frame.BorderSizePixel = 0
 	Theme.Corner(frame)
+	-- Contour net de la couleur de la rareté, comme une carte à collectionner.
+	Theme.Ink(frame, info.Color, 2, 0.2)
 	local band = Instance.new("Frame")
 	band.BorderSizePixel = 0
 	band.BackgroundColor3 = info.Color
 	band.Size = UDim2.new(1, 0, 0, 8)
 	band.Parent = frame
+	-- Ce qu'on gagne, en image : la fumée de sa couleur, la pièce, l'icône...
+	local art = ItemArt.New(frame, { Item = item.Id }, CARD_WIDTH, nil, ART_HEIGHT)
+	art.Position = UDim2.fromOffset(0, 0)
 	local kind = Instance.new("TextLabel")
 	kind.BackgroundTransparency = 1
-	kind.Position = UDim2.fromOffset(8, 16)
+	kind.Position = UDim2.fromOffset(8, ART_HEIGHT + 8)
 	kind.Size = UDim2.new(1, -16, 0, 16)
 	kind.FontFace = Theme.BODY
 	kind.TextSize = 12
 	kind.TextColor3 = Theme.DIM
 	kind.TextXAlignment = Enum.TextXAlignment.Left
-	kind.Text = string.upper(Catalog.KIND_NAMES[item.Kind])
+	kind.Text = Format.Upper(Catalog.KIND_NAMES[item.Kind])
 	kind.Parent = frame
 	local name = Instance.new("TextLabel")
 	name.BackgroundTransparency = 1
-	name.Position = UDim2.fromOffset(8, 34)
-	name.Size = UDim2.new(1, -16, 0, 56)
+	name.Position = UDim2.fromOffset(8, ART_HEIGHT + 24)
+	name.Size = UDim2.new(1, -16, 0, 40)
 	name.FontFace = Theme.HEADLINE
-	name.TextSize = 18
+	name.TextSize = 15
 	name.TextWrapped = true
 	name.TextColor3 = Theme.TEXT
 	name.TextXAlignment = Enum.TextXAlignment.Left
 	name.TextYAlignment = Enum.TextYAlignment.Top
-	name.Text = string.upper(item.Name)
+	name.Text = Format.Upper(item.Name)
 	name.Parent = frame
 	local rarity = Instance.new("TextLabel")
 	rarity.BackgroundTransparency = 1
@@ -81,7 +90,7 @@ local function card(parent: Instance, item: Catalog.Item, index: number): Frame
 	rarity.TextSize = 13
 	rarity.TextColor3 = info.Color
 	rarity.TextXAlignment = Enum.TextXAlignment.Left
-	rarity.Text = string.upper(info.Name)
+	rarity.Text = Format.Upper(info.Name)
 	rarity.Parent = frame
 	frame.Parent = parent
 	return frame
@@ -115,13 +124,13 @@ function RollReveal.new(playerGui: Instance): RollReveal
 	local window = Instance.new("Frame")
 	window.AnchorPoint = Vector2.new(0.5, 0.5)
 	window.Position = UDim2.fromScale(0.5, 0.45)
-	window.Size = UDim2.fromOffset(CARD_WIDTH * 5 + CARD_GAP * 4, 120)
+	window.Size = UDim2.fromOffset(CARD_WIDTH * 5 + CARD_GAP * 4, CARD_HEIGHT)
 	window.BackgroundTransparency = 1
 	window.ClipsDescendants = true
 	window.Parent = gui
 	local strip = Instance.new("Frame")
 	strip.BackgroundTransparency = 1
-	strip.Size = UDim2.fromOffset(CARD_COUNT * (CARD_WIDTH + CARD_GAP), 120)
+	strip.Size = UDim2.fromOffset(CARD_COUNT * (CARD_WIDTH + CARD_GAP), CARD_HEIGHT)
 	strip.Parent = window
 	self.Strip = strip
 
@@ -129,26 +138,29 @@ function RollReveal.new(playerGui: Instance): RollReveal
 	local marker = Instance.new("Frame")
 	marker.AnchorPoint = Vector2.new(0.5, 0.5)
 	marker.Position = UDim2.fromScale(0.5, 0.45)
-	marker.Size = UDim2.fromOffset(4, 150)
-	marker.BackgroundColor3 = Theme.ACCENT
+	marker.Size = UDim2.fromOffset(4, CARD_HEIGHT + 30)
+	marker.BackgroundColor3 = Theme.YELLOW
 	marker.BorderSizePixel = 0
 	marker.ZIndex = 5
 	marker.Parent = gui
 
 	local title = Instance.new("TextLabel")
 	title.AnchorPoint = Vector2.new(0.5, 0)
-	title.Position = UDim2.new(0.5, 0, 0.45, 90)
+	title.Position = UDim2.new(0.5, 0, 0.45, CARD_HEIGHT / 2 + 30)
 	title.Size = UDim2.fromOffset(700, 44)
 	title.BackgroundTransparency = 1
-	title.FontFace = Theme.HEADLINE
-	title.TextSize = 36
+	-- Le nom de l'objet tiré, en lettrage de manga encré.
+	title.FontFace = Theme.SFX
+	title.TextSize = 50
+	title.Rotation = -2
+	Theme.TextInk(title, 3)
 	title.TextColor3 = Theme.TEXT
 	title.Text = ""
 	title.Parent = gui
 	self.Title = title
 	local subtitle = Instance.new("TextLabel")
 	subtitle.AnchorPoint = Vector2.new(0.5, 0)
-	subtitle.Position = UDim2.new(0.5, 0, 0.45, 136)
+	subtitle.Position = UDim2.new(0.5, 0, 0.45, CARD_HEIGHT / 2 + 76)
 	subtitle.Size = UDim2.fromOffset(700, 24)
 	subtitle.BackgroundTransparency = 1
 	subtitle.FontFace = Theme.BODY_BOLD
@@ -186,10 +198,11 @@ function RollReveal:_finish()
 		return
 	end
 	local info = Rarity.Get(item.Rarity)
-	self.Title.Text = string.upper(item.Name)
+	self.Title.Text = Format.Upper(item.Name)
 	self.Title.TextColor3 = info.Color
+	Theme.Pop(self.Title, 1, 0.4) -- le nom jaillit
 	local duplicate = self.Strip:GetAttribute("Credits") :: number?
-	self.Subtitle.Text = string.upper(info.Name) .. " · " .. Catalog.KIND_NAMES[item.Kind]
+	self.Subtitle.Text = Format.Upper(info.Name) .. " · " .. Catalog.KIND_NAMES[item.Kind]
 		.. (if duplicate and duplicate > 0 then "  ·  déjà possédé : +" .. Credits.Format(duplicate) else "  ·  NOUVEAU")
 end
 
