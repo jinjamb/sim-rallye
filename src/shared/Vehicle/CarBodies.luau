@@ -59,7 +59,8 @@
 		4 DÉTAILS     phares, calandre, feux, puis les pièces choisies
 		              (aileron, bouclier, capot, ailes, accessoires) et les
 		              détails communs (poignées, essuie-glaces, trappe à
-		              carburant, anneaux de remorquage : detailParts) ;
+		              carburant, anneaux de remorquage : detailParts) et
+		              les lignes de carrosserie à l'encre (panelLineParts) ;
 		5 GAME READY  petites pièces hors des rayons et sans ombre
 		              (DETAIL_NAMES), budget de pièces (PART_BUDGET), tout
 		              sans masse ni collision.
@@ -1077,6 +1078,65 @@ local function detailParts(list: { Spec }, m: Mounts, c: Cabin)
 	add(list, { Name = "FuelCap", Shape = "Cylinder", Size = Vector3.new(0.04, 0.42, 0.42), At = at(m.HalfWidth + 0.02, m.BeltY - 0.3, WHEEL_Z + 0.1), Paint = "Chrome" })
 end
 
+--[[
+	LIGNES DE CARROSSERIE (style anime, avec le trait d'encre autour de la
+	voiture : client/World/CarOutlines.luau) : les traits qu'un dessinateur
+	poserait à l'intérieur de la silhouette, en fines baguettes couleur encre
+	posées à fleur de tôle :
+		- les jonctions des portières (avant, milieu, arrière), sur chaque flanc ;
+		- la ligne d'épaule, d'un bout à l'autre du flanc ;
+		- le contour du capot (deux côtés et le bord avant).
+	Hors des rayons et sans ombre (DETAIL_NAMES), sans zone de peinture :
+	elles gardent leur encre quelle que soit la livrée.
+]]
+local INK = Color3.fromRGB(26, 18, 40)
+local LINE = 0.08 -- largeur d'un trait (studs)
+local LINE_DEPTH = 0.03 -- épaisseur : dépasse à peine de la tôle
+local function panelLineParts(list: { Spec }, m: Mounts, c: Cabin)
+	local function line(size: Vector3, cf: CFrame): Spec
+		return { Name = "PanelLine", Shape = "Block", Size = size, At = cf, Paint = "Trim", Color = INK }
+	end
+	local nose = m.NoseSlope
+	local tail = m.TailSlope
+	local frontZ = m.NoseZ + (if nose then nose.Length else 0)
+	local rearZ = m.TailZ - (if tail then tail.Length else 0)
+	local flankX = m.HalfWidth + LINE_DEPTH / 2
+
+	-- Portières : bord avant, séparation sous le montant central, bord arrière.
+	local doorEdge = WHEEL_Z - ARCH_HALF - 0.2
+	local roofLength = c.RoofRearZ - c.RoofFrontZ
+	local split = math.clamp(c.RoofFrontZ + roofLength * 0.48, -doorEdge + 0.8, doorEdge - 0.8)
+	local bottom = m.BottomY + 0.38 -- au-dessus de la jupe noire
+	local top = m.BeltY - 0.04
+	for _, z in ipairs({ -doorEdge, split, doorEdge }) do
+		pair(list, function(s)
+			return line(Vector3.new(LINE_DEPTH, top - bottom, LINE), at(s * flankX, (top + bottom) / 2, z))
+		end)
+	end
+
+	-- Ligne d'épaule, sous le bord de caisse : d'un bout à l'autre si elle passe
+	-- au-dessus des pneus, sinon (caisse basse) le long des portières seulement.
+	local shoulderY = m.BeltY - 0.1 -- au-dessus des poignées de porte
+	local fromZ, toZ = frontZ, rearZ
+	if shoulderY < TIRE_TOP + 0.12 then
+		fromZ, toZ = -(WHEEL_Z - ARCH_HALF), WHEEL_Z - ARCH_HALF
+	end
+	pair(list, function(s)
+		return line(Vector3.new(LINE_DEPTH, LINE, toZ - fromZ), at(s * flankX, shoulderY, (fromZ + toZ) / 2))
+	end)
+
+	-- Capot : ses deux côtés et son bord avant (après la pente du nez).
+	local hoodFront = math.max(m.HoodFrontZ, frontZ + 0.05)
+	local hoodLength = m.HoodRearZ - hoodFront
+	if hoodLength > 0.4 then
+		local y = m.BeltY + LINE_DEPTH / 2
+		pair(list, function(s)
+			return line(Vector3.new(LINE, LINE_DEPTH, hoodLength), at(s * m.HoodHalfWidth, y, hoodFront + hoodLength / 2))
+		end)
+		add(list, line(Vector3.new(m.HoodHalfWidth * 2, LINE_DEPTH, LINE), at(0, y, hoodFront)))
+	end
+end
+
 --------------------------------------------------------------------------------
 -- Zones de peinture
 --------------------------------------------------------------------------------
@@ -1182,6 +1242,7 @@ local DETAIL_NAMES: { [string]: boolean } = {
 	MirrorArm = true, ExhaustTip = true, DiffuserFin = true, Mudflap = true, HoodPin = true,
 	GrilleBar = true, GrilleMesh = true, GrilleFrame = true, LightTape = true, LightCover = true,
 	SideVent = true, WindowNet = true, Canard = true, Moustache = true, SunStrip = true,
+	PanelLine = true,
 }
 
 local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
@@ -1367,6 +1428,7 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 			mirrorParts(specs, cab, option("Mirrors"))
 			roofParts(specs, cab, option("Roof"))
 			detailParts(specs, mounts, cab)
+			panelLineParts(specs, mounts, cab)
 		end
 		skirtParts(specs, mounts, option("Skirts"))
 		diffuserParts(specs, mounts, option("Diffuser"))
