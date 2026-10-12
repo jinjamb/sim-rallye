@@ -183,7 +183,7 @@ export type Requirement = {
 -- Objets possédés (identifiant -> true), pour les conditions Item.
 export type Owned = { [string]: boolean }
 
-export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -213,6 +213,17 @@ Progression.ITEMS = {
 	{ Kind = "Pattern", Index = 7, Requirement = { AnyMedal = 3 } }, -- Zébrures
 	{ Kind = "Pattern", Index = 8, Requirement = { Item = "part_pattern_flames" } }, -- Flammes
 	{ Kind = "Pattern", Index = 9, Requirement = { Item = "part_pattern_sakura" } }, -- Sakura
+	-- Sponsors (Livery.SPONSORS) ; Sim Rallye (2) est libre. « Item » : aux tirages.
+	{ Kind = "Sponsor", Index = 3, Requirement = { Level = 2 } }, -- Kaze Oil
+	{ Kind = "Sponsor", Index = 4, Requirement = { Level = 3 } }, -- Sakura Tyres
+	{ Kind = "Sponsor", Index = 5, Requirement = { Level = 5 } }, -- Hayate Racing
+	{ Kind = "Sponsor", Index = 6, Requirement = { Level = 6 } }, -- Yama Motors
+	{ Kind = "Sponsor", Index = 7, Requirement = { Level = 8 } }, -- Raijin Energy
+	{ Kind = "Sponsor", Index = 8, Requirement = { Wins = 1 } }, -- Hoshi Lubes
+	{ Kind = "Sponsor", Index = 9, Requirement = { Level = 11 } }, -- Gomu Turbo
+	{ Kind = "Sponsor", Index = 10, Requirement = { AnyMedal = 3 } }, -- Kitsune
+	{ Kind = "Sponsor", Index = 11, Requirement = { Item = "part_sponsor_neon" } }, -- Neon Rally
+	{ Kind = "Sponsor", Index = 12, Requirement = { Item = "part_sponsor_dragon" } }, -- Dragon Brakes
 	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
 	{ Kind = "Body", Index = 3, Requirement = { Level = 6 } }, -- Yama
 	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
@@ -370,6 +381,11 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 	keep("StripeColor", "Color")
 	keep("Stripes", "Stripes")
 	keep("Plate", "Plate")
+	for _, field in ipairs({ "SponsorHood", "SponsorDoors", "SponsorRoof" }) do
+		if result[field] ~= nil then
+			keep(field, "Sponsor")
+		end
+	end
 	if result.Pattern ~= nil then
 		keep("Pattern", "Pattern")
 		keep("PatternColor", "Color")

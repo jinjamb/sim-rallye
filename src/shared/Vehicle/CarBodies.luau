@@ -799,6 +799,8 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	car:SetAttribute("TailLightZ", if m then m.TailZ + 0.12 else nil)
 	car:SetAttribute("TailLightY", if m then 0.1 else nil)
 	car:SetAttribute("HeadLightZ", if m then m.NoseZ - 0.12 else nil)
+	-- Sponsor du capot (LiveryPainter) : au milieu du capot.
+	car:SetAttribute("HoodZ", if m then (m.HoodFrontZ + m.HoodRearZ) / 2 else nil)
 
 	local old = car:FindFirstChild(FOLDER)
 	if old then

@@ -21,13 +21,16 @@
 	long, rapporte donc rarement une médaille, comme il se doit.
 
 	PAR CATÉGORIE : les vitesses ci-dessous sont celles de la Rally2 ; chaque
-	catégorie les multiplie par son MedalScale (CarClasses.luau). Sans
-	catégorie précisée : la Rally2.
+	catégorie les multiplie par son MedalScale (CarClasses.luau), selon la
+	surface de la spéciale (asphalte, terre, neige, mixte) ou pour les
+	circuits. Sans catégorie précisée : la Rally2.
 
 	CALIBRAGE : les vitesses ci-dessous sont un premier jet, à ajuster en
 	roulant. Dans Studio, chaque temps validé affiche sa vitesse moyenne dans la
 	sortie ([Médailles] ...) : bronze pour un débutant qui reste sur la route,
-	platine pour les meilleurs pilotes du jeu.
+	platine pour les meilleurs pilotes du jeu. Après quelques passages,
+	_G.MedalReport() dans la barre de commande (MedalCalibration.luau) donne
+	les vitesses et les MedalScale mesurés.
 ]]
 
 local Stages = require(script.Parent.Parent.Stage.Stages)
@@ -60,6 +63,11 @@ local CIRCUIT_SPEEDS: { [string]: { number } } = {
 	greves = { 55, 68, 78, 86 }, -- rapide
 }
 
+-- Vitesses visées d'un circuit (Rally2) : pour le calibrage.
+function Medals.CircuitSpeeds(trackId: string): { number }
+	return CIRCUIT_SPEEDS[trackId] or DEFAULT_CIRCUIT_SPEEDS
+end
+
 -- Distance (studs) parcourue en `ms` millisecondes -> km/h.
 function Medals.AverageKmh(distance: number, ms: number): number
 	return Units.ToKmh(distance / math.max(ms / 1000, 1e-3))
@@ -90,7 +98,7 @@ function Medals.ForStage(classId: string?, stageId: string?): { number }
 	local key = track.Id .. "|" .. class.Id
 	local cached = stageCache[key]
 	if not cached then
-		cached = thresholds(Medals.StageDistance(track.Id), track.MedalSpeeds, class.MedalScale)
+		cached = thresholds(Medals.StageDistance(track.Id), track.MedalSpeeds, (class.MedalScale :: any)[track.Surface] or 1)
 		stageCache[key] = cached
 	end
 	return cached
@@ -98,7 +106,7 @@ end
 
 -- `trackId` : Tracks.luau ; `lapLength` : Circuit.Length (studs).
 function Medals.ForCircuit(trackId: string, lapLength: number, classId: string?): { number }
-	return thresholds(lapLength, CIRCUIT_SPEEDS[trackId] or DEFAULT_CIRCUIT_SPEEDS, CarClasses.Get(classId).MedalScale)
+	return thresholds(lapLength, CIRCUIT_SPEEDS[trackId] or DEFAULT_CIRCUIT_SPEEDS, CarClasses.Get(classId).MedalScale.Circuit)
 end
 
 -- Palier atteint par un temps (0 = aucun).

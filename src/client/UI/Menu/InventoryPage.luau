@@ -9,7 +9,7 @@
 		             un clic dessus dit comment le débloquer (niveau, médaille,
 		             tirage...). Un clic sur une pastille libre l'équipe aussitôt
 		             (sauvegardé comme la livrée : Livery.luau).
-		LIVRÉE       couleurs, bandes, plaques et motif, en pastilles, de
+		LIVRÉE       couleurs, bandes, plaques, motif et sponsors, en pastilles, de
 		             même ; puis la PEINTURE PAR PIÈCE : on choisit une zone
 		             de la carrosserie (capot, toit, portières...), puis sa
 		             couleur (ou « d'origine »).
@@ -215,6 +215,16 @@ function InventoryPage.Livery(ctx: Context, b: Builder)
 		b:Text("COULEUR DU MOTIF", 13, Theme.YELLOW)
 		chips(ctx, b, "Color", names(Livery.COLORS), livery.PatternColor or 4, function(i)
 			equip(ctx, livery, "PatternColor", i)
+		end)
+	end
+	-- Sponsors : un par emplacement.
+	b:Text("SPONSORS", 13, Theme.YELLOW)
+	b:Text("Un autocollant sur le capot, les portières et le toit. « Écurie » affiche le sigle de ton écurie.", 12, Widgets.COLOR_DIM)
+	local sponsorNames = names(Livery.SPONSORS)
+	for _, slot in ipairs(Livery.SPONSOR_SLOTS) do
+		b:Text(Format.Upper(slot.Name), 12, Widgets.COLOR_DIM)
+		chips(ctx, b, "Sponsor", sponsorNames, (livery :: any)[slot.Field] or 1, function(i)
+			equip(ctx, livery, slot.Field, i)
 		end)
 	end
 	b:Text("Numéro et couleur des bandes : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)

@@ -23,6 +23,12 @@
 	Roblox : son identifiant va dans PATTERNS (Image). Tant qu'il vaut 0, le
 	motif se choisit mais ne s'affiche pas.
 
+	SPONSORS (SponsorHood, SponsorDoors, SponsorRoof) : un autocollant de
+	marque (fictive) par emplacement : le capot, les deux portières, le
+	toit (Livery.SPONSORS ; 1 = aucun). Dessinés en texte par
+	LiveryPainter : aucune image à importer. « Écurie » affiche le sigle de
+	son écurie (Teams.luau), à sa couleur.
+
 	Une palette plutôt qu'une couleur libre : des teintes franches, qui se
 	distinguent bien de loin et dans la poussière.
 
@@ -53,7 +59,14 @@ export type Livery = {
 	Paints: { [string]: number },
 	Pattern: number, -- Livery.PATTERNS (1 = aucun)
 	PatternColor: number, -- Livery.COLORS
+	-- Sponsors (Livery.SPONSORS, 1 = aucun), par emplacement.
+	SponsorHood: number,
+	SponsorDoors: number,
+	SponsorRoof: number,
 }
+-- Un sponsor : son texte (nil : le sigle de l'écurie), ses couleurs (fond
+-- nil : le texte seul, cerné), sa police.
+export type SponsorStyle = { Name: string, Text: string?, Ink: Color3, Background: Color3?, Font: Enum.Font }
 export type Swatch = { Name: string, Color: Color3 }
 -- Une bande : décalage latéral de son axe et largeur (studs, repère du châssis).
 export type Lane = { X: number, Width: number }
@@ -110,6 +123,31 @@ Livery.PATTERNS = {
 } :: { PatternStyle }
 
 local INK = Color3.fromRGB(16, 16, 20)
+local WHITE = Color3.new(1, 1, 1)
+
+-- Les emplacements des sponsors : le champ de la livrée et son nom.
+Livery.SPONSOR_SLOTS = {
+	{ Field = "SponsorHood", Name = "Capot" },
+	{ Field = "SponsorDoors", Name = "Portières" },
+	{ Field = "SponsorRoof", Name = "Toit" },
+}
+
+-- Marques imaginaires (aucune vraie marque) ; ajouter à la FIN seulement.
+Livery.SPONSORS = {
+	{ Name = "Aucun", Text = "", Ink = WHITE, Background = nil, Font = Enum.Font.GothamBlack },
+	{ Name = "Sim Rallye", Text = "SIM RALLYE", Ink = WHITE, Background = Color3.fromRGB(255, 46, 126), Font = Enum.Font.GothamBlack },
+	{ Name = "Kaze Oil", Text = "KAZE OIL", Ink = WHITE, Background = Color3.fromRGB(200, 25, 35), Font = Enum.Font.GothamBlack },
+	{ Name = "Sakura Tyres", Text = "SAKURA TYRES", Ink = Color3.fromRGB(230, 60, 140), Background = WHITE, Font = Enum.Font.GothamBold },
+	{ Name = "Hayate Racing", Text = "HAYATE RACING", Ink = Color3.fromRGB(255, 210, 30), Background = INK, Font = Enum.Font.GothamBlack },
+	{ Name = "Yama Motors", Text = "YAMA MOTORS", Ink = WHITE, Background = Color3.fromRGB(25, 75, 190), Font = Enum.Font.GothamBold },
+	{ Name = "Raijin Energy", Text = "RAIJIN ENERGY", Ink = INK, Background = Color3.fromRGB(255, 220, 30), Font = Enum.Font.GothamBlack },
+	{ Name = "Hoshi Lubes", Text = "HOSHI LUBES", Ink = WHITE, Background = nil, Font = Enum.Font.GothamBlack },
+	{ Name = "Gomu Turbo", Text = "GOMU TURBO", Ink = WHITE, Background = Color3.fromRGB(245, 120, 20), Font = Enum.Font.GothamBlack },
+	{ Name = "Kitsune", Text = "KITSUNE", Ink = Color3.fromRGB(210, 30, 40), Background = WHITE, Font = Enum.Font.Bangers },
+	{ Name = "Neon Rally", Text = "NEON RALLY", Ink = Color3.fromRGB(0, 230, 255), Background = INK, Font = Enum.Font.GothamBlack },
+	{ Name = "Dragon Brakes", Text = "DRAGON BRAKES", Ink = INK, Background = Color3.fromRGB(230, 30, 25), Font = Enum.Font.Bangers },
+	{ Name = "Écurie", Text = nil, Ink = WHITE, Background = INK, Font = Enum.Font.GothamBlack },
+} :: { SponsorStyle }
 Livery.PLATES = {
 	{ Name = "Classique", Disc = Color3.new(1, 1, 1), Text = INK, GoldRing = false },
 	{ Name = "Noir", Disc = INK, Text = Color3.new(1, 1, 1), GoldRing = false },
@@ -137,6 +175,9 @@ function Livery.Default(userId: number): Livery
 		Paints = {},
 		Pattern = 1,
 		PatternColor = 4, -- noir
+		SponsorHood = 1,
+		SponsorDoors = 1,
+		SponsorRoof = 1,
 	}
 end
 
@@ -172,6 +213,9 @@ function Livery.Sanitize(input: any, userId: number): Livery
 		end
 	end
 	result.Pattern = index(input.Pattern, #Livery.PATTERNS) or 1
+	for _, slot in ipairs(Livery.SPONSOR_SLOTS) do
+		(result :: any)[slot.Field] = index(input[slot.Field], #Livery.SPONSORS) or 1
+	end
 	result.PatternColor = index(input.PatternColor, #Livery.COLORS) or result.PatternColor
 	return result
 end
@@ -218,6 +262,9 @@ function Livery.ItemName(kind: string, index: number): string
 	elseif kind == "Pattern" then
 		local pattern = Livery.PATTERNS[index]
 		return "Motif " .. (if pattern then pattern.Name else "?")
+	elseif kind == "Sponsor" then
+		local sponsor = Livery.SPONSORS[index]
+		return "Sponsor " .. (if sponsor then sponsor.Name else "?")
 	elseif kind == "Body" then
 		local body = CarBodies.LIST[index]
 		return "Modèle " .. (if body then body.Name else "?")
@@ -238,7 +285,7 @@ function Livery.Key(livery: Livery): string
 		table.insert(paints, tostring(chosen or 0))
 	end
 	return string.format(
-		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s",
+		"%d/%d/%d/%d/%d|%d/%d/%d/%d/%d/%d|%d/%d|%s|%d/%d/%d",
 		livery.Color,
 		livery.Number,
 		livery.Stripes,
@@ -252,7 +299,10 @@ function Livery.Key(livery: Livery): string
 		livery.Rims or 1,
 		livery.Pattern or 1,
 		livery.PatternColor or 4,
-		table.concat(paints, ",")
+		table.concat(paints, ","),
+		livery.SponsorHood or 1,
+		livery.SponsorDoors or 1,
+		livery.SponsorRoof or 1
 	)
 end
 

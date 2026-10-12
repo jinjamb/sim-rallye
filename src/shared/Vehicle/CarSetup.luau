@@ -15,6 +15,10 @@
 	profil en garde un jeu par catégorie) et peut changer les valeurs par
 	défaut (Setup de sa fiche). Une traction n'a ni différentiel central ni
 	arrière moteur : ces réglages (AwdOnly) ne s'affichent pas pour elle.
+	L'APPUI AÉRO a la plage de la voiture (CarClasses : DownforceRange) : les
+	bornes de Downforce ci-dessous ne sont qu'un repli.
+	PRÉRÉGLAGES : une valeur d'appui y est une part de cette plage (Relative),
+	pour que « Terre » et « Asphalte » aient un sens sur chaque voiture.
 ]]
 
 local CarClasses = require(script.Parent.CarClasses)
@@ -110,7 +114,7 @@ CarSetup.FIELDS = {
 	{
 		Key = "Downforce", Label = "Appui aéro", Group = "Châssis",
 		Min = 0, Max = 0.30, Step = 0.02, Default = 0.25, Format = "%.2f", Scale = 1,
-		Hint = "Appui à 100 km/h, en fraction du poids. Une vraie Rally2 : ~0.05-0.10.",
+		Hint = "Appui à 100 km/h, en fraction du poids : plus de grip en courbe rapide, mais plus de traînée en ligne droite.",
 	},
 	{
 		Key = "FinalDrive", Label = "Rapport de pont", Group = "Boîte",
@@ -130,18 +134,20 @@ CarSetup.PRESETS = {
 		Name = "Terre",
 		Values = {
 			BrakeBias = 0.60, FrontPowerLock = 0.25, RearPowerLock = 0.55,
-			AntiRollFront = 0.45, AntiRollRear = 0.35, FinalDrive = 3.8, Downforce = 0.12,
+			AntiRollFront = 0.45, AntiRollRear = 0.35, FinalDrive = 3.8,
 		},
+		Relative = { Downforce = 0.4 },
 	},
 	{
 		-- Asphalte : stabilité et précision, barres raides, rapports longs.
 		Name = "Asphalte",
 		Values = {
 			BrakeBias = 0.68, BrakeForce = 1.0, FrontPowerLock = 0.30, RearPowerLock = 0.40,
-			CenterSplit = 0.55, AntiRollFront = 0.75, AntiRollRear = 0.60, FinalDrive = 3.3, Downforce = 0.20,
+			CenterSplit = 0.55, AntiRollFront = 0.75, AntiRollRear = 0.60, FinalDrive = 3.3,
 		},
+		Relative = { Downforce = 0.85 },
 	},
-} :: { { Name: string, Values: Setup } }
+} :: { { Name: string, Values: Setup, Relative: Setup? } }
 
 local BY_KEY: { [string]: Field } = {}
 for _, field in ipairs(CarSetup.FIELDS) do
@@ -166,13 +172,26 @@ function CarSetup.Default(classId: string?): Setup
 	return setup
 end
 
+-- Un réglage tel qu'il est pour cette catégorie (l'appui aéro a sa plage).
+local function fieldFor(field: Field, classId: string?): Field
+	if field.Key ~= "Downforce" then
+		return field
+	end
+	local range = CarClasses.Get(classId).DownforceRange
+	local adjusted = table.clone(field)
+	adjusted.Min = range.Min
+	adjusted.Max = range.Max
+	adjusted.Hint = string.format("%s Plage de cette voiture : %.2f à %.2f.", field.Hint, range.Min, range.Max)
+	return adjusted
+end
+
 -- Les réglages qui ont un effet sur cette catégorie, dans l'ordre du menu.
 function CarSetup.FieldsFor(classId: string?): { Field }
 	local drive = CarClasses.Get(classId).Drive
 	local fields = {}
 	for _, field in ipairs(CarSetup.FIELDS) do
 		if drive == "AWD" or not field.AwdOnly then
-			table.insert(fields, field)
+			table.insert(fields, fieldFor(field, classId))
 		end
 	end
 	return fields
@@ -195,7 +214,8 @@ function CarSetup.Sanitize(input: any, classId: string?): Setup
 	if type(input) ~= "table" then
 		return setup
 	end
-	for _, field in ipairs(CarSetup.FIELDS) do
+	for _, base in ipairs(CarSetup.FIELDS) do
+		local field = fieldFor(base, classId)
 		local value = input[field.Key]
 		if type(value) == "number" and value == value and math.abs(value) ~= math.huge then
 			setup[field.Key] = snap(field, value)
@@ -204,11 +224,12 @@ function CarSetup.Sanitize(input: any, classId: string?): Setup
 	return setup
 end
 
-function CarSetup.Step(setup: Setup, key: string, direction: number): Setup
-	local field = BY_KEY[key]
-	if not field then
+function CarSetup.Step(setup: Setup, key: string, direction: number, classId: string?): Setup
+	local base = BY_KEY[key]
+	if not base then
 		return setup
 	end
+	local field = fieldFor(base, classId)
 	local copy = table.clone(setup)
 	copy[key] = snap(field, (setup[key] or field.Default) + direction * field.Step)
 	return copy
@@ -220,6 +241,14 @@ function CarSetup.WithPreset(name: string, classId: string?): Setup
 		if preset.Name == name then
 			for key, value in pairs(preset.Values) do
 				setup[key] = value
+			end
+			-- Une part de la plage de cette voiture (l'appui aéro).
+			for key, share in pairs(preset.Relative or {}) do
+				local field = BY_KEY[key]
+				if field then
+					local adjusted = fieldFor(field, classId)
+					setup[key] = adjusted.Min + share * (adjusted.Max - adjusted.Min)
+				end
 			end
 		end
 	end

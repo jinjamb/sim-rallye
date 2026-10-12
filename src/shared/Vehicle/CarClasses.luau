@@ -27,7 +27,8 @@
 	AÉRODYNAMIQUE (Aerodynamics.luau) : chaque catégorie a sa traînée
 	(DragRatio) et sa répartition d'appui (AeroBalance) ; la quantité d'appui
 	est un réglage (Downforce, CarSetup.luau) dont la valeur de série est
-	dans Setup. L'appui ajoute de la charge sur les pneus, donc de
+	dans Setup et la plage dans DownforceRange : un simple becquet de
+	Rally4 ne donne pas l'appui des grands ailerons d'une WRC. L'appui ajoute de la charge sur les pneus, donc de
 	l'adhérence, d'autant plus qu'on va vite.
 
 	CLASSEMENTS ÉQUITABLES : records, fantômes, médailles et classements sont
@@ -38,14 +39,20 @@
 	PUISSANCE : voir Powertrain.luau (la courbe en N·m est recalée pour que
 	sa puissance maximale, ramenée à la masse, vaille PowerToWeight).
 	MÉDAILLES : les vitesses moyennes de Medals.luau sont celles de la
-	Rally2 ; MedalScale les adapte (à calibrer en roulant : la sortie de
-	Studio affiche la vitesse moyenne de chaque temps validé).
+	Rally2 ; MedalScale les adapte, PAR SURFACE (une traction souffre sur
+	la neige, l'appui d'une WRC paie sur l'asphalte rapide, la puissance
+	d'un Groupe B sur la terre) et pour les circuits. Valeurs estimées
+	d'après la fiche (puissance au poids, pneus, appui, turbo), à recaler
+	en roulant : dans Studio, _G.MedalReport() (MedalCalibration.luau)
+	donne les valeurs mesurées.
 ]]
 
 local CarClasses = {}
 
 export type Drive = "AWD" | "FWD"
 export type TorquePoint = { rpm: number, torque: number }
+-- Par surface de spéciale (StageTrack : Surface), et pour les circuits.
+export type MedalScale = { Tarmac: number, Gravel: number, Snow: number, Mixed: number, Circuit: number }
 
 export type Class = {
 	Id: string,
@@ -73,7 +80,10 @@ export type Class = {
 	TireGrip: number, -- adhérence des pneus (1 = Rally2)
 	DragRatio: number, -- traînée à 100 km/h, en fraction du poids (Aerodynamics.luau)
 	AeroBalance: number, -- part de l'appui sur l'arrière (0.5 : neutre ; plus : stable)
-	MedalScale: number, -- vitesses des médailles, relatives à la Rally2
+	-- Plage du réglage d'appui (CarSetup : Downforce), propre à la voiture : ce
+	-- que ses ailerons peuvent donner, du plus plat au plus braqué.
+	DownforceRange: { Min: number, Max: number },
+	MedalScale: MedalScale, -- vitesses des médailles, relatives à la Rally2
 	Setup: { [string]: number }, -- réglages par défaut propres (CarSetup.luau)
 	Engine: string, -- son moteur de série (SoundBank.luau)
 	Body: string, -- kit de carrosserie (BodyKits.luau)
@@ -113,7 +123,9 @@ local LIST: { Class } = {
 		TireGrip = 0.97,
 		DragRatio = 0.028, -- petite voiture, simple becquet
 		AeroBalance = 0.55,
-		MedalScale = 0.9,
+		DownforceRange = { Min = 0, Max = 0.18 },
+		-- Moins de puissance, traction : la neige la ralentit le plus.
+		MedalScale = { Tarmac = 0.89, Gravel = 0.88, Snow = 0.85, Mixed = 0.88, Circuit = 0.9 },
 		Setup = { FinalDrive = 3.4, Downforce = 0.14, BrakeBias = 0.62, SteerAngle = 47 },
 		Engine = "Rally4",
 		Body = "Rally4",
@@ -148,7 +160,8 @@ local LIST: { Class } = {
 		TireGrip = 1,
 		DragRatio = 0.03,
 		AeroBalance = 0.6,
-		MedalScale = 1,
+		DownforceRange = { Min = 0.04, Max = 0.3 },
+		MedalScale = { Tarmac = 1, Gravel = 1, Snow = 1, Mixed = 1, Circuit = 1 },
 		Setup = {},
 		Engine = "Rally2",
 		Body = "Rally2",
@@ -184,8 +197,10 @@ local LIST: { Class } = {
 		TireGrip = 1.03,
 		DragRatio = 0.036, -- grands ailerons, lame avant, ailes ouvertes : l'appui se paie
 		AeroBalance = 0.55, -- lame et canards à l'avant : l'avant mord à haute vitesse
-		MedalScale = 1.08,
-		Setup = { FinalDrive = 3.6, Downforce = 0.30, BrakeForce = 0.95, CenterLock = 0.5 },
+		DownforceRange = { Min = 0.12, Max = 0.42 }, -- même au plus plat, ses ailerons appuient
+		-- L'appui et l'anti-lag paient surtout sur l'asphalte rapide.
+		MedalScale = { Tarmac = 1.11, Gravel = 1.08, Snow = 1.05, Mixed = 1.09, Circuit = 1.08 },
+		Setup = { FinalDrive = 3.6, Downforce = 0.32, BrakeForce = 0.95, CenterLock = 0.5 },
 		Engine = "WRC",
 		Body = "WRC",
 		RecordSuffix = "_wrc",
@@ -221,7 +236,9 @@ local LIST: { Class } = {
 		TireGrip = 0.95,
 		DragRatio = 0.033, -- aileron double étage, mais carrosserie des années 80
 		AeroBalance = 0.65, -- appui surtout à l'arrière : l'avant se déleste à haute vitesse
-		MedalScale = 1.12,
+		DownforceRange = { Min = 0, Max = 0.16 },
+		-- La puissance paie sur la terre ; peu d'appui et pneus moins bons sur l'asphalte.
+		MedalScale = { Tarmac = 1.07, Gravel = 1.11, Snow = 1.04, Mixed = 1.09, Circuit = 1.1 },
 		Setup = { FinalDrive = 3.2, Downforce = 0.08, CenterSplit = 0.65, BrakeForce = 0.8 },
 		Engine = "GroupB",
 		Body = "GroupB",

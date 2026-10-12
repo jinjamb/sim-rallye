@@ -148,6 +148,13 @@ Le profil vierge déclenche le tutoriel express (`TutorialService`) : le client 
 
 La livrée (`Livery.luau`) porte, en plus de la couleur principale, une couleur par zone de carrosserie (`Paints` : capot, toit, portières, boucliers…, zones définies dans `CarBodies.ZONES` et posées sur chaque pièce par l'attribut `PaintZone`) et un motif (`Pattern`, `PatternColor`). `LiveryPainter` repeint chaque zone, puis pose le motif (une `Texture` répétée par face visible) sur les pièces restées dans la couleur principale. Les images des motifs sont dans `assets/patterns/` (générées par `generate.py`) : chacune s'importe sur Roblox, et son identifiant va dans `Livery.PATTERNS` (`Image`). Tant qu'il vaut 0, le motif se choisit mais ne s'affiche pas.
 
+Sponsors : un autocollant de marque imaginaire par emplacement (capot, portières, toit : `Livery.SPONSORS`, `SPONSOR_SLOTS`), dessiné en texte par `LiveryPainter` (aucune image à importer) ; « Écurie » affiche le sigle de son écurie. Déblocages par niveau, victoire, médaille ou tirage (`Progression.ITEMS`, sorte « Sponsor »).
+
+## Réglages et médailles par voiture
+
+- Appui aéro : chaque catégorie a sa plage (`CarClasses.DownforceRange`), appliquée par `CarSetup` (menu, sauvegarde) ; les préréglages en donnent une part (`Relative`).
+- Médailles : les vitesses des tracés sont celles de la Rally2 ; `CarClasses.MedalScale` les adapte par surface (asphalte, terre, neige, mixte) et pour les circuits. Dans Studio, `_G.MedalReport()` (`MedalCalibration`) donne, d'après les passages de la session, les vitesses suggérées de chaque tracé et les `MedalScale` mesurés.
+
 ## Sons moteur
 
 Chaque moteur est un enregistrement du Creator Store (`Audio/SoundBank.luau`, `RECORDINGS`) : des boucles à régime stabilisé, à charge et pied levé, que `CarAudio` fond l'une dans l'autre selon le régime. Les types de moteur (3, 4 et 5 cylindres turbo, 4 cylindres anti-lag, boxer, V6, 6 à plat, rotatif) ont chacun leur série à remplir (`STORE`) ; une série vide est remplacée par le V8. Une tonalité (`TONES`) choisit l'enregistrement et le traite (égaliseur, distorsion) : une par catégorie de voiture, une par son moteur à débloquer (`Items/Engines.luau`).

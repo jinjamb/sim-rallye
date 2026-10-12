@@ -46,6 +46,7 @@ local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local TutorialService = require(script.Parent.TutorialService)
+local MedalCalibration = require(script.Parent.MedalCalibration)
 
 local StageService = {}
 
@@ -168,6 +169,7 @@ local function onFinish(player: Player, ms: number, clean: boolean, stageId: str
 
 	-- Calibrage des médailles (Medals.luau) : la vitesse moyenne de chaque temps validé.
 	if RunService:IsStudio() then
+		MedalCalibration.Stage(stageId, classId, ms)
 		print(string.format(
 			"[Médailles] Spéciale %s en %s : %.2f s, %.1f km/h de moyenne",
 			stageId,

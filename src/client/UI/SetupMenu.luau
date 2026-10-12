@@ -190,10 +190,10 @@ function SetupMenu:_build()
 				local plus = makeButton(body, UDim2.fromOffset(PANEL_WIDTH - 46, y + 2), UDim2.fromOffset(32, ROW_HEIGHT - 4), "+")
 				self.ValueLabels[field.Key] = value
 				minus.Activated:Connect(function()
-					self:_set(CarSetup.Step(self.Setup, field.Key, -1), field.Hint)
+					self:_set(CarSetup.Step(self.Setup, field.Key, -1, self.ClassId), field.Hint)
 				end)
 				plus.Activated:Connect(function()
-					self:_set(CarSetup.Step(self.Setup, field.Key, 1), field.Hint)
+					self:_set(CarSetup.Step(self.Setup, field.Key, 1, self.ClassId), field.Hint)
 				end)
 				y += ROW_HEIGHT
 			end

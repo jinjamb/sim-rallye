@@ -78,6 +78,7 @@ local StyleService = require(script.Parent.StyleService)
 local ChallengeService = require(script.Parent.ChallengeService)
 local EconomyService = require(script.Parent.EconomyService)
 local ReferralService = require(script.Parent.ReferralService)
+local MedalCalibration = require(script.Parent.MedalCalibration)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
@@ -1360,6 +1361,7 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 				medal = after -- nouvelle médaille sur ce circuit
 			end
 			if RunService:IsStudio() then
+				MedalCalibration.Lap(race.TrackId, race.CarClass, length, lapMs)
 				print(string.format("[Médailles] %s en %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, race.CarClass, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
 			end
 		end

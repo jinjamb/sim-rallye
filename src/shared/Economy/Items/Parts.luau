@@ -18,6 +18,8 @@ local items: { ItemTypes.Item } = {
 	{ Id = "part_rims_sakura", Kind = "Part", Name = "Jantes sakura", Description = "rose sakura, branches noires", Rarity = "Prototype", Roll = true, Slot = "Rims", Option = 5 },
 	{ Id = "part_pattern_flames", Kind = "Part", Name = "Motif flammes", Description = "des flammes sur toute la carrosserie", Rarity = "Pro", Roll = true, Slot = "Pattern", Option = 8 },
 	{ Id = "part_pattern_sakura", Kind = "Part", Name = "Motif sakura", Description = "pluie de pétales de cerisier", Rarity = "Prototype", Roll = true, Slot = "Pattern", Option = 9 },
+	{ Id = "part_sponsor_neon", Kind = "Part", Name = "Sponsor Neon Rally", Description = "l'autocollant cyan sur fond noir", Rarity = "Pro", Roll = true, Slot = "Sponsor", Option = 11 },
+	{ Id = "part_sponsor_dragon", Kind = "Part", Name = "Sponsor Dragon Brakes", Description = "l'autocollant rouge du dragon", Rarity = "Usine", Roll = true, Slot = "Sponsor", Option = 12 },
 	{ Id = "part_rims_neon", Kind = "Part", Name = "Jantes néon", Description = "cyan lumineux, même la nuit", Rarity = "Legende", Roll = true, Slot = "Rims", Option = 6 },
 }
 

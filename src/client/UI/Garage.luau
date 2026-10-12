@@ -279,6 +279,9 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 		{ Kind = "Color", Index = livery.StripeColor },
 		{ Kind = "Plate", Index = livery.Plate },
 		{ Kind = "Pattern", Index = livery.Pattern or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorHood or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorDoors or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorRoof or 1 },
 		{ Kind = "Color", Index = livery.PatternColor or 4 },
 		{ Kind = "Body", Index = livery.Body },
 	}
