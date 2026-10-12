@@ -4,11 +4,15 @@
 	L'invitation de Roblox (SocialService) : le joueur choisit des amis, qui
 	reçoivent une notification pour rejoindre le jeu. Depuis une session
 	privée, l'invitation porte son code (LaunchData) : à leur arrivée, le
-	serveur les y emmène (SessionService).
+	serveur les y emmène (SessionService). Elle porte aussi l'identifiant de
+	celui qui invite : le parrainage (Referral.luau).
 ]]
 
 local Players = game:GetService("Players")
 local SocialService = game:GetService("SocialService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local Referral = require(ReplicatedStorage.Shared.Social.Referral)
 
 local FriendInvite = {}
 
@@ -25,10 +29,10 @@ function FriendInvite.Prompt(sessionCode: string?): string?
 	local options = Instance.new("ExperienceInviteOptions")
 	if sessionCode then
 		options.PromptMessage = "Rejoins ma session privée de Sim Rallye !"
-		options.LaunchData = sessionCode
 	else
 		options.PromptMessage = "Viens rouler avec moi sur Sim Rallye !"
 	end
+	options.LaunchData = Referral.Encode(player.UserId, sessionCode)
 	local okPrompt = pcall(function()
 		SocialService:PromptGameInvite(player, options)
 	end)

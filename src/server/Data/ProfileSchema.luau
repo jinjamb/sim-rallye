@@ -86,6 +86,11 @@ export type Profile = {
 	ChampBests: { [string]: number }, -- meilleur temps total (ms) par rallye et catégorie (ChampionshipService)
 	ChampionshipXp: number, -- XP gagnée à l'arrivée des rallyes, cumulée
 	ChampionshipsDone: number, -- rallyes terminés
+	TutorialDone: boolean, -- tutoriel express terminé (ou passé) : plus proposé
+	ReferredBy: number?, -- parrain : l'ami qui a invité ce joueur à sa première venue (ReferralService)
+	ReferralQualified: boolean, -- ce filleul a pris le volant : récompenses du parrainage données
+	Referrals: number, -- amis parrainés récompensés
+	ReferralsPending: number, -- récompenses de parrainage pas encore remises (écrites par un autre serveur)
 }
 
 export type ChampionshipRun = {
@@ -147,6 +152,11 @@ function ProfileSchema.Empty(userId: number): Profile
 		ChampionshipsDone = 0,
 		XpBoostUntil = 0,
 		PremiumPassSeason = nil,
+		TutorialDone = false,
+		ReferredBy = nil,
+		ReferralQualified = false,
+		Referrals = 0,
+		ReferralsPending = 0,
 	}
 end
 
@@ -221,6 +231,11 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.BonusXp = count(data.BonusXp)
 	profile.ChampionshipXp = count(data.ChampionshipXp)
 	profile.ChampionshipsDone = count(data.ChampionshipsDone)
+	profile.TutorialDone = data.TutorialDone == true
+	profile.ReferredBy = if type(data.ReferredBy) == "number" and data.ReferredBy > 0 then math.floor(data.ReferredBy) else nil
+	profile.ReferralQualified = data.ReferralQualified == true
+	profile.Referrals = count(data.Referrals)
+	profile.ReferralsPending = count(data.ReferralsPending)
 	if type(data.ChampBests) == "table" then
 		for key, ms in pairs(data.ChampBests) do
 			if type(key) == "string" and type(ms) == "number" and ms > 0 then

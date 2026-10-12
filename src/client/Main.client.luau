@@ -46,6 +46,7 @@ local Garage = require(script.Parent.UI.Garage)
 local Theme = require(script.Parent.UI.Theme)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Tutorial = require(script.Parent.Tutorial.Tutorial)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -670,10 +671,47 @@ end)
 
 print("[Paddock] Bienvenue ! C : menu (spéciale, rallycross, essais libres, records). Au paddock : une zone par circuit, zone jaune = ta voiture, zone violette = garage (couleur, numéro, réglages). H : retour au paddock")
 
--- Arrivée dans le jeu : le menu principal, pour choisir tout de suite à quoi jouer.
-task.delay(2, function()
+--[[
+	Arrivée dans le jeu : un nouveau pilote part tout de suite au volant
+	(tutoriel express, Tutorial.luau) ; les autres trouvent le menu principal,
+	pour choisir à quoi jouer. L'état du tutoriel arrive avec le profil.
+]]
+local MENU_DELAY = 2 -- secondes avant d'ouvrir le menu à l'arrivée
+local TUTORIAL_WAIT = 8 -- secondes au plus à attendre le profil pour savoir
+local arrivedAt = os.clock()
+local arrivalHandled = false
+
+local function openMenuIfIdle()
 	if not hasControl() and not isRacing() then
 		raceClient:OpenMenu()
+	end
+end
+
+local tutorial = Tutorial.new({
+	PlayerGui = playerGui,
+	IsTouch = isTouch,
+	IsDriving = hasControl,
+	-- Tutoriel fini ou passé : la suite se choisit dans le menu.
+	OnFinished = function()
+		raceClient:OpenMenu()
+	end,
+})
+
+Remotes.Tutorial.OnClientEvent:Connect(function(state: any, news: any)
+	-- Le premier état reçu décide de l'arrivée : tutoriel tout de suite, ou menu.
+	local first = not arrivalHandled
+	arrivalHandled = true
+	if tutorial:SetState(state, news, first) or not first then
+		return
+	end
+	task.delay(math.max(0, MENU_DELAY - (os.clock() - arrivedAt)), openMenuIfIdle)
+end)
+
+-- Profil en retard (DataStore lent) : le menu quand même.
+task.delay(TUTORIAL_WAIT, function()
+	if not arrivalHandled then
+		arrivalHandled = true
+		openMenuIfIdle()
 	end
 end)
 
@@ -721,6 +759,11 @@ end)
 -- Championnats : rallye en cours, rallyes, classements, annonces.
 Remotes.ChampionshipState.OnClientEvent:Connect(function(state: any, news: any)
 	raceClient:SetChampionship(state, news)
+end)
+
+-- Parrainage : amis récompensés (rubrique « Jouer entre amis »), et ses bonnes nouvelles.
+Remotes.ReferralState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetReferral(state, news)
 end)
 
 -- Session (publique ou privée, son code) : rubrique « Jouer entre amis ».
@@ -865,6 +908,7 @@ local telemetryAccumulator = 0
 
 RunService.RenderStepped:Connect(function(dt: number)
 	remoteCars:Update(dt)
+	tutorial:Update(dt)
 
 	-- Une course qui part (revanche, salle rejointe) reprend la main sur le ralenti.
 	if replay:IsActive() and raceClient:IsRaceUnderway() then

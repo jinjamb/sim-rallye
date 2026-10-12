@@ -128,6 +128,17 @@ export type Remotes = {
 	-- Serveur -> Client : (state, news?) rallye en cours, rallyes et classements ;
 	-- news : spéciale lancée, terminée, pénalité, rallye terminé, message
 	ChampionshipState: RemoteEvent,
+
+	-- TUTORIEL EXPRESS (TutorialService)
+	-- Serveur -> Client : (state, news?) { Active, StageId, Credits, Rolls } ; news : { Completed }
+	Tutorial: RemoteEvent,
+	-- Client -> Serveur : (action: "Skip") ne plus proposer le tutoriel
+	TutorialAction: RemoteEvent,
+
+	-- PARRAINAGE (ReferralService)
+	-- Serveur -> Client : (state, news?) { Referrals, Max, InviterCredits, InviterRolls,
+	-- NewcomerCredits } ; news : { Welcome } | { Bonus, Inviter } | { Rewarded, Credits, Rolls }
+	ReferralState: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -174,6 +185,9 @@ local RELIABLE = {
 	"SessionState",
 	"ChampionshipAction",
 	"ChampionshipState",
+	"Tutorial",
+	"TutorialAction",
+	"ReferralState",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

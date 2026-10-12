@@ -231,6 +231,12 @@ Achievements.LIST = {
 		BadgeId = 0,
 	},
 	{
+		Id = "recruiter",
+		Name = "Recruteur",
+		Description = "Inviter un ami qui découvre le jeu et termine sa première spéciale ou sa première course.",
+		BadgeId = 0,
+	},
+	{
 		Id = "pass_complete",
 		Name = "Saison bouclée",
 		Description = "Atteindre le dernier palier du Rallye Pass.",

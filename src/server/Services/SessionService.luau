@@ -6,7 +6,8 @@
 	INVITER : le bouton du menu ouvre l'invitation de Roblox (côté client,
 	SocialService). Un ami qui accepte rejoint le jeu ; s'il était invité
 	depuis une session privée, l'invitation porte son code (LaunchData), et
-	ce service l'y emmène dès son arrivée.
+	ce service l'y emmène dès son arrivée. L'invitation porte aussi celui qui
+	invite : le parrainage (ReferralService, Referral.luau).
 
 	SESSION PRIVÉE (création réservée au pass Premium ; la rejoindre avec un
 	code, ou par invitation, reste ouvert à tous) : un serveur réservé (TeleportService:ReserveServerAsync),
@@ -31,6 +32,7 @@ local RunService = game:GetService("RunService")
 local TeleportService = game:GetService("TeleportService")
 
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
+local Referral = require(ReplicatedStorage.Shared.Social.Referral)
 local Perks = require(script.Parent.Perks)
 
 local SessionService = {}
@@ -252,7 +254,7 @@ local function onPlayerAdded(player: Player)
 		serverCode = cleanCode((teleportData :: any).SessionCode)
 	end
 	-- Invité depuis une session privée : l'invitation porte son code.
-	local invited = cleanCode(joinData.LaunchData)
+	local invited = cleanCode(Referral.Decode(joinData.LaunchData).SessionCode)
 	if invited and not (isPrivate and invited == serverCode) and not RunService:IsStudio() then
 		task.spawn(function()
 			local info = lookup(invited)

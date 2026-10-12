@@ -46,6 +46,7 @@ export type Data = {
 	Drift: any, -- Roi du drift { Key, EndsAt, Entries = { UserId, Name, Score }, Mine } (ChallengeService)
 	Team: any, -- écurie { Team, UseColors, Invite, Board, Rank, Season } (TeamService)
 	Session: any, -- session { Private, Code, Players, MaxPlayers, Studio } (SessionService)
+	Referral: any, -- parrainage { Referrals, Max, InviterCredits, InviterRolls, NewcomerCredits } (ReferralService)
 	Championship: any, -- championnats { Current, List, ClassId } (ChampionshipService)
 	Achievements: { [string]: number }?, -- trophées obtenus : id -> date (AchievementService)
 }

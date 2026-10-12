@@ -78,6 +78,7 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Drift: any, -- Roi du drift (ChallengeService)
 	Team: any, -- écurie (TeamService)
 	Session: any, -- session : publique ou privée, son code (SessionService)
+	Referral: any, -- parrainage : amis récompensés, montants (ReferralService)
 	Championship: any, -- championnats : rallye en cours, rallyes, classements
 	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
@@ -116,6 +117,7 @@ function RaceClient.new(options: Options): RaceClient
 	self.Drift = nil
 	self.Team = nil
 	self.Session = nil
+	self.Referral = nil
 	self.Championship = nil
 	self.Achievements = nil
 	self.PodiumUntil = 0
@@ -272,6 +274,7 @@ function RaceClient:_refreshMenu()
 		Drift = self.Drift,
 		Team = self.Team,
 		Session = self.Session,
+		Referral = self.Referral,
 		Championship = self.Championship,
 		Achievements = self.Achievements,
 	})
@@ -634,6 +637,40 @@ function RaceClient:SetSession(state: any, news: any)
 	self:_refreshMenu()
 	if type(news) == "table" and type(news.Message) == "string" then
 		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
+	end
+end
+
+--[[
+	Parrainage : amis récompensés (menu) ; les nouvelles : bienvenue de la
+	part du parrain, bonus du filleul qui prend le volant, récompense du
+	parrain (les crédits et le tirage ont aussi leur notification).
+]]
+function RaceClient:SetReferral(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Referral = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.Welcome) == "string" then
+		Banner.Show(
+			"Invité par " .. news.Welcome,
+			string.format("Termine ta première spéciale : +%d CR pour toi, et une récompense pour %s.", tonumber(state.NewcomerCredits) or 0, news.Welcome),
+			Theme.CYAN,
+			5
+		)
+	elseif type(news.Inviter) == "string" then
+		Banner.Show("Bonus de parrainage", string.format("+%d CR · %s est récompensé aussi. Merci d'être venu !", tonumber(news.Bonus) or 0, news.Inviter), Theme.CYAN, 4)
+	elseif type(news.Rewarded) == "number" then
+		Banner.Show(
+			if news.Rewarded > 1 then string.format("%d amis parrainés", news.Rewarded) else "Ami parrainé",
+			string.format("Ton invitation a payé : +%d CR et %d tirage%s.", tonumber(news.Credits) or 0, tonumber(news.Rolls) or 0, if (tonumber(news.Rolls) or 0) > 1 then "s" else ""),
+			Theme.CYAN,
+			5,
+			true
+		)
 	end
 end
 

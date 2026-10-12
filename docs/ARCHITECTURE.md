@@ -33,6 +33,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Weather/`     | `Weather` : la météo (sec, pluie, variable), ses averses et l'eau sur la route, calculées de la même façon par le serveur et chaque client. |
 | `Championship/` | `Championships` : les rallyes du mode championnat (spéciales enchaînées, météo de chaque spéciale, rallye de la semaine). |
 | `Teams/`       | `Teams` : les écuries (taille, nom et sigle valides, couleurs communes).                  |
+| `Social/`      | `Referral` : le parrainage (montants, plafond) et les données portées par une invitation (parrain, code de session). |
 
 ## `src/server` : l'autorité
 
@@ -75,6 +76,8 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `AchievementService` | Trophées : les décerne et donne leur badge Roblox (BadgeService).                 |
 | `AnnounceService`  | Annonces à tout le serveur : records battus, platine, roi du drift, grands trophées. |
 | `SessionService`   | Jouer entre amis : sessions privées (serveur réservé, code à 6 caractères), arrivée par invitation, retour aux serveurs publics. |
+| `ReferralService`  | Parrainage : note le parrain d'un nouveau joueur, récompense les deux quand le filleul prend le volant (parrain absent : récompense mise de côté dans son profil, remise par `MessagingService` ou à sa venue). |
+| `TutorialService`  | Tutoriel express : proposé aux nouveaux pilotes, bouclé par la première spéciale terminée (récompense de bienvenue). |
 | `ChampionshipService` | Mode championnat : enchaîne les spéciales d'un rallye, temps cumulé et pénalités, classements, récompenses. Prévenu par `StageService` via des crochets. |
 | `CarService`       | Voitures des joueurs : apparition, volant, livrée, télémétrie.                        |
 | `RaceService`      | Courses de rallycross : salle d'attente, départ, tours, résultats, revanche.          |
@@ -96,6 +99,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style. |
 | `Stage/`   | Ce qui sert sur la spéciale : chrono, copilote, fantômes, contrainte du défi (`StageModifier` : nuit, pluie, brouillard…). |
 | `School/`  | Déroulement d'une leçon.                                                                                      |
+| `Tutorial/` | `Tutorial` : le tutoriel express (un nouveau pilote au volant dès son arrivée, guidé en quatre étapes selon son appareil). |
 | `Weather/` | `WeatherClient` : la météo chez le pilote (adhérence mouillée, pluie, ciel, routes assombries).                |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
@@ -135,6 +139,10 @@ Modifier le tracé d'une spéciale change sa longueur, donc la clé de ses recor
 ## Météo
 
 Une prévision (`Weather.luau`) tient en trois valeurs : le mode (sec, pluie, variable), une graine et l'heure du serveur de son début. Le serveur la tire au lancement d'une spéciale (mode choisi au menu) ou au départ d'une course (mode réglé par l'hôte) et la pose sur la voiture (attributs `Weather`, `WeatherSeed`, `WeatherStart`). Chaque client en déduit les mêmes averses au même moment, et l'eau sur la route qui monte sous la pluie puis sèche (`WET_TIME`, `DRY_TIME`). L'adhérence suit l'eau (`Surfaces.EffectiveGrip`) : l'asphalte perd le plus, la neige presque rien.
+
+## Arrivée d'un nouveau joueur
+
+Le profil vierge déclenche le tutoriel express (`TutorialService`) : le client lance aussitôt la spéciale par défaut, au sec, sans passer par le menu, et `Tutorial.luau` guide le pilote (accélérer, tourner, frein à main, suivre le copilote jusqu'à l'arrivée). La première spéciale terminée boucle le tutoriel et rapporte des crédits et un tirage ; le menu s'ouvre ensuite. Un joueur arrivé par l'invitation d'un ami est noté comme filleul (`ReferralService`) : quand il termine sa première spéciale ou sa première course, lui et son parrain sont récompensés.
 
 ## Conventions
 

@@ -21,7 +21,8 @@
 	(attribut Weekly) a son propre classement (ChallengeService).
 
 	À l'arrivée : le record (RecordService), le fantôme attendu (GhostService),
-	le résultat au joueur (RunValidated), la progression et les défis du jour.
+	le résultat au joueur (RunValidated), la progression, les défis du jour,
+	et le tutoriel express (TutorialService).
 
 	VOITURE DE RALLYE (attribut Championship : mode championnat) : départ,
 	arrivée, retour au départ et passage refusé sont aussi signalés au mode
@@ -44,6 +45,7 @@ local ChallengeService = require(script.Parent.ChallengeService)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local TutorialService = require(script.Parent.TutorialService)
 
 local StageService = {}
 
@@ -117,6 +119,8 @@ local function stageFinished(player: Player, clean: boolean, weekly: boolean)
 	if weekly then
 		ChallengeService.DailyEvent(player, "WeeklyRun", 1)
 	end
+	-- La première : fin du tutoriel express (et du parrainage d'un filleul).
+	TutorialService.StageFinished(player)
 end
 
 local function onWeeklyFinish(player: Player, ms: number, key: string, clean: boolean)

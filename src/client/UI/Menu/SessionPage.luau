@@ -7,6 +7,7 @@
 		  ou en rejoindre une avec son code ;
 		- dans une session privée : son code à partager, et le retour aux
 		  serveurs publics.
+		- le parrainage : ce que rapporte un ami invité qui prend le volant.
 	Le code tapé est gardé dans ctx.View (il survit aux reconstructions).
 ]]
 
@@ -20,6 +21,22 @@ type Builder = MenuKit.Builder
 local SessionPage = {}
 
 local CODE_LENGTH = 6
+
+-- Ce que rapporte une invitation, et les amis déjà récompensés.
+local function referralLine(ctx: Context, b: Builder)
+	local referral: any = ctx.Data.Referral
+	if type(referral) ~= "table" then
+		return
+	end
+	local rolls = tonumber(referral.InviterRolls) or 0
+	b:Text(string.format(
+		"PARRAINAGE · un ami invité qui découvre le jeu et termine sa première spéciale (ou course) : +%d CR%s pour toi, +%d CR pour lui.",
+		tonumber(referral.InviterCredits) or 0,
+		if rolls > 0 then string.format(" et %d tirage%s", rolls, if rolls > 1 then "s" else "") else "",
+		tonumber(referral.NewcomerCredits) or 0
+	), 12, Theme.CYAN)
+	b:Text(string.format("Amis parrainés : %d / %d", tonumber(referral.Referrals) or 0, tonumber(referral.Max) or 0), 12, Widgets.COLOR_DIM)
+end
 
 function SessionPage.Friends(ctx: Context, b: Builder)
 	local state: any = ctx.Data.Session
@@ -42,6 +59,7 @@ function SessionPage.Friends(ctx: Context, b: Builder)
 		ctx.Button(row, "QUITTER LA SESSION", half + 8, half, function()
 			ctx.Action("Session", { Action = "Leave" })
 		end)
+		referralLine(ctx, b)
 		return
 	end
 	b:Text("Invite tes amis sur ce serveur, ou crée une session privée : un serveur rien que pour vous, qu'on rejoint avec son code.", 12, Widgets.COLOR_DIM)
@@ -50,6 +68,7 @@ function SessionPage.Friends(ctx: Context, b: Builder)
 		ctx.Action("Session", { Action = "Invite" })
 	end)
 	Widgets.Primary(invite)
+	referralLine(ctx, b)
 	-- Créer une session : pass Premium (sinon, le bouton ouvre son achat).
 	local canCreate = state ~= nil and state.CanCreate == true
 	local create = ctx.Button(row, if canCreate then "SESSION PRIVÉE" else "SESSION PRIVÉE · PREMIUM", half + 8, half, function()
