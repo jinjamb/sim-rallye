@@ -77,6 +77,7 @@ export type CarAudio = typeof(setmetatable({}, CarAudio)) & {
 	ToneId: string,
 	Tone: SoundBank.EngineTone,
 	Recording: SoundBank.EngineProfile,
+	PitchScale: number, -- transposition de la tonalité (ou de son remplaçant)
 	Connections: { RBXScriptConnection },
 	OnLoad: { Voice },
 	OffLoad: { Voice },
@@ -158,6 +159,14 @@ local function makeVoices(samples: { SoundBank.EngineSample }, prefix: string, p
 	local voices = {}
 	for i, sample in ipairs(samples) do
 		local sound = makeSound(string.format("%s_%d", prefix, sample.Rpm), sample.Id, parent)
+		-- Planche (SoundBank.luau) : l'échantillon est une région du fichier, bouclée.
+		local start, length = sample.Start, sample.Length
+		if start and length then
+			local region = NumberRange.new(start, start + length)
+			sound.PlaybackRegionsEnabled = true
+			sound.PlaybackRegion = region
+			sound.LoopRegion = region
+		end
 		voices[i] = { Sample = sample, Sound = sound, LastAudible = -math.huge }
 	end
 	return voices
@@ -277,7 +286,10 @@ function CarAudio:_setTone(toneId: string)
 		return
 	end
 	local tone = SoundBank.Tone(toneId)
-	local recording = SoundBank.RECORDINGS[tone.Recording] or SoundBank.RECORDINGS.LS3
+	local available = SoundBank.RECORDINGS[tone.Recording]
+	local recording = available or SoundBank.RECORDINGS.LS3
+	-- Enregistrement pas encore importé : le V8, transposé.
+	self.PitchScale = if available then tone.PitchScale else tone.FallbackPitch
 	if recording ~= self.Recording then
 		for _, layer in ipairs({ self.OnLoad, self.OffLoad }) do
 			for _, voice in ipairs(layer) do
@@ -463,7 +475,7 @@ function CarAudio:Update(dt: number, state: AudioState)
 	self.Load = approach(self.Load, state.Load, dt, LOAD_SMOOTH_TIME)
 	local tone = self.Tone
 	local master = self.Recording.Volume * tone.Volume
-	local rpm = state.Rpm * tone.PitchScale
+	local rpm = state.Rpm * self.PitchScale
 	updateLayer(self.OnLoad, rpm, master * math.sqrt(self.Load), now)
 	updateLayer(self.OffLoad, rpm, master * OFF_LOAD_GAIN * math.sqrt(1 - self.Load), now)
 

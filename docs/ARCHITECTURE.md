@@ -148,6 +148,10 @@ Le profil vierge déclenche le tutoriel express (`TutorialService`) : le client 
 
 La livrée (`Livery.luau`) porte, en plus de la couleur principale, une couleur par zone de carrosserie (`Paints` : capot, toit, portières, boucliers…, zones définies dans `CarBodies.ZONES` et posées sur chaque pièce par l'attribut `PaintZone`) et un motif (`Pattern`, `PatternColor`). `LiveryPainter` repeint chaque zone, puis pose le motif (une `Texture` répétée par face visible) sur les pièces restées dans la couleur principale. Les images des motifs sont dans `assets/patterns/` (générées par `generate.py`) : chacune s'importe sur Roblox, et son identifiant va dans `Livery.PATTERNS` (`Image`). Tant qu'il vaut 0, le motif se choisit mais ne s'affiche pas.
 
+## Sons moteur
+
+Chaque moteur est un enregistrement (`Audio/SoundBank.luau`, `RECORDINGS`) : des boucles à régime stabilisé, à charge et pied levé, que `CarAudio` fond l'une dans l'autre selon le régime. Les moteurs du jeu (3, 4 et 5 cylindres turbo, 4 cylindres anti-lag, boxer, V6, 6 à plat, rotatif) sont synthétisés par `assets/engines/generate.py` : un fichier `.ogg` par moteur, qui enchaîne toutes ses boucles (une « planche ») ; chaque boucle est une région du fichier (`PlaybackRegion`, `LoopRegion`). Chaque planche s'importe sur Roblox, et son identifiant va dans `SHEETS`. Tant qu'il vaut 0, le moteur est remplacé par le V8 du Creator Store. Une tonalité (`TONES`) choisit l'enregistrement et le traite (égaliseur, distorsion) : une par catégorie de voiture, une par son moteur à débloquer (`Items/Engines.luau`).
+
 ## Conventions
 
 - `--!strict` partout. Les types exportés sont nommés comme le module (`Car.Car`, `MainMenu.MainMenu`).

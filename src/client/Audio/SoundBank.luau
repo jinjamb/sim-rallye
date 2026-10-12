@@ -18,9 +18,15 @@
 	Rpm DOIT être le régime auquel l'échantillon a été enregistré : sur les séries
 	du Creator Store, c'est en général le nombre à la fin du nom.
 
-	Tous les sons ci-dessous sont publiés dans le Creator Store (relevés le
-	2026-10-03). Pour en tester d'autres : create.roblox.com/store/audio,
-	chercher "engacc", "engdec", "eng on", "eng off", ou un nom de moteur.
+	PLANCHES : un moteur peut tenir dans UN seul fichier audio, qui enchaîne
+	ses boucles ; chaque échantillon y est alors une région (Start, Length,
+	en secondes), lue et bouclée par Sound.PlaybackRegion / LoopRegion. Les
+	moteurs synthétisés (assets/engines/, generate.py) sont faits ainsi :
+	un import par moteur au lieu de dix-sept.
+
+	Le V8 (LS3) vient du Creator Store (relevé le 2026-10-03). Pour en tester
+	d'autres : create.roblox.com/store/audio, chercher "engacc", "engdec",
+	"eng on", "eng off", ou un nom de moteur.
 ]]
 
 local SoundBank = {}
@@ -33,6 +39,9 @@ SoundBank.MasterVolume = 0.5
 export type EngineSample = {
 	Id: string,
 	Rpm: number,
+	-- Planche : la boucle est la région [Start, Start + Length] du fichier (s).
+	Start: number?,
+	Length: number?,
 }
 
 export type EngineProfile = {
@@ -49,13 +58,14 @@ export type EngineProfile = {
 	(0..1 : la rocaille d'un échappement libre). Chaque catégorie de voiture
 	a la sienne (CarClasses.luau : Engine), et les sons moteur à débloquer
 	(Items/Engines.luau) en sont d'autres.
-	Pour l'instant, toutes partent du même enregistrement de V8 : ce sont
-	des variations, pas de vrais moteurs. Un vrai enregistrement s'ajoute
-	dans RECORDINGS, et une tonalité le cite (Recording).
+	Chaque tonalité cite son enregistrement (Recording). Un enregistrement
+	dont la planche n'est pas encore importée (identifiant 0) est remplacé
+	par le V8 (LS3), transposé de FallbackPitch.
 ]]
 export type EngineTone = {
 	Recording: string,
 	PitchScale: number,
+	FallbackPitch: number, -- transposition du V8 tant que l'enregistrement manque
 	Low: number,
 	Mid: number,
 	High: number,
@@ -100,28 +110,97 @@ local LS3: EngineProfile = {
 	},
 }
 
+--[[
+	MOTEURS SYNTHÉTISÉS (assets/engines/generate.py) : un fichier par moteur,
+	tous sur la même planche (REGIONS : mêmes régimes, mêmes positions).
+	Chaque fichier .ogg s'importe dans Studio (Asset Manager) ; son
+	identifiant va dans SHEETS. Tant qu'il vaut 0, le moteur est remplacé
+	par le V8 (voir FallbackPitch).
+]]
+local REGIONS = {
+	OnLoad = {
+		{ Rpm = 1000, Start = 0.050000, Length = 1.200000 },
+		{ Rpm = 1800, Start = 1.350000, Length = 1.200000 },
+		{ Rpm = 2600, Start = 2.650000, Length = 1.199773 },
+		{ Rpm = 3401, Start = 3.949773, Length = 1.199637 },
+		{ Rpm = 4200, Start = 5.249410, Length = 1.200000 },
+		{ Rpm = 5002, Start = 6.549410, Length = 1.199546 },
+		{ Rpm = 5803, Start = 7.848957, Length = 1.199456 },
+		{ Rpm = 6599, Start = 9.148413, Length = 1.200272 },
+		{ Rpm = 7401, Start = 10.448685, Length = 1.199773 },
+		{ Rpm = 8205, Start = 11.748458, Length = 1.199320 },
+	},
+	OffLoad = {
+		{ Rpm = 900, Start = 13.047778, Length = 1.200000 },
+		{ Rpm = 2000, Start = 14.347778, Length = 1.200000 },
+		{ Rpm = 3200, Start = 15.647778, Length = 1.200181 },
+		{ Rpm = 4399, Start = 16.947959, Length = 1.200272 },
+		{ Rpm = 5600, Start = 18.248231, Length = 1.200000 },
+		{ Rpm = 6802, Start = 19.548231, Length = 1.199637 },
+		{ Rpm = 7994, Start = 20.847868, Length = 1.200907 },
+	},
+}
+
+local SHEETS: { [string]: { Name: string, Id: number, Volume: number } } = {
+	I3 = { Name = "3 cylindres turbo", Id = 0, Volume = 0.5 }, -- assets/engines/I3.ogg
+	I4 = { Name = "4 cylindres turbo", Id = 0, Volume = 0.5 }, -- I4.ogg
+	I4R = { Name = "4 cylindres anti-lag", Id = 0, Volume = 0.5 }, -- I4R.ogg
+	I5 = { Name = "5 cylindres turbo", Id = 0, Volume = 0.5 }, -- I5.ogg
+	Boxer4 = { Name = "4 cylindres à plat", Id = 0, Volume = 0.5 }, -- Boxer4.ogg
+	V6 = { Name = "V6", Id = 0, Volume = 0.5 }, -- V6.ogg
+	Flat6 = { Name = "6 cylindres à plat", Id = 0, Volume = 0.5 }, -- Flat6.ogg
+	Rotary = { Name = "Rotatif", Id = 0, Volume = 0.45 }, -- Rotary.ogg
+}
+
+local function sheet(spec: { Name: string, Id: number, Volume: number }): EngineProfile
+	local function samples(list: { { Rpm: number, Start: number, Length: number } }): { EngineSample }
+		local result = {}
+		for _, region in ipairs(list) do
+			table.insert(result, { Id = id(spec.Id), Rpm = region.Rpm, Start = region.Start, Length = region.Length })
+		end
+		return result
+	end
+	return { Name = spec.Name, Volume = spec.Volume, OnLoad = samples(REGIONS.OnLoad), OffLoad = samples(REGIONS.OffLoad) }
+end
+
 SoundBank.RECORDINGS = {
 	LS3 = LS3,
 } :: { [string]: EngineProfile }
+for key, spec in pairs(SHEETS) do
+	if spec.Id ~= 0 then
+		SoundBank.RECORDINGS[key] = sheet(spec)
+	end
+end
 
-local function tone(pitch: number, low: number, mid: number, high: number, distortion: number, volume: number?): EngineTone
-	return { Recording = "LS3", PitchScale = pitch, Low = low, Mid = mid, High = high, Distortion = distortion, Volume = volume or 1 }
+local function tone(recording: string, fallbackPitch: number, low: number, mid: number, high: number, distortion: number, volume: number?): EngineTone
+	return {
+		Recording = recording,
+		PitchScale = 1,
+		FallbackPitch = fallbackPitch,
+		Low = low,
+		Mid = mid,
+		High = high,
+		Distortion = distortion,
+		Volume = volume or 1,
+	}
 end
 
 SoundBank.TONES = {
 	-- Catégories de voitures (son de série).
-	Rally2 = tone(1.18, -3, 0, 2, 0.08),
-	Rally4 = tone(1.32, -5, 1, 3, 0.05, 0.9),
-	WRC = tone(1.26, -2, 2, 4, 0.14, 1.05),
-	GroupB = tone(1.08, 2, 0, 1, 0.25, 1.1),
+	Rally4 = tone("I3", 1.32, 0, 0, 1, 0, 0.9),
+	Rally2 = tone("I4", 1.18, 0, 0, 0, 0),
+	WRC = tone("I4R", 1.26, 0, 1, 2, 0.05, 1.05),
+	GroupB = tone("I5", 1.08, 1, 0, 0, 0.1, 1.1),
 	-- Sons moteur à débloquer (Items/Engines.luau).
-	V8 = tone(1, 0, 0, 0, 0),
-	Open = tone(1.12, 3, -1, 2, 0.35, 1.1),
-	Sport = tone(1.25, -2, 1, 4, 0.1),
-	Turbo = tone(1.2, -4, 2, 5, 0.15),
-	Screamer = tone(1.45, -6, 0, 6, 0.05),
-	Vintage = tone(0.95, 4, 2, -4, 0.45, 1.1),
-	Legend = tone(1.1, 3, 1, 3, 0.3, 1.15),
+	V8 = tone("LS3", 1, 0, 0, 0, 0),
+	Open = tone("I4", 1.12, 3, -1, 2, 0.35, 1.1),
+	Sport = tone("V6", 1.25, -1, 1, 2, 0),
+	Turbo = tone("I4R", 1.2, -3, 2, 5, 0.1),
+	Screamer = tone("Flat6", 1.45, -2, 0, 3, 0),
+	Vintage = tone("V6", 0.95, 4, 2, -4, 0.4, 1.1),
+	Legend = tone("I5", 1.1, 3, 1, 2, 0.3, 1.15),
+	Boxer = tone("Boxer4", 1.0, 2, 0, 0, 0.05),
+	Rotary = tone("Rotary", 1.5, -2, 1, 3, 0.1),
 } :: { [string]: EngineTone }
 
 SoundBank.DEFAULT_TONE = "Rally2"
