@@ -83,7 +83,7 @@ Products.LIST = {
 	{ Key = "credits_l", ProductId = 0, Name = "Caisse d'équipe", Grant = { Credits = 8000 }, SuggestedRobux = 299 },
 	{ Key = "credits_xl", ProductId = 0, Name = "Budget d'usine", Grant = { Credits = 20000 }, SuggestedRobux = 649 },
 	-- Rallye Pass : la voie premium de la saison en cours (Pass.luau), à racheter à chaque saison.
-	{ Key = "pass_premium", ProductId = 0, Name = "Rallye Pass premium", Grant = { PassPremium = true }, SuggestedRobux = 399 },
+	{ Key = "pass_premium", ProductId = 0, Name = "Rallye Pass premium", Grant = { PassPremium = true }, SuggestedRobux = 249 },
 
 	-- Paliers d'achat : objets et déblocages (voir plus haut).
 	{ Key = "tier_49", ProductId = 0, Name = "Achat · 49 R$", Grant = {}, SuggestedRobux = 49, Tier = 49 },
