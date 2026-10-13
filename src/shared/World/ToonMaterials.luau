@@ -43,6 +43,20 @@ ToonMaterials.TEXTURES = {
 
 local PREFIX = "Toon"
 
+--[[
+	Couleur d'une pièce (Part) faite dans une de ces matières : sur une pièce,
+	la couleur TEINTE la texture ; une texture déjà peinte veut du blanc. Sans
+	texture importée pour cette matière : la couleur prévue (fallback).
+]]
+function ToonMaterials.PartColor(material: Enum.Material, fallback: Color3): Color3
+	for _, texture in ipairs(ToonMaterials.TEXTURES) do
+		if texture.Image ~= 0 and table.find(texture.Materials, material) then
+			return Color3.new(1, 1, 1)
+		end
+	end
+	return fallback
+end
+
 -- Pose les variantes des textures importées et en fait les matières par défaut.
 function ToonMaterials.Apply()
 	local applied = 0

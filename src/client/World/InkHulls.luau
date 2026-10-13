@@ -171,7 +171,7 @@ local function step()
 		end
 		local part = tracked[cursor]
 		cursor += 1
-		local near = enabled and part:IsDescendantOf(workspace) and (part.Position - eye).Magnitude < limit + part.Size.Magnitude / 2
+		local near = enabled and part.Transparency < 0.5 and part:IsDescendantOf(workspace) and (part.Position - eye).Magnitude < limit + part.Size.Magnitude / 2
 		local hull = hulls[part]
 		if near and not hull then
 			local made = makeHull(part)
