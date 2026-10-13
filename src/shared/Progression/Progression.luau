@@ -215,6 +215,7 @@ Progression.ITEMS = {
 	{ Kind = "Pattern", Index = 7, Requirement = { AnyMedal = 3 } }, -- Zébrures
 	{ Kind = "Pattern", Index = 8, Requirement = { Item = "part_pattern_flames" } }, -- Flammes
 	{ Kind = "Pattern", Index = 9, Requirement = { Item = "part_pattern_sakura" } }, -- Sakura
+	{ Kind = "Pattern", Index = 10, Requirement = { Level = 8 } }, -- Crayonné
 	-- Finitions (Livery.FINISHES, TRIM_FINISHES) et couleurs sur mesure.
 	{ Kind = "Finish", Index = 2, Requirement = { Level = 2 } }, -- Brillant
 	{ Kind = "Finish", Index = 3, Requirement = { Level = 3 } }, -- Mat

@@ -22,7 +22,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Util/`        | `Format` (temps, milliers, compte à rebours) et `Units` (échelle stud/mètre, gravité).    |
 | `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, WRC, Groupe B, aérodynamique comprise), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
 | `Stage/`       | Les spéciales : `Stages` (la liste des spéciales et leurs tracés), `StageTrack` (construction d'un tracé, abscisse) et `Pacenotes` (notes du copilote). |
-| `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. |
+| `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. `ToonMaterials` : les textures de sol style anime (`assets/textures`), en variantes de matériaux posées par le serveur. |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
 | `Paddock/`     | La disposition du paddock (zones, panneaux).                                             |
 | `Progression/` | `Progression` (XP, niveaux, licences, déblocages), `Medals` (seuils bronze → platine), `Achievements` (trophées et badges Roblox) et `XpEvents` (calendrier du double XP). |

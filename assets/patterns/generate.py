@@ -90,4 +90,29 @@ for _ in range(9):
             petal = r * (0.55 + 0.45 * np.abs(np.cos(2.5 * th)))
             alpha = np.maximum(alpha, smooth(rr - petal, 3 / N) * (1 - 0.6 * smooth(rr - r * 0.18, 3 / N)))
 save("sakura", alpha)
+
+# Crayonné : paquets de hachures au crayon à papier (style anime), en diagonale,
+# avec quelques hachures croisées ; traits d'épaisseur et d'intensité inégales.
+from PIL import ImageDraw
+sketch = Image.new("L", (N, N), 0)
+draw = ImageDraw.Draw(sketch)
+rng = np.random.default_rng(21)
+for _ in range(34):
+    cx0, cy0 = rng.uniform(0, N, 2)
+    angle = np.radians(rng.uniform(38, 52) + (90 if rng.random() < 0.25 else 0))
+    dx, dy = np.cos(angle), -np.sin(angle)
+    nx, ny = -dy, dx
+    count = int(rng.integers(5, 10))
+    length = rng.uniform(70, 150)
+    for k in range(count):
+        off = (k - count / 2) * rng.uniform(13, 17)
+        l = length * rng.uniform(0.6, 1.05)
+        sx = cx0 + nx * off + rng.normal(0, 2) - dx * l / 2
+        sy = cy0 + ny * off + rng.normal(0, 2) - dy * l / 2
+        value = int(rng.uniform(120, 230))
+        width = int(rng.integers(2, 4))
+        for ox in (-N, 0, N):
+            for oy in (-N, 0, N):
+                draw.line([sx + ox, sy + oy, sx + dx * l + ox, sy + dy * l + oy], fill=value, width=width)
+save("crayonne", np.array(sketch, float) / 255)
 print("ok")
