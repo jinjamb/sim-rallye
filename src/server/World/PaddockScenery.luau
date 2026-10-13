@@ -260,9 +260,10 @@ function PaddockScenery.Build(paddock: Instance)
 	walkway.Color = Color3.fromRGB(248, 182, 208)
 	walkway.Material = Enum.Material.SmoothPlastic
 	walkway.Parent = folder
-	-- Guirlandes de lanternes au-dessus de l'allée.
+	-- Guirlandes de lanternes au-dessus de l'allée, assez haut pour ne pas
+	-- boucher la vue de la caméra vers les zones de course.
 	for _, dz in ipairs({ -6, 12 }) do
-		Scenery.LanternString(folder, Vector3.new(spawn.X - 17, 0.2, spawn.Z + dz), Vector3.new(spawn.X + 17, 0.2, spawn.Z + dz), 7)
+		Scenery.LanternString(folder, Vector3.new(spawn.X - 17, 0.2, spawn.Z + dz), Vector3.new(spawn.X + 17, 0.2, spawn.Z + dz), 6, 15)
 	end
 	-- Pétales de cerisier sur l'accueil.
 	Scenery.PetalFall(folder, spawn + Vector3.new(0, 0, -10), Vector2.new(100, 80))
