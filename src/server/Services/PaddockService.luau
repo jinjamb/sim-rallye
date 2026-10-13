@@ -32,6 +32,10 @@
 	L'entrée est détectée au FRANCHISSEMENT : quelqu'un qui quitte la salle par
 	le menu sans bouger n'y est pas renvoyé aussitôt ; il ressort et revient.
 
+	STYLE : dessin animé, comme le reste du décor (ToonDecor.luau) : panneaux
+	crème cerclés d'encre, titres arrondis (FredokaOne) au trait, couleurs
+	franches, trait d'encre autour des pièces (étiquette Ink).
+
 	PODIUM : après la dernière manche, les trois premiers y sont posés, les
 	confettis partent, et tous les pilotes de la course voient la cérémonie
 	(caméra du podium, RaceClient.luau).
@@ -60,6 +64,16 @@ local RecordService = require(script.Parent.RecordService)
 local EconomyService = require(script.Parent.EconomyService)
 local GarageService = require(script.Parent.GarageService)
 local PaddockScenery = require(script.Parent.Parent.World.PaddockScenery)
+local ToonDecor = require(ReplicatedStorage.Shared.World.ToonDecor)
+local ToonMaterials = require(ReplicatedStorage.Shared.World.ToonMaterials)
+
+-- Palette du paddock (style dessin animé).
+local INK = Color3.fromRGB(32, 22, 48)
+local CREAM = Color3.fromRGB(250, 244, 234)
+local TEXT_DIM = Color3.fromRGB(86, 76, 110)
+local TEXT_SOFT = Color3.fromRGB(130, 118, 150)
+local GOLD = Color3.fromRGB(214, 150, 20)
+local POST = Color3.fromRGB(70, 60, 90)
 
 local PaddockService = {}
 
@@ -97,6 +111,8 @@ local function part(parent: Instance, name: string, size: Vector3, cframe: CFram
 	p.Material = Enum.Material.SmoothPlastic
 	p.TopSurface = Enum.SurfaceType.Smooth
 	p.BottomSurface = Enum.SurfaceType.Smooth
+	p:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
+	ToonDecor.Tag(p)
 	p.Parent = parent
 	return p
 end
@@ -106,9 +122,14 @@ local function label(parent: Instance, text: string, y: number, height: number, 
 	l.BackgroundTransparency = 1
 	l.Position = UDim2.new(0, 30, 0, y)
 	l.Size = UDim2.new(1, -60, 0, height)
+	-- Titres (FredokaOne) : lettres arrondies cernées d'encre, comme un titre d'anime.
 	l.Font = font
 	l.TextScaled = true
 	l.TextColor3 = color
+	if font == Enum.Font.FredokaOne then
+		l.TextStrokeColor3 = INK
+		l.TextStrokeTransparency = 0
+	end
 	l.TextXAlignment = Enum.TextXAlignment.Left
 	l.Text = text
 	l.Parent = parent
@@ -118,13 +139,13 @@ end
 -- Panneau tourné vers +Z (vers le point d'apparition).
 local function board(parent: Instance, position: Vector3, size: Vector2, color: Color3): (Part, Frame)
 	local center = position + Vector3.new(0, size.Y / 2, 0)
-	local panel = part(parent, "Board", Vector3.new(size.X, size.Y, 0.6), CFrame.lookAt(center, center + Vector3.new(0, 0, 1)), Color3.fromRGB(20, 21, 26), true)
+	local panel = part(parent, "Board", Vector3.new(size.X, size.Y, 0.6), CFrame.lookAt(center, center + Vector3.new(0, 0, 1)), INK, true)
 	-- Montants du sol jusqu'en haut du panneau.
 	local groundY = PaddockLayout.SPAWN.Y
 	local topY = position.Y + size.Y
 	for _, side in ipairs({ -1, 1 }) do
 		local postPosition = Vector3.new(position.X + side * (size.X / 2 - 0.5), (groundY + topY) / 2, position.Z - 0.6)
-		part(parent, "Post", Vector3.new(0.8, topY - groundY, 0.8), CFrame.new(postPosition), Color3.fromRGB(50, 52, 60), true)
+		part(parent, "Post", Vector3.new(0.8, topY - groundY, 0.8), CFrame.new(postPosition), POST, true)
 	end
 	local gui = Instance.new("SurfaceGui")
 	gui.Face = Enum.NormalId.Front
@@ -133,11 +154,19 @@ local function board(parent: Instance, position: Vector3, size: Vector2, color: 
 	gui.Parent = panel
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.fromScale(1, 1)
-	frame.BackgroundColor3 = Color3.fromRGB(20, 21, 26)
+	frame.BackgroundColor3 = CREAM
 	frame.BorderSizePixel = 0
 	frame.Parent = gui
+	-- Cadre d'encre épais, bandeau de couleur penché en haut.
+	local border = Instance.new("UIStroke")
+	border.Color = INK
+	border.Thickness = 14
+	border.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	border.Parent = frame
 	local stripe = Instance.new("Frame")
-	stripe.Size = UDim2.new(1, 0, 0, 16)
+	stripe.Size = UDim2.new(1.1, 0, 0, 22)
+	stripe.Position = UDim2.new(-0.05, 0, 0, 0)
+	stripe.Rotation = -1
 	stripe.BackgroundColor3 = color
 	stripe.BorderSizePixel = 0
 	stripe.Parent = frame
@@ -149,7 +178,7 @@ local function padRing(parent: Instance, pad: PaddockLayout.Pad)
 	local base = pad.Position
 	-- Disque au-dessus de l'anneau, l'anneau au-dessus de la dalle (dessus à 0.2) :
 	-- trois hauteurs distinctes, sinon les surfaces scintillent.
-	local disc = part(parent, "PadDisc", Vector3.new(0.2, pad.Radius * 2, pad.Radius * 2), CFrame.new(base + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(30, 32, 38), false)
+	local disc = part(parent, "PadDisc", Vector3.new(0.2, pad.Radius * 2, pad.Radius * 2), CFrame.new(base + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, 0, math.pi / 2), pad.Color:Lerp(CREAM, 0.72), false)
 	disc.Shape = Enum.PartType.Cylinder
 	local ring = part(parent, "PadRing", Vector3.new(0.2, pad.Radius * 2 + 1.5, pad.Radius * 2 + 1.5), CFrame.new(base + Vector3.new(0, 0.2, 0)) * CFrame.Angles(0, 0, math.pi / 2), pad.Color, false)
 	ring.Shape = Enum.PartType.Cylinder
@@ -173,8 +202,9 @@ local function buildPaddock()
 	-- Dalle (fine : aucune marche à franchir, à pied comme en voiture).
 	local plaza = PaddockLayout.PLAZA_CENTER
 	local size = PaddockLayout.PLAZA_SIZE
-	local slab = part(folder, "Plaza", Vector3.new(size.X, 0.2, size.Y), CFrame.new(plaza + Vector3.new(0, 0.1, 0)), Color3.fromRGB(70, 72, 78), true)
-	slab.Material = Enum.Material.Asphalt
+	local slab = part(folder, "Plaza", Vector3.new(size.X, 0.2, size.Y), CFrame.new(plaza + Vector3.new(0, 0.1, 0)), ToonMaterials.PartColor(Enum.Material.Asphalt, Color3.fromRGB(92, 86, 110)), true)
+	slab.Material = Enum.Material.Asphalt -- texture toon d'asphalte (ToonMaterials), sinon celle de Roblox
+	game:GetService("CollectionService"):RemoveTag(slab, ToonDecor.INK_TAG)
 
 	-- Point d'apparition.
 	local spawnLocation = Instance.new("SpawnLocation")
@@ -182,7 +212,7 @@ local function buildPaddock()
 	spawnLocation.Anchored = true
 	spawnLocation.Size = Vector3.new(14, 0.4, 14)
 	spawnLocation.CFrame = CFrame.lookAt(PaddockLayout.SPAWN + Vector3.new(0, 0.3, 0), PaddockLayout.SPAWN + Vector3.new(0, 0.3, -1))
-	spawnLocation.Color = Color3.fromRGB(40, 42, 48)
+	spawnLocation.Color = Color3.fromRGB(255, 196, 220)
 	spawnLocation.Material = Enum.Material.SmoothPlastic
 	spawnLocation.Duration = 0
 	spawnLocation.Neutral = true
@@ -190,11 +220,15 @@ local function buildPaddock()
 
 	-- Arche d'accueil.
 	local archPosition = PaddockLayout.SPAWN + Vector3.new(0, 0, -22)
-	local _, archFrame = board(folder, archPosition + Vector3.new(0, 12, 0), Vector2.new(34, 5), Color3.fromRGB(245, 200, 55))
-	label(archFrame, "PADDOCK RALLYCROSS", 30, 150, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
+	local _, archFrame = board(folder, archPosition + Vector3.new(0, 12, 0), Vector2.new(34, 5), Color3.fromRGB(255, 120, 170))
+	label(archFrame, "PADDOCK RALLYCROSS", 34, 150, Enum.Font.FredokaOne, Color3.fromRGB(255, 205, 50))
+	-- Piliers et linteau rouges, façon torii.
+	local red = Color3.fromRGB(214, 40, 40)
 	for _, side in ipairs({ -1, 1 }) do
-		part(folder, "ArchPillar", Vector3.new(1.5, 17, 1.5), CFrame.new(archPosition + Vector3.new(side * 16.5, 8.5, -0.6)), Color3.fromRGB(50, 52, 60), true)
+		part(folder, "ArchPillar", Vector3.new(1.8, 18, 1.8), CFrame.new(archPosition + Vector3.new(side * 16.5, 9, -0.6)), red, true)
 	end
+	part(folder, "ArchBeam", Vector3.new(40, 1.4, 2.4), CFrame.new(archPosition + Vector3.new(0, 18.4, -0.6)), red, false)
+	part(folder, "ArchBeamTop", Vector3.new(42, 0.6, 2.8), CFrame.new(archPosition + Vector3.new(0, 19.4, -0.6)), INK, false)
 
 	-- Zones des circuits.
 	for _, pad in ipairs(PaddockLayout.RACE_PADS) do
@@ -203,15 +237,15 @@ local function buildPaddock()
 		-- Rangée arrière : panneau plus haut, visible au-dessus de la rangée avant.
 		local back = pad.Position.Z < PaddockLayout.SPAWN.Z - 60
 		local _, frame = board(folder, pad.Position + Vector3.new(0, if back then 12 else 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
-		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
-		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-		local record = label(frame, "Record du tour : -", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
+		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 34, 90, Enum.Font.FredokaOne, pad.Color)
+		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, TEXT_DIM)
+		local record = label(frame, "Record du tour : -", 190, 52, Enum.Font.GothamBold, GOLD)
 		if circuit then
-			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, Color3.fromRGB(200, 202, 210))
+			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, TEXT_DIM)
 			medals.RichText = true
 		end
-		local status = label(frame, "Entre dans la zone pour courir", 292, 140, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
-		label(frame, "1 à 6 pilotes · départ 20 s après le 1er · C : menu", 450, 50, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
+		local status = label(frame, "Entre dans la zone pour courir", 292, 140, Enum.Font.GothamBlack, INK)
+		label(frame, "1 à 6 pilotes · départ 20 s après le 1er · C : menu", 450, 50, Enum.Font.GothamMedium, TEXT_SOFT)
 		signs[pad.Id] = { Status = status, Record = record }
 	end
 
@@ -219,28 +253,27 @@ local function buildPaddock()
 	local carPad = PaddockLayout.CAR_PAD
 	padRing(folder, carPad)
 	local _, carFrame = board(folder, carPad.Position + Vector3.new(0, 4, -carPad.Radius - 4), Vector2.new(16, 7), carPad.Color)
-	label(carFrame, "TA VOITURE", 30, 90, Enum.Font.GothamBlack, carPad.Color)
-	label(carFrame, "Essais libres sur la piste d'essai · spéciale : menu C", 140, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-	label(carFrame, "Entre à pied dans la zone · E : monter · Q : descendre", 230, 60, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
+	label(carFrame, "TA VOITURE", 34, 90, Enum.Font.FredokaOne, carPad.Color)
+	label(carFrame, "Essais libres sur la piste d'essai · spéciale : menu C", 140, 60, Enum.Font.GothamMedium, TEXT_DIM)
+	label(carFrame, "Entre à pied dans la zone · E : monter · Q : descendre", 230, 60, Enum.Font.GothamMedium, TEXT_SOFT)
 
 	-- Garage : zone, plaque tournante (la voiture y est posée par chaque client,
 	-- à ses propres couleurs : Garage.luau) et panneau.
 	local garagePad = PaddockLayout.GARAGE_PAD
 	padRing(folder, garagePad)
 	local showroom = PaddockLayout.SHOWROOM
-	local turntable = part(folder, "Turntable", Vector3.new(0.6, PaddockLayout.SHOWROOM_RADIUS * 2, PaddockLayout.SHOWROOM_RADIUS * 2), CFrame.new(showroom + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(35, 36, 42), true)
+	local turntable = part(folder, "Turntable", Vector3.new(0.6, PaddockLayout.SHOWROOM_RADIUS * 2, PaddockLayout.SHOWROOM_RADIUS * 2), CFrame.new(showroom + Vector3.new(0, 0.3, 0)) * CFrame.Angles(0, 0, math.pi / 2), Color3.fromRGB(64, 54, 86), true)
 	turntable.Shape = Enum.PartType.Cylinder
-	turntable.Material = Enum.Material.DiamondPlate
 	local _, garageFrame = board(folder, showroom + Vector3.new(0, 4, -PaddockLayout.SHOWROOM_RADIUS - 4), Vector2.new(18, 8), garagePad.Color)
-	label(garageFrame, "GARAGE", 30, 100, Enum.Font.GothamBlack, garagePad.Color)
-	label(garageFrame, "Couleur, numéro de course, réglages de la voiture", 150, 60, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-	label(garageFrame, "Entre dans la zone violette", 250, 60, Enum.Font.GothamMedium, Color3.fromRGB(130, 134, 145))
+	label(garageFrame, "GARAGE", 34, 100, Enum.Font.FredokaOne, garagePad.Color)
+	label(garageFrame, "Couleur, numéro de course, réglages de la voiture", 150, 60, Enum.Font.GothamMedium, TEXT_DIM)
+	label(garageFrame, "Entre dans la zone violette", 250, 60, Enum.Font.GothamMedium, TEXT_SOFT)
 
 	-- Podium.
 	local podium = Instance.new("Folder")
 	podium.Name = "Podium"
 	podium.Parent = folder
-	local stepColors = { Color3.fromRGB(230, 185, 40), Color3.fromRGB(190, 192, 200), Color3.fromRGB(190, 120, 60) }
+	local stepColors = { Color3.fromRGB(255, 205, 50), Color3.fromRGB(200, 205, 230), Color3.fromRGB(230, 140, 80) }
 	local stepSize = PaddockLayout.PODIUM_STEP_SIZE
 	for index, step in ipairs(PaddockLayout.PODIUM_STEPS) do
 		local position = PaddockLayout.PODIUM_CENTER + step.Offset + Vector3.new(0, step.Height / 2, 0)
@@ -252,14 +285,14 @@ local function buildPaddock()
 		local number = Instance.new("TextLabel")
 		number.BackgroundTransparency = 1
 		number.Size = UDim2.fromScale(1, 1)
-		number.Font = Enum.Font.GothamBlack
+		number.Font = Enum.Font.FredokaOne
 		number.TextScaled = true
-		number.TextColor3 = Color3.fromRGB(20, 21, 26)
+		number.TextColor3 = INK
 		number.Text = tostring(index)
 		number.Parent = gui
 	end
-	local _, podiumFrame = board(podium, PaddockLayout.PODIUM_CENTER + Vector3.new(0, 0, -stepSize.Y / 2 - 2), Vector2.new(30, 9), Color3.fromRGB(230, 185, 40))
-	label(podiumFrame, "PODIUM", 60, 200, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
+	local _, podiumFrame = board(podium, PaddockLayout.PODIUM_CENTER + Vector3.new(0, 0, -stepSize.Y / 2 - 2), Vector2.new(30, 9), Color3.fromRGB(255, 205, 50))
+	label(podiumFrame, "PODIUM", 60, 200, Enum.Font.FredokaOne, Color3.fromRGB(255, 205, 50))
 
 	-- Confettis, au-dessus des marches.
 	for index, step in ipairs(PaddockLayout.PODIUM_STEPS) do

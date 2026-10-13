@@ -37,6 +37,8 @@ local Ghost = require(script.Parent.Parent.Stage.Ghost)
 local StylePoints = require(script.Parent.StylePoints)
 local StageModifier = require(script.Parent.Parent.Stage.StageModifier)
 local WeatherClient = require(script.Parent.Parent.Weather.WeatherClient)
+local Ambiance = require(script.Parent.Parent.World.Ambiance)
+local Ambiances = require(script.Parent.Parent.World.Ambiances)
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local DrivingSchool = require(script.Parent.Parent.School.DrivingSchool)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
@@ -134,6 +136,11 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	local car = CarClass.new(self.Chassis, self.ClassId, self.CarModel)
 	car:ApplySetup(context.Setups[self.ClassId] or CarSetup.Default(self.ClassId))
 	self.Car = car
+
+	-- Ambiance lumineuse du circuit ou de la spéciale (Ambiances.luau), posée
+	-- AVANT la météo et le défi : ils partent de cet éclairage et y reviennent.
+	local circuit = if self.RaceId then Tracks.FindAt(self.Chassis.Position) else nil
+	Ambiance.Set(if circuit then Ambiances.ForCircuit(circuit.Id) else Ambiances.ForStage(track.Id, track.Surface))
 
 	-- Météo de la spéciale ou de la course (Weather.luau), posée par le serveur.
 	local forecast = Weather.FromAttributes(model:GetAttribute("Weather"), model:GetAttribute("WeatherSeed"), model:GetAttribute("WeatherStart"))
@@ -479,6 +486,7 @@ function DrivingSession:Destroy()
 	if undoWeather then
 		undoWeather()
 	end
+	Ambiance.Reset()
 	self.HasControl = false
 	self.Dashboard:Destroy()
 	self.Style:Destroy()

@@ -156,6 +156,7 @@ Livery.PATTERNS = {
 	{ Name = "Zébrures", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/zebrures.png
 	{ Name = "Flammes", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/flammes.png
 	{ Name = "Sakura", Image = 0, Tile = 5, Transparency = 0 }, -- assets/patterns/sakura.png
+	{ Name = "Crayonné", Image = 0, Tile = 4, Transparency = 0.1 }, -- assets/patterns/crayonne.png (hachures au crayon, style anime)
 } :: { PatternStyle }
 
 local INK = Color3.fromRGB(16, 16, 20)

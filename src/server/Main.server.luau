@@ -30,6 +30,11 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 -- Crée les RemoteEvents avant que le premier joueur ne les attende.
 require(ReplicatedStorage.Shared.Network.Remotes)
 
+-- Textures de sol style anime (celles déjà importées), pour tout le monde.
+require(ReplicatedStorage.Shared.World.ToonMaterials).Apply()
+-- Décor en style dessin animé : modèles du Creator Store et cartes enregistrées.
+require(ReplicatedStorage.Shared.World.ToonDecor).RestyleWorld()
+
 local ProfileStore = require(script.Parent.Data.ProfileStore)
 local Services = script.Parent.Services
 local AchievementService = require(Services.AchievementService)

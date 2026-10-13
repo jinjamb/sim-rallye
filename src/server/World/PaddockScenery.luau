@@ -19,6 +19,12 @@
 	plaques (les modèles du jeu : Hayate, Kaze, Hoshi), oriflammes,
 	lanternes, cerisiers en fleur, piles de pneus, mâts d'éclairage.
 
+	STYLE DESSIN ANIMÉ : allée rose du spawn sous des guirlandes de
+	lanternes en papier, pétales de cerisier qui tombent, passage piéton
+	peint entre les deux rangées de zones, vibreurs rouges et blancs autour
+	de la dalle, bannières nobori, distributeurs de boissons, stand de rue
+	et ses bancs. Les sols gardent la texture toon (ToonMaterials.PartColor).
+
 	Rien de ce décor ne touche aux zones (PaddockLayout.luau) : les pads, le
 	garage, le podium et la vue de sa caméra restent dégagés.
 ]]
@@ -29,6 +35,7 @@ local Scenery = require(ReplicatedStorage.Shared.World.Scenery)
 local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
+local ToonMaterials = require(ReplicatedStorage.Shared.World.ToonMaterials)
 
 local PaddockScenery = {}
 
@@ -43,7 +50,8 @@ local function slab(parent: Instance, name: string, minX: number, maxX: number, 
 	part.CanTouch = false
 	part.Size = Vector3.new(maxX - minX, 0.2, maxZ - minZ)
 	part.Position = Vector3.new((minX + maxX) / 2, 0.1, (minZ + maxZ) / 2)
-	part.Color = color
+	-- Sol en matière toon (herbe...) : la texture garde ses couleurs.
+	part.Color = ToonMaterials.PartColor(material, color)
 	part.Material = material
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
@@ -101,8 +109,8 @@ local function showcaseCar(parent: Instance, template: Model, entry: typeof(SHOW
 	plate.CanTouch = false
 	plate.Size = Vector3.new(0.8, 18, 18)
 	plate.CFrame = CFrame.new(base + Vector3.new(0, 0.4, 0)) * CFrame.Angles(0, 0, math.pi / 2)
-	plate.Color = Color3.fromRGB(36, 37, 44)
-	plate.Material = Enum.Material.DiamondPlate
+	plate.Color = Color3.fromRGB(64, 54, 86)
+	plate.Material = Enum.Material.SmoothPlastic
 	plate.Parent = parent
 	local ring = plate:Clone()
 	ring.Name = "ShowcaseRing"
@@ -238,6 +246,76 @@ function PaddockScenery.Build(paddock: Instance)
 	treeRow(folder, rng, -95, stageEdge + 8, 95, stageEdge + 8, 9, 0, 3)
 	for x = -92, 92, 5 do
 		Scenery.Tree(folder, Vector3.new(x, 0.2, stageEdge + 3), rng, "Bush", 1.6)
+	end
+
+	-- STYLE DESSIN ANIMÉ ------------------------------------------------------
+	local cream = Scenery.CREAM
+	-- Allée du spawn vers les zones, rose, juste au-dessus de la dalle.
+	local walkway = Instance.new("Part")
+	walkway.Name = "Walkway"
+	walkway.Anchored = true
+	walkway.CanTouch = false
+	walkway.Size = Vector3.new(12, 0.06, 44)
+	walkway.Position = Vector3.new(spawn.X, 0.23, spawn.Z - 4)
+	walkway.Color = Color3.fromRGB(248, 182, 208)
+	walkway.Material = Enum.Material.SmoothPlastic
+	walkway.Parent = folder
+	-- Guirlandes de lanternes au-dessus de l'allée, assez haut pour ne pas
+	-- boucher la vue de la caméra vers les zones de course.
+	for _, dz in ipairs({ -6, 12 }) do
+		Scenery.LanternString(folder, Vector3.new(spawn.X - 17, 0.2, spawn.Z + dz), Vector3.new(spawn.X + 17, 0.2, spawn.Z + dz), 6, 15)
+	end
+	-- Pétales de cerisier sur l'accueil.
+	Scenery.PetalFall(folder, spawn + Vector3.new(0, 0, -10), Vector2.new(100, 80))
+
+	-- Passage piéton peint entre les deux rangées de zones.
+	for x = -205, -50, 3.4 do
+		local stripe = Instance.new("Part")
+		stripe.Name = "Crosswalk"
+		stripe.Anchored = true
+		stripe.CanCollide = false
+		stripe.CanTouch = false
+		stripe.CanQuery = false
+		stripe.Size = Vector3.new(1.7, 0.04, 6)
+		stripe.Position = Vector3.new(x, 0.22, 118)
+		stripe.Color = cream
+		stripe.Material = Enum.Material.SmoothPlastic
+		stripe.CastShadow = false
+		stripe.Parent = folder
+	end
+
+	-- Vibreurs autour de la dalle.
+	local inset = 1.2
+	local corners = {
+		Vector3.new(west + inset, 0.2, south + inset),
+		Vector3.new(east - inset, 0.2, south + inset),
+		Vector3.new(east - inset, 0.2, north - inset),
+		Vector3.new(west + inset, 0.2, north - inset),
+	}
+	for i = 1, 4 do
+		Scenery.Kerb(folder, corners[i], corners[i % 4 + 1])
+	end
+
+	-- Bannières nobori le long du bord sud, lisibles depuis l'accueil.
+	local noboriTexts = { "ラリー", "全開", "SAKURA", "さくら", "RALLYE", "速い", "GO!", "ドリフト" }
+	local noboriXs = { -224, -204, -184, -132, -112, -92, -72, -52 }
+	for i, x in ipairs(noboriXs) do
+		Scenery.Nobori(folder, Vector3.new(x, 0.2, 68), Scenery.TEAM_COLORS[(i - 1) % #Scenery.TEAM_COLORS + 1], noboriTexts[i], Vector3.new(0, 0, 1))
+	end
+
+	-- Coin ouest : distributeurs de boissons, stand de rue et ses bancs.
+	local machineColors = { Color3.fromRGB(235, 70, 70), Color3.fromRGB(70, 150, 255), Color3.fromRGB(255, 255, 255) }
+	for i, color in ipairs(machineColors) do
+		local z = 150 + (i - 1) * 3.8
+		Scenery.VendingMachine(folder, CFrame.lookAt(Vector3.new(-240, 0.2, z), Vector3.new(-230, 0.2, z)), color)
+	end
+	Scenery.FoodStand(folder, CFrame.lookAt(Vector3.new(-232, 0.2, 212), Vector3.new(-222, 0.2, 212)), Color3.fromRGB(235, 60, 60), "ラーメン")
+	for _, z in ipairs({ 206, 218 }) do
+		Scenery.Bench(folder, CFrame.lookAt(Vector3.new(-216, 0.2, z), Vector3.new(-226, 0.2, z)))
+	end
+	-- Bancs le long de l'allée, face aux zones.
+	for _, side in ipairs({ -1, 1 }) do
+		Scenery.Bench(folder, CFrame.lookAt(Vector3.new(spawn.X + side * 30, 0.2, spawn.Z - 2), Vector3.new(spawn.X + side * 30, 0.2, spawn.Z - 12)))
 	end
 
 	folder.Parent = paddock

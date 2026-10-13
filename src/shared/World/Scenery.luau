@@ -20,6 +20,11 @@
 	l'allée du paddock).
 ]]
 
+local CollectionService = game:GetService("CollectionService")
+
+-- Chemin absolu : les outils de construction chargent une COPIE de ce module.
+local ToonDecor = require(game:GetService("ReplicatedStorage").Shared.World.ToonDecor)
+
 local Scenery = {}
 
 -- PineSnow : pin enneigé (spéciale de montagne).
@@ -38,6 +43,8 @@ Scenery.TEAM_COLORS = {
 }
 
 local DARK = Color3.fromRGB(32, 33, 40)
+-- Murs crème des bâtiments (style dessin animé).
+Scenery.CREAM_WALL = Color3.fromRGB(244, 232, 214)
 local STEEL = Color3.fromRGB(120, 124, 134)
 local CANVAS = Color3.fromRGB(236, 236, 240)
 
@@ -62,15 +69,37 @@ local function piece(
 	part.Size = size
 	part.CFrame = cframe
 	part.Color = color
-	part.Material = material
+	-- Style dessin animé (ToonDecor) : matière lisse, trait d'encre autour.
+	part.Material = ToonDecor.Material(material)
+	part:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
+	ToonDecor.Tag(part)
 	part.Parent = parent
 	return part
 end
 
 local function block(parent: Instance, name: string, size: Vector3, cframe: CFrame, color: Color3, solid: boolean?): Part
 	return piece(parent, name, Enum.PartType.Block, size, cframe, color, Enum.Material.SmoothPlastic, solid == true)
+end
+
+-- Couleurs franches du style dessin animé (ToonDecor.PALETTE), un peu variées.
+local function vary(color: Color3, rng: Random, amount: number): Color3
+	local h, s, v = color:ToHSV()
+	return Color3.fromHSV((h + rng:NextNumber(-0.02, 0.02)) % 1, s, math.clamp(v * (1 + rng:NextNumber(-amount, amount)), 0, 1))
+end
+
+local function green(rng: Random): Color3
+	return vary(ToonDecor.PALETTE.Leaf, rng, 0.08)
+end
+
+local function trunkColor(rng: Random): Color3
+	return vary(ToonDecor.PALETTE.Trunk, rng, 0.06)
+end
+
+-- La face éclairée d'un feuillage : un ton plus clair, comme un aplat de lumière.
+local function lighter(color: Color3): Color3
+	return color:Lerp(Color3.fromRGB(255, 250, 200), 0.32)
 end
 
 -- Un cylindre Roblox a son axe sur X : on le redresse.
@@ -96,7 +125,7 @@ local function sign(part: Part, text: string, background: Color3, face: Enum.Nor
 	label.BackgroundColor3 = background
 	label.BorderSizePixel = 0
 	label.TextColor3 = if background.R + background.G + background.B > 2 then DARK else Color3.new(1, 1, 1)
-	label.Font = Enum.Font.GothamBlack
+	label.Font = Enum.Font.FredokaOne -- arrondie, comme les enseignes d'un dessin animé
 	label.TextScaled = true
 	label.Text = text
 	label.Parent = gui
@@ -170,6 +199,8 @@ function Scenery.Asset(parent: Instance, kind: string, at: Vector3 | CFrame, rng
 	end
 	local frame = if typeof(at) == "CFrame" then at else CFrame.new(at) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
 	model:PivotTo(frame)
+	-- Style dessin animé : sans textures photo, recoloré selon sa sorte.
+	ToonDecor.RestyleAsset(model, kind)
 	model.Parent = parent
 	return model
 end
@@ -206,8 +237,7 @@ function Scenery.Rock(parent: Instance, ground: Vector3, rng: Random, height: nu
 	if Scenery.Asset(parent, "Rock", ground - Vector3.new(0, height * 0.35, 0), rng, height * 1.35) then
 		return
 	end
-	local grey = rng:NextInteger(105, 135)
-	piece(parent, "Rock", Enum.PartType.Ball, Vector3.new(height * 1.6, height * 1.6, height * 1.6), CFrame.new(ground + Vector3.new(0, height * 0.3, 0)), Color3.fromRGB(grey, grey - 4, grey - 10), Enum.Material.Slate, false)
+	piece(parent, "Rock", Enum.PartType.Ball, Vector3.new(height * 1.6, height * 1.6, height * 1.6), CFrame.new(ground + Vector3.new(0, height * 0.3, 0)), vary(ToonDecor.PALETTE.Rock, rng, 0.08), Enum.Material.Slate, false)
 end
 
 -- Une pile de rondins (la coupe du bois en bord de spéciale).
@@ -219,7 +249,7 @@ function Scenery.Logs(parent: Instance, ground: Vector3, rng: Random)
 	for row = 0, 2 do
 		for i = 0, 2 - row do
 			local offset = Vector3.new(0, 0.9 + row * 1.5, (i - (2 - row) / 2) * 1.8)
-			piece(parent, "Log", Enum.PartType.Cylinder, Vector3.new(10, 1.8, 1.8), CFrame.new(ground) * yaw * CFrame.new(offset), Color3.fromRGB(140, 96, 62), Enum.Material.Wood, false)
+			piece(parent, "Log", Enum.PartType.Cylinder, Vector3.new(10, 1.8, 1.8), CFrame.new(ground) * yaw * CFrame.new(offset), ToonDecor.PALETTE.Wood, Enum.Material.Wood, false)
 		end
 	end
 end
@@ -257,6 +287,7 @@ function Scenery.FenceLine(parent: Instance, from: Vector3, to: Vector3, rng: Ra
 				model:ScaleTo(step / segment)
 			end
 			model:PivotTo(frame)
+			ToonDecor.RestyleAsset(model, "Fence")
 			model.Parent = parent
 		else
 			block(parent, "FencePost", Vector3.new(0.5, 3.5, 0.5), frame * CFrame.new(-step / 2, 1.75, 0), Color3.fromRGB(110, 78, 52), false)
@@ -271,13 +302,7 @@ end
 -- Arbres
 --------------------------------------------------------------------------------
 
-local function green(rng: Random): Color3
-	return Color3.fromRGB(rng:NextInteger(50, 78), rng:NextInteger(110, 145), rng:NextInteger(45, 70))
-end
 
-local function trunkColor(rng: Random): Color3
-	return Color3.fromRGB(rng:NextInteger(88, 108), rng:NextInteger(62, 76), rng:NextInteger(46, 56))
-end
 
 -- Une sorte d'arbre au hasard ; `sakura` : part des cerisiers (0 à 1).
 function Scenery.PickKind(rng: Random, sakura: number?): TreeKind
@@ -311,6 +336,7 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		ball(parent, "Bush", size, ground + Vector3.new(0, size * 0.3, 0), color, Enum.Material.Grass)
 		local second = size * rng:NextNumber(0.6, 0.8)
 		ball(parent, "Bush", second, ground + Vector3.new(rng:NextNumber(-2, 2), second * 0.3, rng:NextNumber(-2, 2)), color, Enum.Material.Grass)
+		ball(parent, "Bush", size * 0.55, ground + Vector3.new(0, size * 0.62, 0), lighter(color), Enum.Material.Grass)
 		return
 	end
 	if k == "Pine" or k == "PineSnow" then
@@ -319,19 +345,19 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		local snowy = k == "PineSnow"
 		local trunkHeight = 5 * s
 		column(parent, "Trunk", trunkHeight + 1, 1.4 * s, ground - Vector3.new(0, 1, 0), trunkColor(rng), Enum.Material.Wood, true)
-		local color = Color3.fromRGB(rng:NextInteger(30, 50), rng:NextInteger(88, 112), rng:NextInteger(55, 72))
+		local color = vary(ToonDecor.PALETTE.Pine, rng, 0.08)
 		local y = trunkHeight - 1 * s
 		local tiers = rng:NextInteger(3, 4)
 		for tier = 1, tiers do
 			local width = (11 - tier * 2.2) * s
 			local height = 4.2 * s
-			column(parent, "Leaves", height, width, ground + Vector3.new(0, y, 0), color, Enum.Material.Grass, false)
+			column(parent, "Leaves", height, width, ground + Vector3.new(0, y, 0), if tier == tiers then lighter(color) else color, Enum.Material.Grass, false)
 			if snowy then
 				column(parent, "Snow", 0.8 * s, width * 0.92, ground + Vector3.new(0, y + height - 0.4 * s, 0), Color3.fromRGB(240, 244, 250), Enum.Material.Snow, false)
 			end
 			y += height * 0.72
 		end
-		ball(parent, "Leaves", 2.4 * s, ground + Vector3.new(0, y + 0.6 * s, 0), color, Enum.Material.Grass)
+		ball(parent, "Leaves", 2.4 * s, ground + Vector3.new(0, y + 0.6 * s, 0), lighter(color), Enum.Material.Grass)
 		return
 	end
 	local isSakura = k == "Sakura"
@@ -351,6 +377,8 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		local shift = Vector3.new(rng:NextNumber(-0.35, 0.35) * crown, rng:NextNumber(0.05, 0.35) * crown, rng:NextNumber(-0.35, 0.35) * crown)
 		ball(parent, "Leaves", second, top + shift, if isSakura then color:Lerp(Scenery.SAKURA, 0.5) else color, material)
 	end
+	-- Calotte claire sur le dessus : l'aplat de lumière du dessin animé.
+	ball(parent, "Leaves", crown * 0.62, top + Vector3.new(0, crown * 0.3, 0), lighter(color), material)
 	if isSakura then
 		-- Pétales tombés au pied de l'arbre.
 		local carpet = crown * 1.1
@@ -506,7 +534,6 @@ function Scenery.LightTower(parent: Instance, ground: Vector3, facing: Vector3)
 	local face = block(parent, "LightFace", Vector3.new(4.6, 2, 0.1), lamp.CFrame * CFrame.new(0, 0, -0.45), Color3.fromRGB(255, 248, 225), false)
 	face.Material = Enum.Material.Neon
 	local light = Instance.new("SpotLight")
-	light.Face = Enum.NormalId.Front
 	light.Angle = 70
 	light.Range = 60
 	light.Brightness = 2
@@ -522,7 +549,7 @@ function Scenery.PitBuilding(parent: Instance, frame: CFrame, length: number, ba
 	local model = Instance.new("Model")
 	model.Name = "PitBuilding"
 	local height, depth = 13, 14
-	block(model, "Body", Vector3.new(length, height, depth), frame * CFrame.new(0, height / 2, 0), Color3.fromRGB(214, 216, 224), true)
+	block(model, "Body", Vector3.new(length, height, depth), frame * CFrame.new(0, height / 2, 0), Scenery.CREAM_WALL, true)
 	-- Façade : -Z local (vers LookVector).
 	local front = -depth / 2 - 0.1
 	local doorWidth, doorHeight, pitch = 10, 8, 14
@@ -701,6 +728,214 @@ function Scenery.Hills(params: HillParams): number
 		end
 	end
 	return highest
+end
+
+--------------------------------------------------------------------------------
+-- Paddock style anime : la petite vie autour des stands
+--------------------------------------------------------------------------------
+
+Scenery.INK = Color3.fromRGB(32, 22, 48) -- traits, cadres, textes
+Scenery.CREAM = Color3.fromRGB(250, 244, 234) -- fonds des panneaux
+-- Texture des pétales (assets/particles/petale.png, à importer) ; 0 : étincelles roses.
+Scenery.PETAL_TEXTURE = 0
+
+local CAN_COLORS = {
+	Color3.fromRGB(235, 70, 70),
+	Color3.fromRGB(70, 150, 255),
+	Color3.fromRGB(255, 205, 50),
+	Color3.fromRGB(60, 190, 110),
+	Color3.fromRGB(255, 140, 200),
+}
+
+--[[
+	Distributeur de boissons (jidōhanbaiki), façade vers LookVector : caisse
+	colorée, vitrine éclairée et ses rangées de canettes, monnayeur, trappe.
+]]
+function Scenery.VendingMachine(parent: Instance, frame: CFrame, color: Color3)
+	local model = Instance.new("Model")
+	model.Name = "VendingMachine"
+	local width, height, depth = 3.4, 6.2, 2.4
+	block(model, "Body", Vector3.new(width, height, depth), frame * CFrame.new(0, height / 2, 0), color, true)
+	local front = -depth / 2 - 0.05
+	local window = block(model, "Window", Vector3.new(width - 0.6, 2.8, 0.1), frame * CFrame.new(0, height - 2, front), Color3.fromRGB(255, 250, 235), false)
+	window.Material = Enum.Material.Neon
+	for row = 0, 2 do
+		for col = 0, 3 do
+			local can = CAN_COLORS[(row * 4 + col) % #CAN_COLORS + 1]
+			block(model, "Can", Vector3.new(0.45, 0.6, 0.12), frame * CFrame.new(-1.05 + col * 0.7, height - 3 + row * 0.9, front - 0.08), can, false)
+		end
+	end
+	block(model, "Buttons", Vector3.new(width - 0.6, 0.3, 0.12), frame * CFrame.new(0, height - 3.65, front - 0.05), Scenery.INK, false)
+	block(model, "Coin", Vector3.new(0.5, 0.9, 0.12), frame * CFrame.new(1.1, 2.2, front - 0.05), Color3.fromRGB(200, 205, 215), false)
+	block(model, "Tray", Vector3.new(width - 1, 0.8, 0.12), frame * CFrame.new(0, 0.9, front - 0.05), Scenery.INK, false)
+	local light = Instance.new("PointLight")
+	light.Color = Color3.fromRGB(255, 245, 220)
+	light.Range = 9
+	light.Brightness = 0.8
+	light.Parent = window
+	model.Parent = parent
+end
+
+--[[
+	Nobori : haute bannière verticale sur sa hampe, texte écrit de haut en bas.
+	`facing` : direction (à plat) vers laquelle la bannière se lit.
+]]
+function Scenery.Nobori(parent: Instance, ground: Vector3, color: Color3, text: string, facing: Vector3)
+	local model = Instance.new("Model")
+	model.Name = "Nobori"
+	local look = Vector3.new(facing.X, 0, facing.Z).Unit
+	local frame = CFrame.lookAt(ground, ground + look)
+	column(model, "Pole", 9, 0.25, ground, Color3.fromRGB(70, 60, 90), Enum.Material.SmoothPlastic, false)
+	block(model, "Crossbar", Vector3.new(1.8, 0.15, 0.15), frame * CFrame.new(0.9, 8.7, 0), Color3.fromRGB(70, 60, 90), false)
+	local banner = block(model, "Banner", Vector3.new(1.6, 6.2, 0.06), frame * CFrame.new(0.95, 5.5, 0), color, false)
+	-- Texte vertical : une lettre par ligne.
+	local letters = {}
+	for _, code in utf8.codes(text) do
+		table.insert(letters, utf8.char(code))
+	end
+	sign(banner, table.concat(letters, "\n"), color, Enum.NormalId.Front)
+	sign(banner, table.concat(letters, "\n"), color, Enum.NormalId.Back)
+	model.Parent = parent
+end
+
+--[[
+	Guirlande de lanternes en papier (chōchin) tendue entre deux mâts, de `from`
+	à `to` (points au sol) ; les mâts sont posés aussi.
+]]
+function Scenery.LanternString(parent: Instance, from: Vector3, to: Vector3, count: number, height: number?)
+	local model = Instance.new("Model")
+	model.Name = "LanternString"
+	local h = height or 9
+	for _, ground in ipairs({ from, to }) do
+		column(model, "LanternPole", h + 0.5, 0.35, ground, Color3.fromRGB(110, 70, 60), Enum.Material.SmoothPlastic, false)
+	end
+	local a, b = from + Vector3.new(0, h, 0), to + Vector3.new(0, h, 0)
+	local span = (b - a).Magnitude
+	local cable = block(model, "Cable", Vector3.new(0.08, 0.08, span), CFrame.lookAt((a + b) / 2, b), Scenery.INK, false)
+	cable.CastShadow = false
+	for i = 1, count do
+		local t = i / (count + 1)
+		-- Le fil fait le ventre : les lanternes du milieu pendent plus bas.
+		local sag = 1.2 * 4 * t * (1 - t)
+		local at = a:Lerp(b, t) - Vector3.new(0, sag + 0.9, 0)
+		local red = i % 2 == 1
+		local lantern = piece(model, "Chochin", Enum.PartType.Cylinder, Vector3.new(1.5, 1.2, 1.2), CFrame.new(at) * UPRIGHT, if red then Color3.fromRGB(235, 60, 60) else Color3.fromRGB(255, 240, 210), Enum.Material.Neon, false)
+		lantern.CastShadow = false
+		block(model, "ChochinCap", Vector3.new(0.9, 0.2, 0.9), CFrame.new(at + Vector3.new(0, 0.8, 0)), Scenery.INK, false)
+	end
+	model.Parent = parent
+end
+
+--[[
+	Stand de rue (yatai) : comptoir, toit à deux pentes, rideau noren découpé
+	en bandes avec son enseigne, une lanterne et deux tabourets. Comptoir
+	vers LookVector.
+]]
+function Scenery.FoodStand(parent: Instance, frame: CFrame, color: Color3, text: string)
+	local model = Instance.new("Model")
+	model.Name = "FoodStand"
+	local width, depth = 8, 4
+	local wood = Color3.fromRGB(190, 130, 85)
+	block(model, "Counter", Vector3.new(width, 3, depth), frame * CFrame.new(0, 1.5, 0), wood, true)
+	block(model, "CounterTop", Vector3.new(width + 0.4, 0.3, depth + 0.6), frame * CFrame.new(0, 3.15, -0.3), Scenery.CREAM, false)
+	for _, side in ipairs({ -1, 1 }) do
+		block(model, "Post", Vector3.new(0.4, 4.5, 0.4), frame * CFrame.new(side * (width / 2 - 0.3), 5.5, depth / 2 - 0.3), wood, false)
+		block(model, "Post", Vector3.new(0.4, 4.5, 0.4), frame * CFrame.new(side * (width / 2 - 0.3), 5.5, -depth / 2 + 0.3), wood, false)
+	end
+	for _, side in ipairs({ -1, 1 }) do
+		local roof = Instance.new("WedgePart")
+		roof.Name = "Roof"
+		roof.Anchored = true
+		roof.CanCollide = false
+		roof.CanTouch = false
+		roof.Size = Vector3.new(width + 1, 1.2, depth / 2 + 0.8)
+		roof.CFrame = frame * CFrame.new(0, 8.4, side * (depth / 4 + 0.4)) * (if side > 0 then CFrame.Angles(0, math.pi, 0) else CFrame.identity)
+		roof.Color = color
+		roof.Material = Enum.Material.SmoothPlastic
+		roof:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
+		ToonDecor.Tag(roof)
+		roof.Parent = model
+	end
+	-- Noren : bandes de tissu sous l'avant-toit, l'enseigne sur la bande du milieu.
+	local strips = 4
+	for i = 1, strips do
+		local x = -width / 2 + (i - 0.5) * width / strips
+		local strip = block(model, "Noren", Vector3.new(width / strips - 0.15, 1.6, 0.06), frame * CFrame.new(x, 6.9, -depth / 2 - 0.2), Scenery.CREAM, false)
+		if i == math.ceil(strips / 2) then
+			sign(strip, text, Scenery.CREAM, Enum.NormalId.Front)
+		end
+	end
+	local lantern = piece(model, "Chochin", Enum.PartType.Cylinder, Vector3.new(1.6, 1.3, 1.3), frame * CFrame.new(width / 2 - 0.6, 6.2, -depth / 2 - 0.6) * UPRIGHT, Color3.fromRGB(235, 60, 60), Enum.Material.Neon, false)
+	lantern.CastShadow = false
+	for _, x in ipairs({ -1.8, 1.8 }) do
+		column(model, "Stool", 2, 1.1, (frame * CFrame.new(x, 0, -depth / 2 - 1.6)).Position, Color3.fromRGB(235, 60, 60), Enum.Material.SmoothPlastic, false)
+	end
+	model.Parent = parent
+end
+
+-- Bordure rouge et blanche (vibreur), de `from` à `to`, au sol.
+function Scenery.Kerb(parent: Instance, from: Vector3, to: Vector3)
+	local flatDelta = Vector3.new(to.X - from.X, 0, to.Z - from.Z)
+	local length = flatDelta.Magnitude
+	if length < 1 then
+		return
+	end
+	local direction = flatDelta.Unit
+	local step = 3
+	local count = math.max(1, math.floor(length / step))
+	local each = length / count
+	for i = 0, count - 1 do
+		local mid = from + direction * (each * (i + 0.5))
+		local part = block(parent, "Kerb", Vector3.new(1.6, 0.25, each - 0.05), CFrame.lookAt(mid + Vector3.new(0, 0.125, 0), mid + Vector3.new(0, 0.125, 0) + direction), if i % 2 == 0 then Color3.fromRGB(230, 50, 60) else Color3.new(1, 1, 1), false)
+		part.CastShadow = false
+		CollectionService:RemoveTag(part, ToonDecor.INK_TAG) -- trop bas pour un trait
+	end
+end
+
+-- Banc en bois, assise vers LookVector.
+function Scenery.Bench(parent: Instance, frame: CFrame)
+	local model = Instance.new("Model")
+	model.Name = "Bench"
+	local wood = Color3.fromRGB(200, 140, 90)
+	block(model, "Seat", Vector3.new(6, 0.35, 1.6), frame * CFrame.new(0, 1.6, 0), wood, true)
+	block(model, "Back", Vector3.new(6, 1.4, 0.3), frame * CFrame.new(0, 2.6, 0.75), wood, false)
+	for _, x in ipairs({ -2.6, 2.6 }) do
+		block(model, "Leg", Vector3.new(0.4, 1.6, 1.4), frame * CFrame.new(x, 0.8, 0), Scenery.INK, false)
+	end
+	model.Parent = parent
+end
+
+--[[
+	Pétales de cerisier qui tombent sur une zone (centre, taille au sol) : un
+	émetteur au-dessus, des pétales roses qui virevoltent.
+]]
+function Scenery.PetalFall(parent: Instance, center: Vector3, size: Vector2, rate: number?)
+	local source = Instance.new("Part")
+	source.Name = "PetalSource"
+	source.Anchored = true
+	source.CanCollide = false
+	source.CanQuery = false
+	source.CanTouch = false
+	source.Transparency = 1
+	source.Size = Vector3.new(size.X, 1, size.Y)
+	source.CFrame = CFrame.new(center + Vector3.new(0, 26, 0))
+	local petals = Instance.new("ParticleEmitter")
+	petals.Name = "Petals"
+	petals.Texture = if Scenery.PETAL_TEXTURE ~= 0 then "rbxassetid://" .. tostring(Scenery.PETAL_TEXTURE) else "rbxasset://textures/particles/sparkles_main.dds"
+	petals.Color = ColorSequence.new(Scenery.SAKURA, Color3.fromRGB(255, 220, 232))
+	petals.LightEmission = 0.2
+	petals.Size = NumberSequence.new(0.35)
+	petals.Rate = rate or 18
+	petals.Lifetime = NumberRange.new(8, 12)
+	petals.Speed = NumberRange.new(1, 2)
+	petals.EmissionDirection = Enum.NormalId.Bottom
+	petals.SpreadAngle = Vector2.new(30, 30)
+	petals.Acceleration = Vector3.new(0.8, -2.5, 0.4)
+	petals.Drag = 0.6
+	petals.Rotation = NumberRange.new(0, 360)
+	petals.RotSpeed = NumberRange.new(-90, 90)
+	petals.Parent = source
+	source.Parent = parent
 end
 
 return Scenery
