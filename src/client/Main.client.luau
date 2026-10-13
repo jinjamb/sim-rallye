@@ -42,6 +42,8 @@ local Banner = require(script.Parent.UI.Banner)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceClient = require(script.Parent.Race.RaceClient)
+local RaceHud = require(script.Parent.Race.RaceHud)
+local ChaseCamera = require(script.Parent.Camera.ChaseCamera)
 local Garage = require(script.Parent.UI.Garage)
 local Theme = require(script.Parent.UI.Theme)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
@@ -49,6 +51,7 @@ local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Tutorial = require(script.Parent.Tutorial.Tutorial)
 local Slipstream = require(script.Parent.Driving.Slipstream)
 local Dents = require(script.Parent.Driving.Dents)
+local Settings = require(script.Parent.Core.Settings)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -221,6 +224,28 @@ raceClient = RaceClient.new({
 		startReplay(which)
 	end,
 })
+
+-- Réglages (onglet OPTIONS) qui touchent ce que Main tient : aide des
+-- commandes, mini-carte de la course, boîte de la voiture en cours.
+Settings.OnChanged(function(id: string, value: any)
+	if id == "FieldOfView" then
+		ChaseCamera.SetFieldOfView(value)
+	elseif id == "CameraShake" then
+		ChaseCamera.SetShakeScale(value)
+	elseif id == "Dents" then
+		Dents.SetEnabled(value)
+	elseif id == "Minimap" then
+		RaceHud.ShowMinimap = value
+		raceClient.Hud:RefreshMinimap()
+	elseif id == "ControlsHint" then
+		controlsHint:SetCollapsed(not value)
+	elseif id == "Gearbox" then
+		local current = session
+		if current then
+			current.Car.Powertrain.Gearbox:SetAutomatic(value == true)
+		end
+	end
+end)
 
 -- Ralenti : "Own" = son meilleur passage, "Opponent" = le fantôme affronté.
 --[[
@@ -585,6 +610,8 @@ local function startSession(model: Model)
 		return
 	end
 	session = created
+	-- Boîte de vitesses au départ : le choix du joueur (onglet OPTIONS).
+	created.Car.Powertrain.Gearbox:SetAutomatic(Settings.Value("Gearbox") == true)
 	-- Les chocs de SA voiture secouent la caméra.
 	Dents.LocalModel = model
 	Dents.OnLocalHit = function(_zone: number, amount: number)
@@ -692,6 +719,9 @@ Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
 	end
 	raceClient:SetProfile(profile.Stats, profile.Laps)
 	raceClient:SetLivery(profile.Livery)
+	-- Réglages du joueur (onglet OPTIONS), appliqués tout de suite.
+	Settings.Load(profile.Options)
+	raceClient:RefreshMenu()
 end)
 
 print("[Paddock] Bienvenue ! C : menu (spéciale, rallycross, essais libres, records). Au paddock : une zone par circuit, zone jaune = ta voiture, zone violette = garage (couleur, numéro, réglages). H : retour au paddock")
@@ -909,6 +939,7 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.Horn()
 	elseif key == Enum.KeyCode.N then
 		local mode = CopilotVoice.Cycle(1)
+		Settings.SyncCopilot()
 		Toast.Show("Voix du copilote : <b>" .. CopilotVoice.MODE_NAMES[mode] .. "</b>", Theme.BLUE)
 		raceClient:RefreshMenu()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).

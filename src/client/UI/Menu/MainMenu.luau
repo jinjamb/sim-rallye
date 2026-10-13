@@ -17,7 +17,8 @@
 		PASS       PassPage (Rallye Pass : paliers, récompenses, premium) ;
 		ÉCURIE     TeamPage (son écurie, invitations, classement des écuries) ;
 		BOUTIQUE   ShopPage (solde, crédits, objets) ;
-		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière).
+		CARRIÈRE   CareerPage (sa voiture, records du tour, carrière) ;
+		OPTIONS    OptionsPage (son, conduite, caméra, affichage).
 	Pendant une course, RacePage remplace tout (sans onglets).
 
 	À pied, la barre de boutons à gauche (HubBar.luau) ouvre chaque onglet
@@ -46,6 +47,7 @@ local CareerPage = require(script.Parent.CareerPage)
 local RacePage = require(script.Parent.RacePage)
 local HubBar = require(script.Parent.HubBar)
 local InventoryPage = require(script.Parent.InventoryPage)
+local OptionsPage = require(script.Parent.OptionsPage)
 local Widgets = require(script.Parent.Parent.Widgets)
 local Theme = require(script.Parent.Parent.Theme)
 
@@ -92,6 +94,7 @@ local TABS: { Tab } = {
 	{ Id = "Team", Name = "ÉCURIE", Icon = "🤝" },
 	{ Id = "Shop", Name = "BOUTIQUE", Icon = "🛒" },
 	{ Id = "Career", Name = "CARRIÈRE", Icon = "🏆" },
+	{ Id = "Options", Name = "OPTIONS", Icon = "⚙️" },
 }
 local SCREEN_PADDING = 24
 local TOUCH_SCALE = 1.1
@@ -191,7 +194,7 @@ function MainMenu.new(playerGui: Instance, localUserId: number, action: (string,
 		name.TextXAlignment = Enum.TextXAlignment.Center
 		name.Position = UDim2.fromOffset(2, 25)
 		name.Size = UDim2.new(1, -4, 0, 16)
-		-- Sept onglets : un nom long (INVENTAIRE) rétrécit pour tenir.
+		-- Huit onglets : un nom long (INVENTAIRE) rétrécit pour tenir.
 		name.TextScaled = true
 		local nameLimit = Instance.new("UITextSizeConstraint")
 		nameLimit.MaxTextSize = 12
@@ -293,6 +296,8 @@ local function buildTab(ctx: MenuKit.Context, b: MenuKit.Builder, tab: string)
 		ShopPage.Rolls(ctx, b)
 		ShopPage.Catalog(ctx, b)
 		ShopPage.CreditPacks(ctx, b)
+	elseif tab == "Options" then
+		OptionsPage.Options(ctx, b)
 	elseif tab == "Career" then
 		CareerPage.Car(ctx, b)
 		CareerPage.Records(ctx, b)

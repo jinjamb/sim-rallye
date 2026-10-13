@@ -22,6 +22,7 @@ local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
+local Options = require(ReplicatedStorage.Shared.Settings.Options)
 
 local ProfileSchema = {}
 
@@ -90,6 +91,7 @@ export type Profile = {
 	ChampionshipXp: number, -- XP gagnée à l'arrivée des rallyes, cumulée
 	ChampionshipsDone: number, -- rallyes terminés
 	TutorialDone: boolean, -- tutoriel express terminé (ou passé) : plus proposé
+	Options: { [string]: number }, -- réglages du joueur : indice du choix par option (Options.luau)
 	ReferredBy: number?, -- parrain : l'ami qui a invité ce joueur à sa première venue (ReferralService)
 	ReferralQualified: boolean, -- ce filleul a pris le volant : récompenses du parrainage données
 	Referrals: number, -- amis parrainés récompensés
@@ -158,6 +160,7 @@ function ProfileSchema.Empty(userId: number): Profile
 		XpBoostUntil = 0,
 		PremiumPassSeason = nil,
 		TutorialDone = false,
+		Options = Options.Defaults(),
 		ReferredBy = nil,
 		ReferralQualified = false,
 		Referrals = 0,
@@ -239,6 +242,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.ChampionshipXp = count(data.ChampionshipXp)
 	profile.ChampionshipsDone = count(data.ChampionshipsDone)
 	profile.TutorialDone = data.TutorialDone == true
+	profile.Options = Options.Sanitize(data.Options)
 	profile.ReferredBy = if type(data.ReferredBy) == "number" and data.ReferredBy > 0 then math.floor(data.ReferredBy) else nil
 	profile.ReferralQualified = data.ReferralQualified == true
 	profile.Referrals = count(data.Referrals)

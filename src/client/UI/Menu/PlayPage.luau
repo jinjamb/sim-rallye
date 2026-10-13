@@ -21,6 +21,7 @@ local RaceTypes = require(script.Parent.Parent.Parent.Race.RaceTypes)
 local MenuKit = require(script.Parent.MenuKit)
 local Theme = require(script.Parent.Parent.Theme)
 local CopilotVoice = require(script.Parent.Parent.Parent.Audio.CopilotVoice)
+local Settings = require(script.Parent.Parent.Parent.Core.Settings)
 local Widgets = require(script.Parent.Parent.Widgets)
 
 type Context = MenuKit.Context
@@ -182,6 +183,7 @@ function PlayPage.Stage(ctx: Context, b: Builder)
 	-- Voix du copilote (aussi : touche N).
 	MenuKit.Stepper(ctx, b, "Voix du copilote (N)", CopilotVoice.MODE_NAMES[CopilotVoice.GetMode()], function(direction)
 		CopilotVoice.Cycle(direction)
+		Settings.SyncCopilot() -- le choix de l'onglet OPTIONS suit
 		ctx.Rebuild()
 	end)
 end

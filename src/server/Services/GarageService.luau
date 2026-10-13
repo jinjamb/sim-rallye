@@ -18,6 +18,7 @@ local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Options = require(ReplicatedStorage.Shared.Settings.Options)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local ProgressService = require(script.Parent.ProgressService)
 
@@ -97,9 +98,26 @@ function GarageService.Start()
 		GarageService.LiveryChanged(player)
 	end)
 
+	-- Réglages du joueur (onglet OPTIONS) : remis en forme puis sauvegardés.
+	local lastOptionsAt: { [Player]: number } = {}
+	Remotes.SaveOptions.OnServerEvent:Connect(function(player: Player, input: any)
+		local profile = ProfileStore.Get(player)
+		if not profile then
+			return
+		end
+		local now = os.clock()
+		if now - (lastOptionsAt[player] or 0) < SAVE_COOLDOWN then
+			return
+		end
+		lastOptionsAt[player] = now
+		profile.Options = Options.Sanitize(input)
+		deferSave(player)
+	end)
+
 	Players.PlayerRemoving:Connect(function(player: Player)
 		lastSetupAt[player] = nil
 		lastLiveryAt[player] = nil
+		lastOptionsAt[player] = nil
 	end)
 end
 

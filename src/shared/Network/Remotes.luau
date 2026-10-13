@@ -143,6 +143,8 @@ export type Remotes = {
 	-- Client -> Serveur : (zone, gravité) un choc avec une autre voiture sur
 	-- SA voiture (CarDamage.luau) ; le serveur note la bosse (Dent1..Dent8).
 	CarDamage: RemoteEvent,
+	-- Client -> Serveur : (options) les réglages du joueur (Options.luau), à sauvegarder.
+	SaveOptions: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -193,6 +195,7 @@ local RELIABLE = {
 	"TutorialAction",
 	"ReferralState",
 	"CarDamage",
+	"SaveOptions",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

@@ -24,6 +24,7 @@ local SoundService = game:GetService("SoundService")
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 local SoundBank = require(script.Parent.Parent.Audio.SoundBank)
+local SoundGroups = require(script.Parent.Parent.Audio.SoundGroups)
 local Toast = require(script.Parent.Parent.UI.Toast)
 local Theme = require(script.Parent.Parent.UI.Theme)
 
@@ -125,6 +126,7 @@ function WeatherClient.Start(forecast: Weather.Forecast): () -> ()
 		created.SoundId = SoundBank.Rain
 		created.Looped = true
 		created.Volume = 0
+		created.SoundGroup = SoundGroups.Get("Effets")
 		created.Parent = SoundService
 		created:Play()
 		sound = created

@@ -44,6 +44,7 @@ local SoundService = game:GetService("SoundService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local SoundBank = require(script.Parent.SoundBank)
+local SoundGroups = require(script.Parent.SoundGroups)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarClass = require(script.Parent.Parent.Physics.Car)
@@ -142,10 +143,8 @@ local function getGroup(): SoundGroup
 	if group then
 		return group
 	end
-	local created = Instance.new("SoundGroup")
-	created.Name = "Voitures"
-	created.Volume = SoundBank.MasterVolume
-	created.Parent = SoundService
+	-- Famille « Voitures » (SoundGroups.luau) : son volume suit les OPTIONS.
+	local created = SoundGroups.Get("Voitures")
 	sharedGroup = created
 	return created
 end

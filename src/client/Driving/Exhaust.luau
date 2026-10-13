@@ -33,6 +33,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local SoundBank = require(script.Parent.Parent.Audio.SoundBank)
+local SoundGroups = require(script.Parent.Parent.Audio.SoundGroups)
 
 local Exhaust = {}
 Exhaust.__index = Exhaust
@@ -82,6 +83,7 @@ local function makeSounds(ids: { string }, parent: Instance, volume: number): { 
 			sound.RollOffMode = Enum.RollOffMode.InverseTapered
 			sound.RollOffMinDistance = 12
 			sound.RollOffMaxDistance = 300
+			sound.SoundGroup = SoundGroups.Get("Effets")
 			sound.Parent = parent
 			table.insert(sounds, sound)
 		end
@@ -171,6 +173,7 @@ function Exhaust.new(chassis: BasePart, model: Model?): Exhaust
 	own.RollOffMode = Enum.RollOffMode.InverseTapered
 	own.RollOffMinDistance = 12
 	own.RollOffMaxDistance = 300
+	own.SoundGroup = SoundGroups.Get("Effets")
 	own.Parent = attachment
 	self.OwnBang = own
 	self.Pops = makeSounds(SoundBank.AntiLagPops, attachment, 0.5)

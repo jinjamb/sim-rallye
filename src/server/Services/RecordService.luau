@@ -356,6 +356,7 @@ function RecordService.Start()
 			Livery = profile.Livery,
 			Stats = profile.Stats,
 			Laps = profile.Laps,
+			Options = profile.Options,
 		})
 		Remotes.Leaderboard:FireClient(player, leaderboards)
 		Remotes.TrackRecords:FireClient(player, lapBoards)

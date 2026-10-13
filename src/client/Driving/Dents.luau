@@ -28,6 +28,7 @@ local RunService = game:GetService("RunService")
 
 local CarDamage = require(ReplicatedStorage.Shared.Vehicle.CarDamage)
 local SoundBank = require(script.Parent.Parent.Audio.SoundBank)
+local SoundGroups = require(script.Parent.Parent.Audio.SoundGroups)
 
 local Dents = {}
 
@@ -50,6 +51,8 @@ type CarState = {
 
 local cars: { [Model]: CarState } = {}
 local started = false
+local enabled = true -- onglet OPTIONS : « Bosses et étincelles »
+local INTACT = table.create(CarDamage.ZONE_COUNT, 0)
 
 -- Prévenu à chaque nouvelle bosse de la voiture du joueur (secousse, son...).
 Dents.OnLocalHit = nil :: ((zone: number, amount: number) -> ())?
@@ -106,9 +109,10 @@ local function collect(state: CarState)
 	state.HalfWidth, state.HalfLength = maxX, maxZ
 end
 
--- Replace chaque pièce d'après les bosses actuelles.
-local function apply(state: CarState)
+-- Replace chaque pièce d'après les bosses actuelles (ou intacte : dents).
+local function apply(state: CarState, dents: { number }?)
 	collect(state)
+	local shown = dents or state.Dents
 	local chassis = state.Chassis
 	local hw, hl = state.HalfWidth, state.HalfLength
 	for part, rest in pairs(state.Rest) do
@@ -116,7 +120,7 @@ local function apply(state: CarState)
 		local edge = math.max(math.abs(p.X) / hw, math.abs(p.Z) / hl)
 		local reach = math.clamp((edge - INNER) / (1 - INNER), 0, 1) ^ 1.5
 		local angle = CarDamage.AngleOf(Vector3.new(p.X, 0, p.Z))
-		local amount = CarDamage.At(state.Dents, angle) * reach
+		local amount = CarDamage.At(shown, angle) * reach
 		local target = rest
 		if amount > 0.005 then
 			-- Vers l'intérieur, perpendiculairement au contour (ellipse du gabarit).
@@ -197,6 +201,7 @@ local function burst(state: CarState, zone: number, amount: number)
 		sound.Volume = 0.4 + amount
 		sound.PlaybackSpeed = 0.9 + math.random() * 0.25
 		sound.RollOffMaxDistance = 300
+		sound.SoundGroup = SoundGroups.Get("Effets")
 		sound.Parent = attachment
 		sound:Play()
 	end
@@ -207,7 +212,7 @@ local function refresh(state: CarState)
 	for zone = 1, CarDamage.ZONE_COUNT do
 		local gained = fresh[zone] - state.Dents[zone]
 		-- Une bosse franche (pas le simple report sur les zones voisines).
-		if gained > 0.05 and fresh[zone] >= math.max(fresh[(zone - 2) % 8 + 1], fresh[zone % 8 + 1]) then
+		if enabled and gained > 0.05 and fresh[zone] >= math.max(fresh[(zone - 2) % 8 + 1], fresh[zone % 8 + 1]) then
 			burst(state, zone, gained)
 			if state.Model == Dents.LocalModel and Dents.OnLocalHit then
 				(Dents.OnLocalHit :: any)(zone, gained)
@@ -253,6 +258,17 @@ local function track(chassis: Instance)
 	refresh(state)
 end
 
+-- Bosses et étincelles affichées ou non (les bosses restent connues).
+function Dents.SetEnabled(on: boolean)
+	if enabled == on then
+		return
+	end
+	enabled = on
+	for _, state in pairs(cars) do
+		state.Dirty = true
+	end
+end
+
 function Dents.Start()
 	if started then
 		return
@@ -279,7 +295,7 @@ function Dents.Start()
 					end
 				end
 				if any then
-					apply(state)
+					apply(state, if enabled then nil else INTACT)
 				end
 			end
 		end

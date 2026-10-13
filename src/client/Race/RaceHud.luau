@@ -37,8 +37,12 @@ local Format = require(ReplicatedStorage.Shared.Util.Format)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local Minimap = require(script.Parent.Minimap)
 local SoundBank = require(script.Parent.Parent.Audio.SoundBank)
+local SoundGroups = require(script.Parent.Parent.Audio.SoundGroups)
 
 local RaceHud = {}
+
+-- Mini-carte en course (onglet OPTIONS : « Mini-carte en course »).
+RaceHud.ShowMinimap = true
 RaceHud.__index = RaceHud
 
 export type Callbacks = {
@@ -434,6 +438,12 @@ end
 -- Disposition
 --------------------------------------------------------------------------------
 
+-- Applique le réglage de la mini-carte tout de suite (sinon à la prochaine course).
+function RaceHud:RefreshMinimap()
+	local race = self.Race
+	self.MinimapHolder.Visible = race ~= nil and race.State ~= "Lobby" and RaceHud.ShowMinimap
+end
+
 function RaceHud:SetTouchLayout(enabled: boolean)
 	self.TouchLayout = enabled
 	-- Mobile : la rangée de boutons tactiles occupe le haut, le volant le bas gauche.
@@ -498,7 +508,7 @@ function RaceHud:SetRace(race: RaceTypes.RaceSnapshot?)
 	self.LobbyBanner.Visible = inLobby
 	self.Info.Visible = not inLobby
 	self.Standings.Visible = not inLobby and not self.TouchLayout
-	self.MinimapHolder.Visible = not inLobby
+	self.MinimapHolder.Visible = not inLobby and RaceHud.ShowMinimap
 	if inLobby then
 		self.Live = nil
 		self:HideResults()
@@ -649,6 +659,7 @@ function RaceHud:_lightSound(kind: string)
 		sound.SoundId = spec.Id
 		sound.Volume = spec.Volume
 		sound.PlaybackSpeed = spec.Pitch
+		sound.SoundGroup = SoundGroups.Get("Effets")
 		sound.Parent = SoundService
 		self.LightSounds[kind] = sound
 	end

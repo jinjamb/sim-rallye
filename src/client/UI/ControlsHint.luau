@@ -259,6 +259,13 @@ function ControlsHint:Update(visible: boolean, racing: boolean)
 end
 
 -- F1 : replie ou rouvre l'aide.
+-- Repliée ou dépliée (onglet OPTIONS : « Aide des commandes »).
+function ControlsHint:SetCollapsed(collapsed: boolean)
+	if self.Collapsed ~= collapsed then
+		self:ToggleCollapsed()
+	end
+end
+
 function ControlsHint:ToggleCollapsed()
 	self.Collapsed = not self.Collapsed
 	self.Shown = ""

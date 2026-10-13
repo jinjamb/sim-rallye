@@ -31,6 +31,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local SoundService = game:GetService("SoundService")
 
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
+local SoundGroups = require(script.Parent.SoundGroups)
 
 local CopilotVoice = {}
 
@@ -132,7 +133,7 @@ local function generate()
 					tts.VoiceId = VOICE_IDS[mode]
 					tts.AutoLocalize = false -- le jeu est en français : la voix aussi
 					tts.Speed = SPEECH_SPEED
-					tts.Volume = SPEECH_VOLUME
+					tts.Volume = SPEECH_VOLUME * SoundGroups.Level("Voix")
 					local wire = Instance.new("Wire" :: any) :: any
 					wire.SourceInstance = tts
 					wire.TargetInstance = audioOutput()
@@ -174,6 +175,7 @@ local function clipFor(word: string): Sound?
 		created.SoundId = "rbxassetid://" .. tostring(id)
 		created.PlaybackSpeed = CLIP_SPEED
 		created.Volume = 1
+		created.SoundGroup = SoundGroups.Get("Voix")
 		created.Parent = SoundService
 		clipSounds[word] = created
 		sound = created
@@ -340,6 +342,16 @@ end
 
 function CopilotVoice.GetMode(): Mode
 	return mode
+end
+
+-- Choisit la voix (onglet OPTIONS).
+function CopilotVoice.SetMode(wanted: Mode)
+	if wanted == mode or not table.find(CopilotVoice.MODES, wanted) then
+		return
+	end
+	local index = table.find(CopilotVoice.MODES, mode) or 1
+	local target = table.find(CopilotVoice.MODES, wanted) or 1
+	CopilotVoice.Cycle(target - index)
 end
 
 -- Change de voix (`direction` : +1 ou -1 dans MODES) ; renvoie la nouvelle.

@@ -30,6 +30,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `School/`      | `Lessons` : les leçons de l'école de pilotage.                                           |
 | `Cosmetics/`   | `Livery` (livrée), `LiveryPainter` (peinture de la voiture, côté serveur et aperçu client) et `Celebrations` (effets de podium). |
 | `Economy/`     | `Credits` (monnaie et barème des gains), `Rarity` (raretés), `Catalog` (tous les objets, leurs sources), `Items/` (les objets de chaque sorte), `Products` (achats en Robux), `Rolls` (règles et probabilités des tirages), `Pass` (saisons et paliers du Rallye Pass). `Items/Parts` : les pièces de carrosserie. |
+| `Settings/`    | `Options` : la liste des réglages du joueur (son, conduite, caméra, affichage), leurs choix et leur remise en forme, partagée par le profil et le menu. |
 | `Weather/`     | `Weather` : la météo (sec, pluie, variable), ses averses et l'eau sur la route, calculées de la même façon par le serveur et chaque client. |
 | `Championship/` | `Championships` : les rallyes du mode championnat (spéciales enchaînées, météo de chaque spéciale, rallye de la semaine). |
 | `Teams/`       | `Teams` : les écuries (taille, nom et sigle valides, couleurs communes).                  |
@@ -92,7 +93,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | Dossier    | Contenu                                                                                                       |
 |------------|---------------------------------------------------------------------------------------------------------------|
 | `Main.client.luau` | Point d'entrée. Il crée ce qui dure toute la partie et relie les modules entre eux.                   |
-| `Core/`    | Commandes (`InputManager`, `TouchControls`), avatar à pied (`CharacterControls`), journal console (`DebugLog`), invitation d'amis (`FriendInvite`). |
+| `Core/`    | Commandes (`InputManager`, `TouchControls`), avatar à pied (`CharacterControls`), journal console (`DebugLog`), invitation d'amis (`FriendInvite`), réglages du joueur (`Settings` : onglet OPTIONS, appliqués et sauvegardés dans le profil). |
 | `Physics/` | La voiture : roues, moteur, boîte, différentiels, aérodynamique.                                              |
 | `Audio/`   | Son des voitures (`CarAudio`), identifiants audio (`SoundBank`) et voix du copilote (`CopilotVoice` : mots enregistrés, sinon synthèse vocale). |
 | `Camera/`  | Caméra de poursuite et caméra de spectateur.                                                                  |
@@ -103,7 +104,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Weather/` | `WeatherClient` : la météo chez le pilote (adhérence mouillée, pluie, ciel, routes assombries).                |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
-| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), vignettes des objets (`ItemArt`), aide des commandes (`ControlsHint`), classement, réglages, garage, et le menu principal (`UI/Menu`, avec la barre de boutons `HubBar` et l'onglet `InventoryPage`). |
+| `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), vignettes des objets (`ItemArt`), aide des commandes (`ControlsHint`), classement, réglages, garage, et le menu principal (`UI/Menu`, avec la barre de boutons `HubBar` et les onglets `InventoryPage` et `OptionsPage`). |
 
 Le menu principal (`UI/Menu/MainMenu`) n'est qu'un cadre, avec des onglets. Chaque rubrique est un module (`PlayPage`, `ChampionshipPage`, `SessionPage`, `ChallengesPage`, `PassPage`, `TeamPage`, `ShopPage`…) qui reçoit un `MenuKit.Context` et ajoute ses lignes.
 

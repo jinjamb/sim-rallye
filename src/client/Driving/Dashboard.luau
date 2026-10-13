@@ -45,6 +45,7 @@ export type Dashboard = typeof(setmetatable({}, Dashboard)) & {
 	GearLabel: TextLabel,
 	ModeLabel: TextLabel,
 	SpeedLabel: TextLabel,
+	UnitLabel: TextLabel, -- KM/H ou MPH (Units.SpeedUnit)
 	WarningLabel: TextLabel,
 	Tires: { [string]: Frame },
 	DetailPanel: Frame,
@@ -282,6 +283,7 @@ function Dashboard.new(car: CarClass.Car, playerGui: Instance): Dashboard
 	Theme.TextInk(self.SpeedLabel, 2)
 	local unit = makeLabel(cluster, UDim2.fromOffset(DIAL_CENTER.X - 38, DIAL_CENTER.Y + 84), UDim2.fromOffset(96, 14), "KM/H", 13, Theme.HEADLINE, Enum.TextXAlignment.Center)
 	unit.TextColor3 = COLOR_TEXT_DIM
+	self.UnitLabel = unit
 
 	-- Témoin : étiquette penchée au-dessus de la plaque, seulement quand il y a lieu.
 	self.WarningLabel = makeLabel(cluster, UDim2.fromOffset(CLUSTER_WIDTH - 20, -14), UDim2.fromOffset(0, 22), "", 14, Theme.HEADLINE, Enum.TextXAlignment.Center)
@@ -485,7 +487,7 @@ function Dashboard:_updateDetail()
 			return string.format("%3.0f%%", w.NormalForce / cornerWeight * 100)
 		end),
 		row("roue", function(w)
-			return string.format("%.0f km/h", Units.ToKmh(w.AngularVelocity * w.Radius))
+			return string.format("%.0f %s", Units.Speed(w.AngularVelocity * w.Radius), Units.SpeedLabel())
 		end),
 		row("long", function(w)
 			return string.format("%+.2f", w.LongSlipNorm)
@@ -562,7 +564,8 @@ function Dashboard:Update(dt: number)
 		else "MANUEL"
 	self.ModeLabel.TextColor3 = if pending > 0 then COLOR_YELLOW else COLOR_TEXT_DIM
 
-	self.SpeedLabel.Text = string.format("%.0f", Units.ToKmh(car.Chassis.AssemblyLinearVelocity.Magnitude))
+	self.SpeedLabel.Text = string.format("%.0f", Units.Speed(car.Chassis.AssemblyLinearVelocity.Magnitude))
+	self.UnitLabel.Text = string.upper(Units.SpeedLabel())
 
 	for _, suffix in ipairs(WHEEL_ORDER) do
 		self.Tires[suffix].BackgroundColor3 = tireColor(car.WheelsByName["Wheel" .. suffix])
