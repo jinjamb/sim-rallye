@@ -13,7 +13,8 @@
 		  AVANT ce style (cartes enregistrées dans le place) et les modèles
 		  du Creator Store (ServerStorage.SceneryAssets) sont convertis : leurs
 		  textures photo sont retirées, leurs pièces recolorées selon leur
-		  sorte (pin, feuillu, rocher...).
+		  sorte (pin, feuillu, rocher...). Un modèle fait à la main dans le
+		  style porte l'attribut ToonReady : il garde ses couleurs.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -88,6 +89,16 @@ function ToonDecor.RestyleAsset(model: Model, kind: string)
 		return
 	end
 	model:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
+	-- Modèle fait à la main dans le style (attribut ToonReady) : ses couleurs
+	-- et ses textures restent ; il reçoit seulement le trait d'encre.
+	if model:GetAttribute("ToonReady") then
+		for _, item in ipairs(model:GetDescendants()) do
+			if item:IsA("BasePart") then
+				ToonDecor.Tag(item)
+			end
+		end
+		return
+	end
 	local _, box = model:GetBoundingBox()
 	local width = math.max(box.X, box.Z)
 	local p = ToonDecor.PALETTE
