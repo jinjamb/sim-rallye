@@ -15,6 +15,13 @@ local Stores = require(script.Parent.Stores)
 
 local Boards = {}
 
+--[[
+	Pilotes exclus de TOUS les classements (ModerationService : /bannir) :
+	absents de ce qui est lu, et rien de ce qu'ils font n'est envoyé.
+]]
+Boards.Excluded = {} :: { [number]: boolean }
+local EXCLUDED_SLACK = 10 -- lus en plus, pour compenser les exclus retirés
+
 export type Entry = { UserId: number, Name: string, Ms: number }
 
 local nameCache: { [number]: string } = {}
@@ -51,10 +58,10 @@ local function merge(store: OrderedDataStore?, session: { [number]: number }, si
 	local byUser: { [number]: Ranked } = {}
 	if Stores.Available() and store then
 		local ok, err = pcall(function()
-			local pages = store:GetSortedAsync(not highest, size)
+			local pages = store:GetSortedAsync(not highest, math.min(100, size + EXCLUDED_SLACK))
 			for _, item in ipairs(pages:GetCurrentPage()) do
 				local userId = tonumber(item.key)
-				if userId then
+				if userId and not Boards.Excluded[userId] then
 					local entry = { UserId = userId, Name = Boards.NameOf(userId), Value = item.value }
 					table.insert(entries, entry)
 					byUser[userId] = entry
@@ -66,6 +73,9 @@ local function merge(store: OrderedDataStore?, session: { [number]: number }, si
 		end
 	end
 	for userId, value in pairs(session) do
+		if Boards.Excluded[userId] then
+			continue
+		end
 		local existing = byUser[userId]
 		if existing then
 			existing.Value = if highest then math.max(existing.Value, value) else math.min(existing.Value, value)
@@ -105,10 +115,24 @@ function Boards.MergeScores(store: OrderedDataStore?, session: { [number]: numbe
 	return entries
 end
 
+-- Retire ce joueur d'un classement sauvegardé (ModerationService : /effacer).
+-- Attend la réponse : à appeler hors du fil principal.
+function Boards.Remove(store: OrderedDataStore?, userId: number, context: string)
+	if not store then
+		return
+	end
+	local ok, err = pcall(function()
+		store:RemoveAsync(tostring(userId))
+	end)
+	if not ok then
+		Stores.Failed(context, err)
+	end
+end
+
 -- Enregistre `value` pour ce joueur si elle bat (plus petite) celle du
 -- classement, en tâche de fond.
 function Boards.SubmitLowest(store: OrderedDataStore?, userId: number, value: number, context: string)
-	if not store then
+	if not store or Boards.Excluded[userId] then
 		return
 	end
 	task.spawn(function()
@@ -129,7 +153,7 @@ end
 -- Enregistre `value` pour ce joueur si elle bat (plus grande) celle du
 -- classement, en tâche de fond.
 function Boards.SubmitHighest(store: OrderedDataStore?, userId: number, value: number, context: string)
-	if not store then
+	if not store or Boards.Excluded[userId] then
 		return
 	end
 	task.spawn(function()
@@ -149,7 +173,7 @@ end
 
 -- Remplace la valeur de ce joueur, en tâche de fond.
 function Boards.Set(store: OrderedDataStore?, userId: number, value: number, context: string)
-	if not store then
+	if not store or Boards.Excluded[userId] then
 		return
 	end
 	task.spawn(function()

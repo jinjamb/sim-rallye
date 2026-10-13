@@ -84,6 +84,7 @@ end
 -- Classements des spéciales (un par spéciale et par catégorie)
 --------------------------------------------------------------------------------
 
+local ERASE_PACE = 0.8 -- secondes entre deux retraits d'un classement (modération)
 local sessionBest: Session = {} -- par Stages.BoardKey
 -- Par spéciale, puis par catégorie (ce que reçoit le client).
 local leaderboards: { [string]: { [string]: { Boards.Entry } } } = {}
@@ -247,6 +248,50 @@ local function pushProfile(player: Player)
 		Remotes.ProfileUpdated:FireClient(player, profile.Stats, profile.Laps)
 		ProgressService.Push(player, true)
 	end
+end
+
+--[[
+	Modération (ModerationService : /effacer, /bannir) : retire un pilote de
+	tous les classements de spéciales et de tours, toutes catégories. Les
+	écritures sont espacées (budget des DataStores) : à lancer en tâche de
+	fond, ça prend une à deux minutes.
+]]
+function RecordService.EraseFor(userId: number)
+	for _, stageId in ipairs(Stages.List()) do
+		for _, class in ipairs(CarClasses.LIST) do
+			local session = sessionBest[Stages.BoardKey(stageId, class.Id)]
+			if session then
+				session[userId] = nil
+			end
+			Boards.Remove(leaderboardStore(class.Id, stageId), userId, "modération")
+			task.wait(ERASE_PACE)
+		end
+	end
+	for _, trackId in ipairs(Tracks.List()) do
+		local circuit = Tracks.Get(trackId)
+		if circuit then
+			for _, class in ipairs(CarClasses.LIST) do
+				local key = ProfileSchema.LapKey(circuit.Key, class.Id)
+				local session = sessionLaps[key]
+				if session then
+					session[userId] = nil
+				end
+				Boards.Remove(lapStore(key), userId, "modération")
+				task.wait(ERASE_PACE)
+			end
+		end
+	end
+end
+
+-- Records personnels remis à zéro (temps, tours, fantômes) : on repart de rien.
+function RecordService.ResetProfile(player: Player)
+	local profile = ProfileStore.Get(player)
+	if not profile then
+		return
+	end
+	profile.Records = {}
+	profile.Laps = {}
+	pushProfile(player)
 end
 
 -- Tour bouclé en course. Renvoie true si c'est le meilleur tour du joueur
