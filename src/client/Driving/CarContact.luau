@@ -20,6 +20,10 @@
 	proportionnelle à l'interpénétration, et un léger frottement. Une voiture
 	que personne ne pilote ne réagit pas : on prend alors toute la réponse.
 
+	BOSSES : un choc assez franc (vitesse de rapprochement au-dessus de
+	CarDamage.THRESHOLD) est signalé au serveur avec la zone touchée de SA
+	voiture ; le serveur la cabosse pour tout le monde (Dents.luau).
+
 	La position de l'autre voiture est légèrement extrapolée (vitesse x
 	EXTRAPOLATION) pour compenser une partie du retard de réplication.
 	L'impulsion est appliquée au point de contact, à hauteur du centre : un choc
@@ -30,6 +34,8 @@ local CollectionService = game:GetService("CollectionService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local CarDamage = require(ReplicatedStorage.Shared.Vehicle.CarDamage)
+local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 
 local CarContact = {}
 CarContact.__index = CarContact
@@ -39,6 +45,7 @@ export type CarContact = typeof(setmetatable({}, CarContact)) & {
 	RaceId: string,
 	HalfWidth: number,
 	HalfLength: number,
+	LastHit: { [BasePart]: number }, -- dernier choc signalé, par voiture touchée
 }
 
 local CAR_TAG = "RallyCar"
@@ -60,6 +67,7 @@ function CarContact.new(car: CarClass.Car, raceId: string): CarContact
 	local self = (setmetatable({}, CarContact) :: any) :: CarContact
 	self.Car = car
 	self.RaceId = raceId
+	self.LastHit = setmetatable({}, { __mode = "k" }) :: any
 
 	-- Empreinte : celle du gabarit (carrosserie importée comprise), sinon du châssis.
 	local size = car.Chassis.Size
@@ -137,6 +145,18 @@ function CarContact:Step(_dt: number)
 		local relative = v1 - v2
 		local approach = relative:Dot(n) -- négatif : les voitures se rapprochent
 		local share = if other:GetAttribute("Driven") == true then 0.5 else 1
+
+		-- Bosse : un choc franc, signalé une fois (pas à chaque image du contact).
+		local amount = CarDamage.AmountFor(-approach)
+		if amount > 0 then
+			local now = os.clock()
+			if now - (self.LastHit[other] or -math.huge) > CarDamage.COOLDOWN then
+				self.LastHit[other] = now
+				-- Le choc arrive du côté de l'autre voiture : -n, vu depuis SA voiture.
+				local zone = CarDamage.ZoneOf(myFrame:VectorToObjectSpace(-n))
+				Remotes.CarDamage:FireServer(zone, amount)
+			end
+		end
 
 		local target = math.min(depth * PUSH_GAIN, MAX_PUSH)
 		if approach < 0 then

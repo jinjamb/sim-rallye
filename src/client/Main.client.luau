@@ -48,6 +48,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Tutorial = require(script.Parent.Tutorial.Tutorial)
 local Slipstream = require(script.Parent.Driving.Slipstream)
+local Dents = require(script.Parent.Driving.Dents)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -81,6 +82,9 @@ local isTouch = TouchControls.IsTouchDevice()
 --------------------------------------------------------------------------------
 -- Ce qui dure toute la partie
 --------------------------------------------------------------------------------
+
+-- Bosses des voitures après un contact (toutes les voitures, chez chacun).
+Dents.Start()
 
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)
@@ -581,6 +585,13 @@ local function startSession(model: Model)
 		return
 	end
 	session = created
+	-- Les chocs de SA voiture secouent la caméra.
+	Dents.LocalModel = model
+	Dents.OnLocalHit = function(_zone: number, amount: number)
+		if session == created then
+			created.ChaseCamera:Jolt(amount * 2)
+		end
+	end
 	-- Réglages et adversaire fantôme de la catégorie de cette voiture.
 	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId), created.CarModel)
 	ghostChallenge:SetClass(created.ClassId)

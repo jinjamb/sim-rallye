@@ -20,7 +20,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 |----------------|------------------------------------------------------------------------------------------|
 | `Network/`     | `Remotes` : la liste de tous les RemoteEvents (créés par le serveur, attendus par le client). |
 | `Util/`        | `Format` (temps, milliers, compte à rebours) et `Units` (échelle stud/mètre, gravité).    |
-| `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, WRC, Groupe B, aérodynamique comprise), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
+| `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, WRC, Groupe B, aérodynamique comprise), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarDamage` (bosses après un contact entre voitures : huit zones, signalées par le pilote, vérifiées par le serveur), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
 | `Stage/`       | Les spéciales : `Stages` (la liste des spéciales et leurs tracés), `StageTrack` (construction d'un tracé, abscisse) et `Pacenotes` (notes du copilote). |
 | `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
@@ -96,7 +96,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `Physics/` | La voiture : roues, moteur, boîte, différentiels, aérodynamique.                                              |
 | `Audio/`   | Son des voitures (`CarAudio`), identifiants audio (`SoundBank`) et voix du copilote (`CopilotVoice` : mots enregistrés, sinon synthèse vocale). |
 | `Camera/`  | Caméra de poursuite et caméra de spectateur.                                                                  |
-| `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style. |
+| `Driving/` | Une session de conduite (`DrivingSession` : une voiture, de son apparition à sa disparition), tableau de bord, effets (poussière, fumée colorée `TireSmoke`, klaxon `Horn`), voitures des autres joueurs, points de style, contact entre voitures (`CarContact`) et carrosserie cabossée (`Dents`, d'après les bosses de `CarDamage`). |
 | `Stage/`   | Ce qui sert sur la spéciale : chrono, copilote, fantômes, contrainte du défi (`StageModifier` : nuit, pluie, brouillard…). |
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Tutorial/` | `Tutorial` : le tutoriel express (un nouveau pilote au volant dès son arrivée, guidé en quatre étapes selon son appareil). |

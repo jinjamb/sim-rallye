@@ -131,6 +131,11 @@ function ChaseCamera:Enter()
 	end
 end
 
+-- Secousse franche (un choc contre une autre voiture : Dents.luau), de 0 à 1.
+function ChaseCamera:Jolt(strength: number)
+	self.BumpEnergy = math.max(self.BumpEnergy, BUMP_MAX * math.clamp(strength, 0, 1))
+end
+
 function ChaseCamera:Exit()
 	self.Active = false
 	self.Camera.FieldOfView = BASE_FOV

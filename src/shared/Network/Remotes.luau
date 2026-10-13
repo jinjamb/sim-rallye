@@ -140,6 +140,9 @@ export type Remotes = {
 	-- Serveur -> Client : (state, news?) { Referrals, Max, InviterCredits, InviterRolls,
 	-- NewcomerCredits } ; news : { Welcome } | { Bonus, Inviter } | { Rewarded, Credits, Rolls }
 	ReferralState: RemoteEvent,
+	-- Client -> Serveur : (zone, gravité) un choc avec une autre voiture sur
+	-- SA voiture (CarDamage.luau) ; le serveur note la bosse (Dent1..Dent8).
+	CarDamage: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -189,6 +192,7 @@ local RELIABLE = {
 	"Tutorial",
 	"TutorialAction",
 	"ReferralState",
+	"CarDamage",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

@@ -185,6 +185,11 @@ end
 	lag », « crackle ».
 ]]
 SoundBank.Backfire = {} :: { string }
+
+-- Choc entre voitures (Driving/Dents.luau), joué au point de choc, plus fort
+-- quand la bosse est grosse. Vide : les étincelles sans le son. À chercher
+-- dans le Creator Store : « car crash », « metal impact », « car hit ».
+SoundBank.Crash = {} :: { string }
 SoundBank.AntiLagPops = {} :: { string }
 
 -- Crissement de pneu sur surface dure (boucle). Joué une fois PAR ROUE.

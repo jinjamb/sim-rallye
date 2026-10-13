@@ -54,6 +54,7 @@ local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
+local CarDamage = require(ReplicatedStorage.Shared.Vehicle.CarDamage)
 
 local CarService = {}
 
@@ -132,6 +133,8 @@ local slotByPlayer: { [Player]: number } = {}
 local driverByChassis: { [BasePart]: Player } = {}
 local lastRequestAt: { [Player]: number } = {}
 local lastTelemetryAt: { [Player]: number } = {}
+local lastDamageAt: { [Player]: number } = {}
+local DAMAGE_MIN_INTERVAL = 0.12 -- secondes entre deux bosses signalées par un joueur
 -- En course, on ne descend pas de voiture (Q) : on abandonne depuis le menu.
 local lockedInCar: { [Player]: boolean } = {}
 local spawnGeneration: { [Player]: number } = {}
@@ -654,6 +657,7 @@ function CarService.Start()
 		slotByPlayer[player] = nil
 		lastRequestAt[player] = nil
 		lastTelemetryAt[player] = nil
+		lastDamageAt[player] = nil
 		driverStateByPlayer[player] = nil
 		lockedInCar[player] = nil
 		spawnGeneration[player] = nil
@@ -690,6 +694,30 @@ function CarService.Start()
 		if chassis and driverByChassis[chassis] == player then
 			release(chassis)
 		end
+	end)
+
+	--[[
+		Bosses (CarDamage.luau) : signalées par le client du pilote, sur SA
+		voiture seulement, quand les contacts sont activés. Valeurs bornées et
+		cadence limitée : un client ne peut que cabosser sa propre voiture.
+	]]
+	Remotes.CarDamage.OnServerEvent:Connect(function(player: Player, zone: any, amount: any)
+		local now = os.clock()
+		if now - (lastDamageAt[player] or 0) < DAMAGE_MIN_INTERVAL then
+			return
+		end
+		local car = carByPlayer[player]
+		if not car or car:GetAttribute("Contacts") ~= true then
+			return
+		end
+		if type(zone) ~= "number" or zone ~= math.floor(zone) or zone < 1 or zone > CarDamage.ZONE_COUNT then
+			return
+		end
+		if type(amount) ~= "number" or amount ~= amount or amount <= 0 then
+			return
+		end
+		lastDamageAt[player] = now
+		CarDamage.Add(car, zone, math.min(amount, CarDamage.MAX_HIT))
 	end)
 
 	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any, brake: any)
