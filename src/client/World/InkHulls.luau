@@ -28,10 +28,10 @@ local InkHulls = {}
 
 -- Identifiants des maillages importés (0 : pas encore importé).
 InkHulls.MESHES = {
-	Box = 0, -- assets/meshes/InkBox.obj
-	Ball = 0, -- assets/meshes/InkBall.obj
-	Cylinder = 0, -- assets/meshes/InkCylinder.obj
-	Wedge = 0, -- assets/meshes/InkWedge.obj
+	Box = 100989789782785, -- assets/meshes/InkBox.obj
+	Ball = 78111543013611, -- assets/meshes/InkBall.obj
+	Cylinder = 93265359356053, -- assets/meshes/InkCylinder.obj
+	Wedge = 104447835953854, -- assets/meshes/InkWedge.obj
 }
 
 local TAG = "Ink" -- ToonDecor.INK_TAG

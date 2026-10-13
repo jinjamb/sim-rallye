@@ -68,24 +68,24 @@ function Ambiance.Set(ambiance: Ambiances.Ambiance)
 	local air = atmosphere :: Atmosphere
 	air.Density = spec.Density
 	air.Offset = spec.Offset
-	air.Haze = spec.Haze
-	air.Glare = spec.Glare
+	air.Haze = spec.Haze * (0.5 + 0.5 * engine.Effects)
+	air.Glare = spec.Glare * engine.Effects
 	air.Color = spec.Color
 	air.Decay = spec.Decay
 
 	local grade = effect("ColorCorrectionEffect", "AmbianceGrade") :: ColorCorrectionEffect
-	grade.Saturation = ambiance.Grade.Saturation
-	grade.Contrast = ambiance.Grade.Contrast
+	grade.Saturation = ambiance.Grade.Saturation * engine.Effects
+	grade.Contrast = ambiance.Grade.Contrast * engine.Effects
 	grade.Brightness = ambiance.Grade.Brightness
 	grade.TintColor = ambiance.Grade.Tint
 
 	local bloom = effect("BloomEffect", "AmbianceBloom") :: BloomEffect
-	bloom.Intensity = ambiance.Bloom.Intensity
+	bloom.Intensity = ambiance.Bloom.Intensity * engine.Effects
 	bloom.Size = ambiance.Bloom.Size
-	bloom.Threshold = ambiance.Bloom.Threshold
+	bloom.Threshold = ambiance.Bloom.Threshold + engine.BloomThreshold
 
 	local rays = effect("SunRaysEffect", "AmbianceRays") :: SunRaysEffect
-	rays.Intensity = ambiance.SunRays.Intensity
+	rays.Intensity = ambiance.SunRays.Intensity * engine.Effects
 	rays.Spread = ambiance.SunRays.Spread
 
 	-- Ciel dessiné (s'il est importé) ; sinon celui de Roblox.

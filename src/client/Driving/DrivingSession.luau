@@ -91,6 +91,7 @@ export type DrivingSession = typeof(setmetatable({}, DrivingSession)) & {
 	Weekly: string?,
 	UndoModifier: (() -> ())?,
 	UndoWeather: (() -> ())?, -- météo de la spéciale ou de la course (WeatherClient)
+	UndoHeadlights: (() -> ())?, -- phares allumés au crépuscule (StageModifier)
 	-- Leçon de l'école de pilotage en cours.
 	School: DrivingSchool.DrivingSchool?,
 	HasControl: boolean,
@@ -145,6 +146,8 @@ function DrivingSession.new(model: Model, context: Context): DrivingSession
 	-- Météo de la spéciale ou de la course (Weather.luau), posée par le serveur.
 	local forecast = Weather.FromAttributes(model:GetAttribute("Weather"), model:GetAttribute("WeatherSeed"), model:GetAttribute("WeatherStart"))
 	self.UndoWeather = if forecast then WeatherClient.Start(forecast) else nil
+	-- Crépuscule ou aube : les phares s'allument d'eux-mêmes.
+	self.UndoHeadlights = if StageModifier.NeedsHeadlights() then StageModifier.Headlights(self.Chassis) else nil
 
 	local wheelAttachments: { Attachment } = {}
 	for i, wheel in ipairs(car.Wheels) do
@@ -485,6 +488,11 @@ function DrivingSession:Destroy()
 	self.UndoWeather = nil
 	if undoWeather then
 		undoWeather()
+	end
+	local undoHeadlights: (() -> ())? = self.UndoHeadlights
+	self.UndoHeadlights = nil
+	if undoHeadlights then
+		undoHeadlights()
 	end
 	Ambiance.Reset()
 	self.HasControl = false

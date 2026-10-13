@@ -148,15 +148,15 @@ Livery.STRIPES = {
 
 Livery.PATTERNS = {
 	{ Name = "Aucun", Image = 0, Tile = 1, Transparency = 0 },
-	{ Name = "Damier", Image = 0, Tile = 2, Transparency = 0 }, -- assets/patterns/damier.png
-	{ Name = "Pois", Image = 0, Tile = 2.5, Transparency = 0 }, -- assets/patterns/pois.png
-	{ Name = "Hexagones", Image = 0, Tile = 3, Transparency = 0 }, -- assets/patterns/hexagones.png
-	{ Name = "Carbone", Image = 0, Tile = 1.2, Transparency = 0.15 }, -- assets/patterns/carbone.png
-	{ Name = "Camouflage", Image = 0, Tile = 7, Transparency = 0 }, -- assets/patterns/camouflage.png
-	{ Name = "Zébrures", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/zebrures.png
-	{ Name = "Flammes", Image = 0, Tile = 6, Transparency = 0 }, -- assets/patterns/flammes.png
-	{ Name = "Sakura", Image = 0, Tile = 5, Transparency = 0 }, -- assets/patterns/sakura.png
-	{ Name = "Crayonné", Image = 0, Tile = 4, Transparency = 0.1 }, -- assets/patterns/crayonne.png (hachures au crayon, style anime)
+	{ Name = "Damier", Image = 127028973095031, Tile = 2, Transparency = 0 }, -- assets/patterns/damier.png
+	{ Name = "Pois", Image = 119110445129659, Tile = 2.5, Transparency = 0 }, -- assets/patterns/pois.png
+	{ Name = "Hexagones", Image = 111908525845189, Tile = 3, Transparency = 0 }, -- assets/patterns/hexagones.png
+	{ Name = "Carbone", Image = 121548141150459, Tile = 1.2, Transparency = 0.15 }, -- assets/patterns/carbone.png
+	{ Name = "Camouflage", Image = 71300816901429, Tile = 7, Transparency = 0 }, -- assets/patterns/camouflage.png
+	{ Name = "Zébrures", Image = 77058660414457, Tile = 6, Transparency = 0 }, -- assets/patterns/zebrures.png
+	{ Name = "Flammes", Image = 132730453069847, Tile = 6, Transparency = 0 }, -- assets/patterns/flammes.png
+	{ Name = "Sakura", Image = 117039106427728, Tile = 5, Transparency = 0 }, -- assets/patterns/sakura.png
+	{ Name = "Crayonné", Image = 79578895660290, Tile = 4, Transparency = 0.1 }, -- assets/patterns/crayonne.png (hachures au crayon, style anime)
 } :: { PatternStyle }
 
 local INK = Color3.fromRGB(16, 16, 20)

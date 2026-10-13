@@ -90,8 +90,10 @@ function ToonDecor.RestyleAsset(model: Model, kind: string)
 	end
 	model:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
 	-- Modèle fait à la main dans le style (attribut ToonReady) : ses couleurs
-	-- et ses textures restent ; il reçoit seulement le trait d'encre.
-	if model:GetAttribute("ToonReady") then
+	-- et ses textures restent ; il reçoit seulement le trait d'encre. De même
+	-- pour les pins enneigés : leur neige est PEINTE dans la texture (le
+	-- feuillage est d'un seul tenant), la retirer en ferait des pins verts.
+	if model:GetAttribute("ToonReady") or kind == "PineSnow" then
 		for _, item in ipairs(model:GetDescendants()) do
 			if item:IsA("BasePart") then
 				ToonDecor.Tag(item)

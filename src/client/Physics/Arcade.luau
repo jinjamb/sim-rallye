@@ -29,7 +29,7 @@
 
 local Arcade = {}
 
-Arcade.STRENGTH = 1
+Arcade.STRENGTH = 0.2
 
 -- Glisse
 local DRIFT_MIN_SPEED = 18 -- studs/s (~18 km/h) : en dessous, rien

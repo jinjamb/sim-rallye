@@ -30,15 +30,17 @@ local StageModifier = {}
 -- Faisceaux longue portée des phares (voir headlights) : distance devant la
 -- voiture (studs, à l'arrêt) et puissance, qui baisse au loin.
 local LONG_BEAMS = {
-	{ Distance = 45, Brightness = 3 },
-	{ Distance = 85, Brightness = 2.4 },
-	{ Distance = 125, Brightness = 1.8 },
-	{ Distance = 165, Brightness = 1.3 },
+	{ Distance = 40, Brightness = 4 },
+	{ Distance = 75, Brightness = 3.4 },
+	{ Distance = 110, Brightness = 2.8 },
+	{ Distance = 145, Brightness = 2.2 },
+	{ Distance = 180, Brightness = 1.6 },
 }
 local BEAM_HEIGHT = 22 -- au-dessus de la route
 local BEAM_STRETCH = 0.6 -- jusqu'à +60 % de distance...
 local BEAM_STRETCH_SPEED = 150 -- ... à 150 studs/s (~150 km/h)
 local LOCKED_GEAR = 3
+local HEADLIGHT_AHEAD = 1.5 -- studs devant le nez de la carrosserie (lame avant comprise)
 
 -- Valeurs d'éclairage modifiées, pour les rendre ensuite.
 local function snapshot(instance: Instance, properties: { string }): () -> ()
@@ -55,35 +57,44 @@ end
 
 local LIGHTING_PROPERTIES = { "ClockTime", "Brightness", "Ambient", "OutdoorAmbient", "FogStart", "FogEnd", "FogColor", "ExposureCompensation" }
 
--- Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z), à la
--- couleur des phares portés (Items/Headlights.luau).
+--[[
+	Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z), à la
+	couleur des phares portés (Items/Headlights.luau). Allumés la nuit (défi)
+	et dès le crépuscule (DrivingSession, voir StageModifier.NeedsHeadlights).
+	Une seule paire par voiture : un second appel ne fait rien.
+	Sans ombres : la carrosserie, posée autour du châssis, masquerait le
+	faisceau de ses propres phares. Les projecteurs sont donc posés DEVANT le
+	nez de la carrosserie (attribut HeadLightZ, CarBodies) : sans ombres, un
+	projecteur placé dedans éclairerait la voiture elle-même (lame avant,
+	capot), d'où un gros halo sur les WRC et leur lame avant.
+]]
 local function headlights(chassis: BasePart): () -> ()
+	if chassis:GetAttribute("HeadlightsOn") then
+		return function() end
+	end
+	chassis:SetAttribute("HeadlightsOn", true)
 	local created: { Instance } = {}
 	local beamColor = CarLights.HeadlightColor(chassis.Parent)
 	local half = chassis.Size
+	local model = chassis.Parent
+	local headZ = if model then model:GetAttribute("HeadLightZ") else nil
+	local noseZ = math.min(-half.Z / 2, if type(headZ) == "number" then headZ else -half.Z / 2)
 	for _, side in ipairs({ -1, 1 }) do
 		local attachment = Instance.new("Attachment")
 		attachment.Name = "Headlight"
-		attachment.Position = Vector3.new(side * half.X * 0.32, 0.2, -half.Z / 2)
+		attachment.Position = Vector3.new(side * half.X * 0.32, 0.2, noseZ - HEADLIGHT_AHEAD)
 		attachment.Orientation = Vector3.new(-6, 0, 0)
 		local light = Instance.new("SpotLight")
 		light.Face = Enum.NormalId.Front
 		light.Range = 60
-		light.Angle = 70
+		light.Angle = 80
 		light.Brightness = 6
 		light.Color = beamColor
-		light.Shadows = true
+		light.Shadows = false
 		light.Parent = attachment
 		attachment.Parent = chassis
 		table.insert(created, attachment)
 	end
-	-- Un halo autour de la voiture, pour voir les bas-côtés.
-	local glow = Instance.new("PointLight")
-	glow.Range = 18
-	glow.Brightness = 0.6
-	glow.Color = beamColor
-	glow.Parent = chassis
-	table.insert(created, glow)
 
 	--[[
 		PORTÉE : Roblox plafonne un projecteur à 60 studs (~17 m), qu'on
@@ -142,7 +153,22 @@ local function headlights(chassis: BasePart): () -> ()
 		for _, item in ipairs(created) do
 			item:Destroy()
 		end
+		chassis:SetAttribute("HeadlightsOn", nil)
 	end
+end
+
+-- Heures où l'on allume les phares (Lighting.ClockTime) : du crépuscule à l'aube.
+local DUSK = 16.5
+local DAWN = 7.5
+
+function StageModifier.NeedsHeadlights(): boolean
+	local clock = Lighting.ClockTime
+	return clock >= DUSK or clock <= DAWN
+end
+
+-- Les phares seuls (crépuscule, aube) ; renvoie de quoi les éteindre.
+function StageModifier.Headlights(chassis: BasePart): () -> ()
+	return headlights(chassis)
 end
 
 --[[

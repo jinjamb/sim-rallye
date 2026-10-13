@@ -9,7 +9,9 @@
 		- deux halos rouges (BillboardGui lumineux, ils percent la poussière),
 		  plus vifs et plus grands au FREINAGE (feux stop) ;
 		- une lumière rouge derrière la voiture, qui teinte le nuage de
-		  poussière et le rend repérable de loin.
+		  poussière et le rend repérable de loin. C'est un projecteur tourné
+		  vers l'arrière, posé derrière le pare-chocs : une lumière ronde,
+		  sans ombre, éclairerait la voiture elle-même (gros halo rouge).
 	AVANT, à la couleur des PHARES portés (Items/Headlights.luau, attribut
 	EquippedHeadlight) :
 		- deux halos sur les phares ;
@@ -37,7 +39,8 @@ export type CarLights = typeof(setmetatable({}, CarLights)) & {
 	RearHalos: { BillboardGui },
 	Front: { Attachment },
 	FrontHalos: { BillboardGui },
-	Glow: PointLight,
+	Glow: SpotLight,
+	GlowAttachment: Attachment,
 	Level: number, -- 0 : feux de position, 1 : feux stop
 	Visible: boolean,
 	Style: string, -- phares portés, déjà appliqués
@@ -52,6 +55,9 @@ local HALO_SIZE = 1.1 -- studs, feux de position
 local HALO_BRAKE_SIZE = 1.9 -- studs, au freinage
 local FRONT_HALO_SIZE = 1.3
 local GLOW_RANGE = 14
+local GLOW_BEHIND = 1 -- studs derrière les feux arrière
+local GLOW_IDLE = 0.3 -- feux de position
+local GLOW_BRAKE = 1.5 -- en plus, au freinage
 local RED = Color3.fromRGB(255, 30, 40)
 local RESPONSE = 0.06 -- secondes : les feux stop s'allument presque aussitôt
 local LENS_CHECK_INTERVAL = 1 -- secondes
@@ -118,12 +124,18 @@ function CarLights.new(chassis: BasePart, model: Model?): CarLights
 	self.NextLensCheck = 0
 	self.Rear, self.RearHalos = pair(chassis, "TailLight", RED, HALO_SIZE)
 	self.Front, self.FrontHalos = pair(chassis, "HeadLightHalo", CarLights.HeadlightColor(model), FRONT_HALO_SIZE)
-	local glow = Instance.new("PointLight")
+	local glowAttachment = Instance.new("Attachment")
+	glowAttachment.Name = "TailGlow"
+	glowAttachment.Parent = chassis
+	self.GlowAttachment = glowAttachment
+	local glow = Instance.new("SpotLight")
+	glow.Face = Enum.NormalId.Back -- vers l'arrière (+Z du châssis)
+	glow.Angle = 100
 	glow.Color = RED
 	glow.Range = GLOW_RANGE
 	glow.Brightness = 0
 	glow.Shadows = false
-	glow.Parent = self.Rear[1]
+	glow.Parent = glowAttachment
 	self.Glow = glow
 	self:_place()
 	self:SetVisible(false)
@@ -146,6 +158,7 @@ function CarLights:_place()
 	for index, attachment in ipairs(self.Front) do
 		attachment.Position = Vector3.new((if index == 1 then -1 else 1) * HALF_WIDTH * 0.92, y, headZ)
 	end
+	self.GlowAttachment.Position = Vector3.new(0, y, tailZ + GLOW_BEHIND)
 end
 
 -- Les phares portés : halos et optiques à leur couleur.
@@ -200,7 +213,7 @@ function CarLights:Update(dt: number, brake: number)
 		gui.Size = UDim2.fromScale(size, size)
 		gui.Brightness = 2 + 4 * self.Level
 	end
-	self.Glow.Brightness = 0.6 + 2.4 * self.Level
+	self.Glow.Brightness = GLOW_IDLE + GLOW_BRAKE * self.Level
 end
 
 function CarLights:Destroy()
@@ -209,6 +222,7 @@ function CarLights:Destroy()
 			attachment:Destroy()
 		end
 	end
+	self.GlowAttachment:Destroy()
 end
 
 return CarLights

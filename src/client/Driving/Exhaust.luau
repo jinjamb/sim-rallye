@@ -69,6 +69,11 @@ local ANTI_LAG_RPM = 3200
 local ANTI_LAG_MAX = 2.5 -- secondes de crépitement après un lever de pied
 local ANTI_LAG_RATE = 10 -- détonations par seconde, anti-lag complet à haut régime
 local LIGHT_FADE = 0.08 -- secondes
+-- Lueur des détonations : discrète, sinon l'anti-lag (WRC, Groupe B), qui
+-- crépite en continu pied levé, nimbe tout l'arrière d'un halo.
+local BANG_LIGHT = 2.5
+local POP_LIGHT = 0.6
+local LIGHT_RANGE = 6
 local FIRE_TEXTURE = "rbxasset://textures/particles/fire_main.dds"
 local SPARK_TEXTURE = "rbxasset://textures/particles/sparkles_main.dds"
 local SMOKE_TEXTURE = "rbxasset://textures/particles/smoke_main.dds"
@@ -120,8 +125,8 @@ function Exhaust.new(chassis: BasePart, model: Model?): Exhaust
 	self:_place()
 
 	local flames = emitter("ExhaustFlames", FIRE_TEXTURE, attachment)
-	flames.LightEmission = 1
-	flames.Brightness = 3
+	flames.LightEmission = 0.6
+	flames.Brightness = 1.6
 	flames.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.05), NumberSequenceKeypoint.new(1, 1) })
 	flames.Lifetime = NumberRange.new(0.06, 0.16)
 	flames.Speed = NumberRange.new(14, 26)
@@ -129,8 +134,8 @@ function Exhaust.new(chassis: BasePart, model: Model?): Exhaust
 	self.Flames = flames
 
 	local fireball = emitter("ExhaustFireball", FIRE_TEXTURE, attachment)
-	fireball.LightEmission = 1
-	fireball.Brightness = 4
+	fireball.LightEmission = 0.6
+	fireball.Brightness = 2
 	fireball.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0), NumberSequenceKeypoint.new(1, 1) })
 	fireball.Lifetime = NumberRange.new(0.08, 0.14)
 	fireball.Speed = NumberRange.new(3, 6)
@@ -140,7 +145,7 @@ function Exhaust.new(chassis: BasePart, model: Model?): Exhaust
 
 	local sparks = emitter("ExhaustSparks", SPARK_TEXTURE, attachment)
 	sparks.LightEmission = 1
-	sparks.Brightness = 3
+	sparks.Brightness = 2
 	sparks.Size = NumberSequence.new(0.12, 0.02)
 	sparks.Lifetime = NumberRange.new(0.15, 0.35)
 	sparks.Speed = NumberRange.new(18, 34)
@@ -209,7 +214,7 @@ function Exhaust:_applyStyle()
 	self.Fireball.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5 * scale), NumberSequenceKeypoint.new(0.4, 1.6 * scale), NumberSequenceKeypoint.new(1, 0.4 * scale) })
 	self.Sparks.Color = ColorSequence.new(core, outer)
 	self.Light.Color = outer:Lerp(core, 0.3)
-	self.Light.Range = 10 * scale
+	self.Light.Range = LIGHT_RANGE * scale
 	self.OwnBang.SoundId = if item and item.Sound and item.Sound ~= "" then item.Sound else ""
 end
 
@@ -245,7 +250,7 @@ function Exhaust:_fire(big: boolean)
 		self.Fireball:Emit(math.random(3, 5))
 		self.Sparks:Emit(math.random(6, 12))
 		self.Smoke:Emit(math.random(2, 3))
-		self.LightLevel = math.max(self.LightLevel, 6 * self.Scale)
+		self.LightLevel = math.max(self.LightLevel, BANG_LIGHT * self.Scale)
 		if self.OwnBang.SoundId ~= "" then
 			self.OwnBang.PlaybackSpeed = 1 + (math.random() - 0.5) * 0.15
 			self.OwnBang.TimePosition = 0
@@ -256,7 +261,7 @@ function Exhaust:_fire(big: boolean)
 	else
 		self.Flames:Emit(math.random(2, 4))
 		self.Sparks:Emit(math.random(0, 2))
-		self.LightLevel = math.max(self.LightLevel, 2 * self.Scale)
+		self.LightLevel = math.max(self.LightLevel, POP_LIGHT * self.Scale)
 		playOne(self.Pops, 0.35)
 	end
 end

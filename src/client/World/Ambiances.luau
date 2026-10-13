@@ -70,11 +70,19 @@ local rgb = Color3.fromRGB
 		                          des aplats (la couleur d'ombre fait le reste).
 	Technology n'est pas modifiable par script : il est dans
 	default.project.json, avec les mêmes valeurs (aperçu dans Studio).
+
+	Effects dose d'un coup les effets d'image de toutes les ambiances
+	(saturation, contraste, bloom, rayons, brume, éblouissement) :
+	1 = valeurs écrites plus bas, 0 = image brute.
+	BloomThreshold s'ajoute au seuil de chaque ambiance : plus haut, seules
+	les sources très vives (néon, phares) bavent, et moins fort.
 ]]
 Ambiances.ENGINE = {
 	ShadowSoftness = 0,
 	EnvironmentSpecularScale = 1,
 	EnvironmentDiffuseScale = 0.25,
+	Effects = 0.5,
+	BloomThreshold = 0.6,
 }
 
 Ambiances.BASE = {
@@ -119,12 +127,12 @@ Ambiances.BASE = {
 	-- Terre : soleil doré, poussière chaude dans l'air.
 	Gravel = {
 		Name = "Terre",
-		ClockTime = 17.3,
+		ClockTime = 16.7,
 		Latitude = 36,
-		Brightness = 2.7,
+		Brightness = 2.9,
 		Exposure = 0.05,
-		Shadow = rgb(140, 104, 140),
-		Ambient = rgb(60, 40, 56),
+		Shadow = rgb(168, 132, 160),
+		Ambient = rgb(78, 58, 72),
 		ShiftTop = rgb(255, 214, 160),
 		ShiftBottom = rgb(130, 90, 150),
 		Atmosphere = { Density = 0.34, Offset = 0.25, Haze = 1.8, Glare = 0.6, Color = rgb(240, 200, 160), Decay = rgb(190, 120, 120) },
@@ -176,12 +184,12 @@ Ambiances.BASE = {
 	-- Rallycross : soleil couchant, ciel rose et violet, néons qui bavent.
 	Circuit = {
 		Name = "Rallycross",
-		ClockTime = 17.9,
+		ClockTime = 17.2,
 		Latitude = 40,
-		Brightness = 2.3,
-		Exposure = 0.2,
-		Shadow = rgb(120, 92, 170),
-		Ambient = rgb(56, 36, 86),
+		Brightness = 2.8,
+		Exposure = 0.3,
+		Shadow = rgb(156, 128, 196),
+		Ambient = rgb(80, 60, 110),
 		ShiftTop = rgb(255, 196, 170),
 		ShiftBottom = rgb(130, 80, 190),
 		Atmosphere = { Density = 0.3, Offset = 0.22, Haze = 1.6, Glare = 0.8, Color = rgb(250, 180, 200), Decay = rgb(140, 90, 200) },
@@ -203,8 +211,8 @@ Ambiances.BASE = {
 ]]
 export type SkySpec = { Side: number, Up: number, Down: number, SunSize: number }
 Ambiances.SKIES = {
-	Couchant = { Side = 0, Up = 0, Down = 0, SunSize = 18 }, -- assets/sky/couchant_*.png
-	Jour = { Side = 0, Up = 0, Down = 0, SunSize = 14 }, -- assets/sky/jour_*.png
+	Couchant = { Side = 88911506507152, Up = 122103276155012, Down = 93321353741587, SunSize = 18 }, -- assets/sky/couchant_*.png
+	Jour = { Side = 135365493007466, Up = 125629886587031, Down = 76351311317946, SunSize = 14 }, -- assets/sky/jour_*.png
 } :: { [string]: SkySpec }
 
 -- Retouches par spéciale (Stages.luau) ou circuit (Tracks.luau), par identifiant.
@@ -216,7 +224,7 @@ local OVERRIDES: { [string]: { [string]: any } } = {
 	lacs = { ClockTime = 9.2, Latitude = 60, Shadow = rgb(100, 124, 196), ShiftBottom = rgb(90, 120, 210) },
 	brumes = { Atmosphere = { Density = 0.48, Offset = 0.05, Haze = 2.6, Glare = 0.4, Color = rgb(226, 196, 220), Decay = rgb(150, 120, 190) } },
 	tourbieres = { ClockTime = 16.5, Clouds = { Cover = 0.8, Density = 0.8, Color = rgb(220, 200, 230) } },
-	port = { ClockTime = 18.3, Brightness = 2, Exposure = 0.35 }, -- crépuscule plus avancé
+	port = { ClockTime = 17.6, Brightness = 2.6, Exposure = 0.45, Shadow = rgb(150, 130, 200), Ambient = rgb(84, 70, 120) }, -- crépuscule plus avancé (phares allumés)
 	falaises = { ClockTime = 14.5, Shadow = rgb(104, 118, 180) }, -- plein jour au bord de la mer
 }
 
