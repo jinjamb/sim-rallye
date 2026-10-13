@@ -802,6 +802,12 @@ end)
 -- trophées), et l'événement en cours (double XP, événement éclair), dans le
 -- bandeau du haut.
 Remotes.Announce.OnClientEvent:Connect(Announcer.FromServer)
+-- Pass offerts : réponse aux commandes des admins, et cadeau reçu (GiftService).
+Remotes.GiftMessage.OnClientEvent:Connect(function(text: any)
+	if type(text) == "string" then
+		Toast.Show(text, Theme.ACCENT)
+	end
+end)
 EventNotice.Start()
 
 -- Voix du copilote : les phrases de la spéciale se préparent dès l'arrivée.

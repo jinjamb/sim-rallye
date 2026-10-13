@@ -37,6 +37,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local Perks = require(script.Parent.Perks)
+local GiftService = require(script.Parent.GiftService)
 local EconomyService = require(script.Parent.EconomyService)
 local ProgressService = require(script.Parent.ProgressService)
 local PassService = require(script.Parent.PassService)
@@ -192,6 +193,10 @@ local function checkPlayer(player: Player)
 			Perks.SetPass(player, pass.Key, ok and owns == true)
 		end
 	end
+	-- Pass offerts (GiftService : liste du code, commandes des admins), en plus des achetés.
+	for key in pairs(GiftService.PassesOf(player.UserId)) do
+		Perks.SetPass(player, key, true)
+	end
 	Perks.SetPremium(player, player.MembershipType == Enum.MembershipType.Premium)
 	-- En cas de doute (service indisponible) : on considère les tirages interdits.
 	local ok, policy = pcall(function()
@@ -206,6 +211,10 @@ local function checkPlayer(player: Player)
 end
 
 function MonetizationService.Start()
+	-- Un don fait ou retiré : on revérifie tout (les pass achetés restent).
+	GiftService.Changed = function(player: Player)
+		checkPlayer(player)
+	end
 	EconomyService.ResolveGrant = resolveGrant
 	EconomyService.ReceiptGranted = function(player: Player, product: Products.Product)
 		if product.Tier then
