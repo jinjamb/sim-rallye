@@ -62,6 +62,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `ProgressService`  | XP, niveau et déblocages, déduits du profil et envoyés au joueur.                     |
 | `EconomyService`   | Crédits, objets possédés et portés, achats en crédits et en Robux (ProcessReceipt).   |
 | `MonetizationService` | Achats en Robux au-delà des packs : paliers par prix, offres, pass, boost d'XP.   |
+| `GiftService` | Pass offerts sans achat : liste d'amis dans le code (`FRIENDS`) et commandes du chat des admins (`/vip`, `/premium`, `/credits2`, `/retirer`, `/dons`), gardées dans un DataStore lu par tous les serveurs. |
 | `Perks`            | Avantages d'un joueur (pass, Premium, boost d'XP, pays) : lu par l'économie et la progression, sans dépendance vers les services. |
 | `GarageService`    | Réglages et livrée.                                                                   |
 | `RecordService`    | Record de la spéciale et son classement, records du tour, statistiques de carrière.   |

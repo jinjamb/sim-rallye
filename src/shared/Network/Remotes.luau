@@ -145,6 +145,8 @@ export type Remotes = {
 	CarDamage: RemoteEvent,
 	-- Client -> Serveur : (options) les réglages du joueur (Options.luau), à sauvegarder.
 	SaveOptions: RemoteEvent,
+	-- Serveur -> Client : (texte) réponse à une commande de don, ou pass reçu (GiftService).
+	GiftMessage: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -196,6 +198,7 @@ local RELIABLE = {
 	"ReferralState",
 	"CarDamage",
 	"SaveOptions",
+	"GiftMessage",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 
