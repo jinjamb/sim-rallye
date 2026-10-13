@@ -22,7 +22,7 @@ Ces modules sont purs. Ils ne contiennent ni état ni RemoteEvent, et leurs donn
 | `Util/`        | `Format` (temps, milliers, compte à rebours) et `Units` (échelle stud/mètre, gravité).    |
 | `Vehicle/`     | Ce qui définit une voiture : `CarClasses` (fiches techniques Rally4, Rally2, WRC, Groupe B, aérodynamique comprise), `CarSetup` (réglages et bornes, par catégorie), `BodyKits` (carrosserie de chaque catégorie), `CarBodies` (modèles Kaze, Hayate, Hoshi… et pièces à personnaliser, sans effet sur la conduite) et `Surfaces` (adhérence). |
 | `Stage/`       | Les spéciales : `Stages` (la liste des spéciales et leurs tracés), `StageTrack` (construction d'un tracé, abscisse) et `Pacenotes` (notes du copilote). |
-| `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. `ToonMaterials` : les textures de sol style anime (`assets/textures`), en variantes de matériaux posées par le serveur. |
+| `World/`       | `Scenery` : le décor (arbres, tribunes, public, collines), partagé par le paddock et les outils de construction des cartes. `ToonMaterials` : les textures de sol style anime (`assets/textures`), en variantes de matériaux posées par le serveur. `ToonDecor` : le décor en style dessin animé (matières lisses, palette, modèles du Creator Store recolorés, étiquette `Ink`). |
 | `Tracks/`      | Les circuits de rallycross.                                                              |
 | `Paddock/`     | La disposition du paddock (zones, panneaux).                                             |
 | `Progression/` | `Progression` (XP, niveaux, licences, déblocages), `Medals` (seuils bronze → platine), `Achievements` (trophées et badges Roblox) et `XpEvents` (calendrier du double XP). |
@@ -101,7 +101,7 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `School/`  | Déroulement d'une leçon.                                                                                      |
 | `Tutorial/` | `Tutorial` : le tutoriel express (un nouveau pilote au volant dès son arrivée, guidé en quatre étapes selon son appareil). |
 | `Weather/` | `WeatherClient` : la météo chez le pilote (adhérence mouillée, pluie, ciel, routes assombries).                |
-| `World/`   | L'ambiance lumineuse, style anime : profils par surface et par circuit (`Ambiances`), application à l'éclairage (`Ambiance` : soleil, ombres colorées, brume, nuages, étalonnage, halo), trait d'encre autour des voitures (`CarOutlines`). |
+| `World/`   | L'ambiance lumineuse, style anime : profils par surface et par circuit (`Ambiances`), application à l'éclairage (`Ambiance` : soleil, ombres colorées, brume, nuages, étalonnage, halo), trait d'encre autour des voitures (`CarOutlines`) et du décor par coque inversée (`InkHulls`, maillages dans `assets/meshes`), ciels dessinés (`assets/sky`). |
 | `Replay/`  | Ralenti et mode photo.                                                                                        |
 | `Race/`    | Rallycross : `RaceClient` (relie serveur, menu et affichage), HUD, minicarte, `RaceTypes`.                    |
 | `UI/`      | `Theme` et `Widgets` (identité visuelle), bandeaux (`Banner`), notifications (`Toast`), bandeau du serveur (`Announcer` : annonces et double XP), vignettes des objets (`ItemArt`), aide des commandes (`ControlsHint`), classement, réglages, garage, et le menu principal (`UI/Menu`, avec la barre de boutons `HubBar` et l'onglet `InventoryPage`). |

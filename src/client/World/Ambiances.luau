@@ -23,7 +23,8 @@
 		Grade                    étalonnage (ColorCorrection) ;
 		Bloom, SunRays           halo des lumières, rayons du soleil ;
 		Clouds                   nuages dynamiques du terrain ;
-		Ink                      couleur du contour des voitures.
+		Ink                      couleur du contour des voitures et du décor ;
+		Sky                      ciel dessiné (SKIES).
 
 	À régler à l'œil dans Studio : modifier une valeur ici, relancer.
 ]]
@@ -55,6 +56,7 @@ export type Ambiance = {
 	SunRays: { Intensity: number, Spread: number },
 	Clouds: { Cover: number, Density: number, Color: Color3 },
 	Ink: Color3,
+	Sky: string, -- Ambiances.SKIES
 }
 
 local rgb = Color3.fromRGB
@@ -93,6 +95,7 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.06, Spread = 0.6 },
 		Clouds = { Cover = 0.55, Density = 0.6, Color = rgb(255, 222, 230) },
 		Ink = rgb(24, 16, 40),
+		Sky = "Couchant",
 	},
 	-- Asphalte : plein jour, ciel bleu franc, ombres bleu-violet.
 	Tarmac = {
@@ -111,6 +114,7 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.04, Spread = 0.5 },
 		Clouds = { Cover = 0.45, Density = 0.55, Color = rgb(255, 255, 255) },
 		Ink = rgb(20, 20, 40),
+		Sky = "Jour",
 	},
 	-- Terre : soleil doré, poussière chaude dans l'air.
 	Gravel = {
@@ -129,6 +133,7 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.1, Spread = 0.7 },
 		Clouds = { Cover = 0.4, Density = 0.5, Color = rgb(255, 220, 200) },
 		Ink = rgb(36, 18, 30),
+		Sky = "Couchant",
 	},
 	-- Neige : matin froid, soleil bas, ombres bleues sur la neige.
 	Snow = {
@@ -147,6 +152,7 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.08, Spread = 0.6 },
 		Clouds = { Cover = 0.5, Density = 0.6, Color = rgb(240, 245, 255) },
 		Ink = rgb(16, 24, 48),
+		Sky = "Jour",
 	},
 	-- Mixte : début d'après-midi, lumière chaude et douce.
 	Mixed = {
@@ -165,6 +171,7 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.06, Spread = 0.6 },
 		Clouds = { Cover = 0.5, Density = 0.55, Color = rgb(255, 240, 240) },
 		Ink = rgb(26, 20, 44),
+		Sky = "Jour",
 	},
 	-- Rallycross : soleil couchant, ciel rose et violet, néons qui bavent.
 	Circuit = {
@@ -183,8 +190,22 @@ Ambiances.BASE = {
 		SunRays = { Intensity = 0.12, Spread = 0.8 },
 		Clouds = { Cover = 0.5, Density = 0.6, Color = rgb(255, 190, 210) },
 		Ink = rgb(30, 14, 46),
+		Sky = "Couchant",
 	},
 } :: { [string]: Ambiance }
+
+--[[
+	CIELS DESSINÉS (assets/sky, générés par generate.py) : trois images par
+	ciel, le côté (le même sur les quatre faces), le dessus et le dessous.
+	Importer les PNG dans Roblox et coller leurs identifiants ici. Tant
+	qu'un ciel vaut 0, le ciel de Roblox reste. SunSize : taille du soleil
+	(gros et rond, comme dans un dessin animé).
+]]
+export type SkySpec = { Side: number, Up: number, Down: number, SunSize: number }
+Ambiances.SKIES = {
+	Couchant = { Side = 0, Up = 0, Down = 0, SunSize = 18 }, -- assets/sky/couchant_*.png
+	Jour = { Side = 0, Up = 0, Down = 0, SunSize = 14 }, -- assets/sky/jour_*.png
+} :: { [string]: SkySpec }
 
 -- Retouches par spéciale (Stages.luau) ou circuit (Tracks.luau), par identifiant.
 local OVERRIDES: { [string]: { [string]: any } } = {

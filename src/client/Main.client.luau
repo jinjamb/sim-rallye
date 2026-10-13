@@ -50,6 +50,7 @@ local Tutorial = require(script.Parent.Tutorial.Tutorial)
 local Slipstream = require(script.Parent.Driving.Slipstream)
 local Ambiance = require(script.Parent.World.Ambiance)
 local CarOutlines = require(script.Parent.World.CarOutlines)
+local InkHulls = require(script.Parent.World.InkHulls)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -87,6 +88,7 @@ local isTouch = TouchControls.IsTouchDevice()
 -- L'ambiance du paddock, et le trait d'encre autour des voitures.
 Ambiance.Reset()
 CarOutlines.Start()
+InkHulls.Start() -- trait d'encre du décor (dès que les maillages sont importés)
 
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)

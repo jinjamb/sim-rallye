@@ -20,6 +20,7 @@ local Ambiances = require(script.Parent.Ambiances)
 local Ambiance = {}
 
 local current: Ambiances.Ambiance = Ambiances.Paddock()
+local SKY_NAME = "AmbianceSky"
 
 -- L'effet nommé, créé au besoin (il peut avoir été supprimé dans Studio).
 local function effect<T>(className: string, name: string): T
@@ -86,6 +87,31 @@ function Ambiance.Set(ambiance: Ambiances.Ambiance)
 	local rays = effect("SunRaysEffect", "AmbianceRays") :: SunRaysEffect
 	rays.Intensity = ambiance.SunRays.Intensity
 	rays.Spread = ambiance.SunRays.Spread
+
+	-- Ciel dessiné (s'il est importé) ; sinon celui de Roblox.
+	local spec = Ambiances.SKIES[ambiance.Sky]
+	local existing = Lighting:FindFirstChild(SKY_NAME)
+	if spec and spec.Side ~= 0 then
+		local painted: Sky
+		if existing and existing:IsA("Sky") then
+			painted = existing
+		else
+			painted = Instance.new("Sky")
+			painted.Name = SKY_NAME
+			painted.Parent = Lighting
+		end
+		local side = "rbxassetid://" .. tostring(spec.Side)
+		painted.SkyboxBk = side
+		painted.SkyboxFt = side
+		painted.SkyboxLf = side
+		painted.SkyboxRt = side
+		painted.SkyboxUp = "rbxassetid://" .. tostring(if spec.Up ~= 0 then spec.Up else spec.Side)
+		painted.SkyboxDn = "rbxassetid://" .. tostring(if spec.Down ~= 0 then spec.Down else spec.Side)
+		painted.SunAngularSize = spec.SunSize
+		painted.CelestialBodiesShown = true
+	elseif existing then
+		existing:Destroy()
+	end
 
 	local terrain = workspace.Terrain
 	local clouds = terrain:FindFirstChildOfClass("Clouds")

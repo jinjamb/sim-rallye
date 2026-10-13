@@ -20,6 +20,9 @@
 	l'allée du paddock).
 ]]
 
+-- Chemin absolu : les outils de construction chargent une COPIE de ce module.
+local ToonDecor = require(game:GetService("ReplicatedStorage").Shared.World.ToonDecor)
+
 local Scenery = {}
 
 -- PineSnow : pin enneigé (spéciale de montagne).
@@ -62,15 +65,37 @@ local function piece(
 	part.Size = size
 	part.CFrame = cframe
 	part.Color = color
-	part.Material = material
+	-- Style dessin animé (ToonDecor) : matière lisse, trait d'encre autour.
+	part.Material = ToonDecor.Material(material)
+	part:SetAttribute(ToonDecor.DONE_ATTRIBUTE, true)
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
+	ToonDecor.Tag(part)
 	part.Parent = parent
 	return part
 end
 
 local function block(parent: Instance, name: string, size: Vector3, cframe: CFrame, color: Color3, solid: boolean?): Part
 	return piece(parent, name, Enum.PartType.Block, size, cframe, color, Enum.Material.SmoothPlastic, solid == true)
+end
+
+-- Couleurs franches du style dessin animé (ToonDecor.PALETTE), un peu variées.
+local function vary(color: Color3, rng: Random, amount: number): Color3
+	local h, s, v = color:ToHSV()
+	return Color3.fromHSV((h + rng:NextNumber(-0.02, 0.02)) % 1, s, math.clamp(v * (1 + rng:NextNumber(-amount, amount)), 0, 1))
+end
+
+local function green(rng: Random): Color3
+	return vary(ToonDecor.PALETTE.Leaf, rng, 0.08)
+end
+
+local function trunkColor(rng: Random): Color3
+	return vary(ToonDecor.PALETTE.Trunk, rng, 0.06)
+end
+
+-- La face éclairée d'un feuillage : un ton plus clair, comme un aplat de lumière.
+local function lighter(color: Color3): Color3
+	return color:Lerp(Color3.fromRGB(255, 250, 200), 0.32)
 end
 
 -- Un cylindre Roblox a son axe sur X : on le redresse.
@@ -170,6 +195,8 @@ function Scenery.Asset(parent: Instance, kind: string, at: Vector3 | CFrame, rng
 	end
 	local frame = if typeof(at) == "CFrame" then at else CFrame.new(at) * CFrame.Angles(0, rng:NextNumber(0, math.pi * 2), 0)
 	model:PivotTo(frame)
+	-- Style dessin animé : sans textures photo, recoloré selon sa sorte.
+	ToonDecor.RestyleAsset(model, kind)
 	model.Parent = parent
 	return model
 end
@@ -206,8 +233,7 @@ function Scenery.Rock(parent: Instance, ground: Vector3, rng: Random, height: nu
 	if Scenery.Asset(parent, "Rock", ground - Vector3.new(0, height * 0.35, 0), rng, height * 1.35) then
 		return
 	end
-	local grey = rng:NextInteger(105, 135)
-	piece(parent, "Rock", Enum.PartType.Ball, Vector3.new(height * 1.6, height * 1.6, height * 1.6), CFrame.new(ground + Vector3.new(0, height * 0.3, 0)), Color3.fromRGB(grey, grey - 4, grey - 10), Enum.Material.Slate, false)
+	piece(parent, "Rock", Enum.PartType.Ball, Vector3.new(height * 1.6, height * 1.6, height * 1.6), CFrame.new(ground + Vector3.new(0, height * 0.3, 0)), vary(ToonDecor.PALETTE.Rock, rng, 0.08), Enum.Material.Slate, false)
 end
 
 -- Une pile de rondins (la coupe du bois en bord de spéciale).
@@ -219,7 +245,7 @@ function Scenery.Logs(parent: Instance, ground: Vector3, rng: Random)
 	for row = 0, 2 do
 		for i = 0, 2 - row do
 			local offset = Vector3.new(0, 0.9 + row * 1.5, (i - (2 - row) / 2) * 1.8)
-			piece(parent, "Log", Enum.PartType.Cylinder, Vector3.new(10, 1.8, 1.8), CFrame.new(ground) * yaw * CFrame.new(offset), Color3.fromRGB(140, 96, 62), Enum.Material.Wood, false)
+			piece(parent, "Log", Enum.PartType.Cylinder, Vector3.new(10, 1.8, 1.8), CFrame.new(ground) * yaw * CFrame.new(offset), ToonDecor.PALETTE.Wood, Enum.Material.Wood, false)
 		end
 	end
 end
@@ -257,6 +283,7 @@ function Scenery.FenceLine(parent: Instance, from: Vector3, to: Vector3, rng: Ra
 				model:ScaleTo(step / segment)
 			end
 			model:PivotTo(frame)
+			ToonDecor.RestyleAsset(model, "Fence")
 			model.Parent = parent
 		else
 			block(parent, "FencePost", Vector3.new(0.5, 3.5, 0.5), frame * CFrame.new(-step / 2, 1.75, 0), Color3.fromRGB(110, 78, 52), false)
@@ -271,13 +298,7 @@ end
 -- Arbres
 --------------------------------------------------------------------------------
 
-local function green(rng: Random): Color3
-	return Color3.fromRGB(rng:NextInteger(50, 78), rng:NextInteger(110, 145), rng:NextInteger(45, 70))
-end
 
-local function trunkColor(rng: Random): Color3
-	return Color3.fromRGB(rng:NextInteger(88, 108), rng:NextInteger(62, 76), rng:NextInteger(46, 56))
-end
 
 -- Une sorte d'arbre au hasard ; `sakura` : part des cerisiers (0 à 1).
 function Scenery.PickKind(rng: Random, sakura: number?): TreeKind
@@ -311,6 +332,7 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		ball(parent, "Bush", size, ground + Vector3.new(0, size * 0.3, 0), color, Enum.Material.Grass)
 		local second = size * rng:NextNumber(0.6, 0.8)
 		ball(parent, "Bush", second, ground + Vector3.new(rng:NextNumber(-2, 2), second * 0.3, rng:NextNumber(-2, 2)), color, Enum.Material.Grass)
+		ball(parent, "Bush", size * 0.55, ground + Vector3.new(0, size * 0.62, 0), lighter(color), Enum.Material.Grass)
 		return
 	end
 	if k == "Pine" or k == "PineSnow" then
@@ -319,19 +341,19 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		local snowy = k == "PineSnow"
 		local trunkHeight = 5 * s
 		column(parent, "Trunk", trunkHeight + 1, 1.4 * s, ground - Vector3.new(0, 1, 0), trunkColor(rng), Enum.Material.Wood, true)
-		local color = Color3.fromRGB(rng:NextInteger(30, 50), rng:NextInteger(88, 112), rng:NextInteger(55, 72))
+		local color = vary(ToonDecor.PALETTE.Pine, rng, 0.08)
 		local y = trunkHeight - 1 * s
 		local tiers = rng:NextInteger(3, 4)
 		for tier = 1, tiers do
 			local width = (11 - tier * 2.2) * s
 			local height = 4.2 * s
-			column(parent, "Leaves", height, width, ground + Vector3.new(0, y, 0), color, Enum.Material.Grass, false)
+			column(parent, "Leaves", height, width, ground + Vector3.new(0, y, 0), if tier == tiers then lighter(color) else color, Enum.Material.Grass, false)
 			if snowy then
 				column(parent, "Snow", 0.8 * s, width * 0.92, ground + Vector3.new(0, y + height - 0.4 * s, 0), Color3.fromRGB(240, 244, 250), Enum.Material.Snow, false)
 			end
 			y += height * 0.72
 		end
-		ball(parent, "Leaves", 2.4 * s, ground + Vector3.new(0, y + 0.6 * s, 0), color, Enum.Material.Grass)
+		ball(parent, "Leaves", 2.4 * s, ground + Vector3.new(0, y + 0.6 * s, 0), lighter(color), Enum.Material.Grass)
 		return
 	end
 	local isSakura = k == "Sakura"
@@ -351,6 +373,8 @@ function Scenery.Tree(parent: Instance, ground: Vector3, rng: Random, kind: Tree
 		local shift = Vector3.new(rng:NextNumber(-0.35, 0.35) * crown, rng:NextNumber(0.05, 0.35) * crown, rng:NextNumber(-0.35, 0.35) * crown)
 		ball(parent, "Leaves", second, top + shift, if isSakura then color:Lerp(Scenery.SAKURA, 0.5) else color, material)
 	end
+	-- Calotte claire sur le dessus : l'aplat de lumière du dessin animé.
+	ball(parent, "Leaves", crown * 0.62, top + Vector3.new(0, crown * 0.3, 0), lighter(color), material)
 	if isSakura then
 		-- Pétales tombés au pied de l'arbre.
 		local carpet = crown * 1.1
