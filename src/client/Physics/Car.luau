@@ -3,6 +3,7 @@ local WheelClass = require(script.Parent.Wheel)
 local PowertrainClass = require(script.Parent.Powertrain)
 local AerodynamicsClass = require(script.Parent.Aerodynamics)
 local DifferentialClass = require(script.Parent.Differential)
+local Arcade = require(script.Parent.Arcade)
 local InputManager = require(script.Parent.Parent.Core.InputManager)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
@@ -49,6 +50,7 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	-- engagé (nil = boîte libre), frein à main hors service.
 	GearLock: number?,
 	HandbrakeDisabled: boolean,
+	AirTime: number, -- secondes depuis que les quatre roues ont quitté le sol (Arcade.luau)
 }
 
 --[[
@@ -150,6 +152,7 @@ function Car.new(chassis: BasePart, classId: string?, carId: string?): Car
 	self.Held = false
 	self.GearLock = nil
 	self.HandbrakeDisabled = false
+	self.AirTime = 0
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -530,6 +533,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 			brakeForce = math.max(brakeForce, self.HandbrakeForce * self.HandbrakePressure)
 		end
 
+		-- Couche arcade : ABS sur l'avant (une roue qui bloque est relâchée).
+		brakeForce = Arcade.BrakeForce(wheel.IsFront, wheel.LongSlipNorm, brakeForce, inputs.handbrake)
+
 		local wheelSteerAngle = 0
 		if wheel.IsFront then
 			wheelSteerAngle = wheel.IsLeft and leftAngle or rightAngle
@@ -541,6 +547,19 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 
 	-- PHASE 4 : aérodynamisme (sur le châssis, indépendant du contact au sol)
 	self.Aerodynamics:Apply(self.Chassis, dt)
+
+	-- PHASE 5 : couche arcade (Arcade.luau), pas sur la grille de départ.
+	local grounded = 0
+	for _, wheel in ipairs(self.Wheels) do
+		if wheel.IsGrounded then
+			grounded += 1
+		end
+	end
+	local airTime: number = self.AirTime
+	self.AirTime = if grounded == 0 then airTime + dt else 0
+	if not self.Held then
+		Arcade.Apply(self.Chassis, dt, inputs, grounded, self.AirTime)
+	end
 end
 
 return Car
