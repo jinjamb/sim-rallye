@@ -11,6 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
+local SoundGroups = require(script.Parent.Parent.Audio.SoundGroups)
 
 local Horn = {}
 
@@ -46,6 +47,7 @@ function Horn.Play(car: Model)
 	sound.RollOffMode = Enum.RollOffMode.InverseTapered
 	sound.RollOffMinDistance = ROLLOFF_MIN
 	sound.RollOffMaxDistance = ROLLOFF_MAX
+	sound.SoundGroup = SoundGroups.Get("Effets")
 	sound.Parent = chassis
 	sound.Ended:Connect(function()
 		sound:Destroy()

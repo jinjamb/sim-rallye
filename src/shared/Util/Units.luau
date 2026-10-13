@@ -27,6 +27,22 @@ function Units.ToKmh(studsPerSecond: number): number
 	return studsPerSecond * Units.METERS_PER_STUD * 3.6
 end
 
+--[[
+	Unité d'affichage des vitesses (onglet OPTIONS : km/h ou mph). Seulement
+	l'affichage : toute la physique reste en studs/s.
+]]
+Units.SpeedUnit = "kmh" :: "kmh" | "mph"
+
+-- Vitesse affichée (studs/s -> km/h ou mph selon SpeedUnit).
+function Units.Speed(studsPerSecond: number): number
+	local kmh = Units.ToKmh(studsPerSecond)
+	return if Units.SpeedUnit == "mph" then kmh / 1.609344 else kmh
+end
+
+function Units.SpeedLabel(): string
+	return if Units.SpeedUnit == "mph" then "mph" else "km/h"
+end
+
 -- Puissance massique : W/kg (= m²/s³) -> studs²/s³, l'unité des couples Roblox
 -- (masse * studs² / s²) multipliés par des rad/s, ramenés à la masse.
 function Units.PowerToWeightToStuds(wattsPerKg: number): number

@@ -30,6 +30,9 @@ local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
+local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MenuKit = require(script.Parent.MenuKit)
 local Widgets = require(script.Parent.Parent.Widgets)
@@ -50,9 +53,12 @@ local CARD_HEIGHT = ART_HEIGHT + 86
 local CARD_BUTTON_HEIGHT = 32
 
 -- Pastilles des sortes : icône et nom court.
+local CHIPS_PER_ROW = 4
 local KIND_CHIPS: { [string]: string } = {
 	Car = "🏎️ VOITURES",
 	Engine = "⚙️ MOTEURS",
+	Backfire = "🔥 FLAMMES",
+	Headlight = "💡 PHARES",
 	Smoke = "💨 FUMÉES",
 	Horn = "📯 KLAXONS",
 	Celebration = "🎉 FÊTES",
@@ -184,7 +190,8 @@ function ShopPage.Rolls(ctx: Context, b: Builder)
 		ctx.Rebuild()
 	end)
 	if ctx.View.ShowOdds then
-		for _, entry in ipairs(Rolls.Odds(false)) do
+		-- Événement éclair « Tirages boostés » : les probabilités affichées suivent.
+		for _, entry in ipairs(Rolls.Odds(false, FlashEvents.RollBoost(workspace:GetServerTimeNow()))) do
 			local info = Rarity.Get(entry.Rarity)
 			local names = {}
 			for _, item in ipairs(entry.Items) do
@@ -236,10 +243,13 @@ function ShopPage.Offers(ctx: Context, b: Builder)
 	end
 
 	for _, pass in ipairs(Products.PASSES) do
-		local active = passes[pass.Key] == true
-		offerRow(b, (if pass.Key == "vip" then "👑 " else "💰 ") .. "PASS " .. Format.Upper(pass.Name), pass.Description, if active then Widgets.COLOR_GREEN else Theme.ACCENT, function(row)
+		-- Le Premium contient les autres pass : avec lui, ils sont « inclus ».
+		local included = pass.Key ~= "premium" and passes.premium == true
+		local active = passes[pass.Key] == true or included
+		local icon = if pass.Key == "premium" then "⭐ " elseif pass.Key == "vip" then "👑 " else "💰 "
+		offerRow(b, icon .. "PASS " .. Format.Upper(pass.Name), pass.Description, if active then Widgets.COLOR_GREEN else Theme.ACCENT, function(row)
 			if active then
-				local state = Widgets.Label(row, "ACTIF ✓", 14, Enum.Font.GothamBlack, Widgets.COLOR_GREEN)
+				local state = Widgets.Label(row, if included and passes[pass.Key] ~= true then "INCLUS ✓" else "ACTIF ✓", 14, Enum.Font.GothamBlack, Widgets.COLOR_GREEN)
 				state.Position = UDim2.fromOffset(MenuKit.CONTENT_WIDTH - BUTTON_WIDTH, 0)
 				state.Size = UDim2.fromOffset(BUTTON_WIDTH, 40)
 				state.TextXAlignment = Enum.TextXAlignment.Center
@@ -308,6 +318,13 @@ local function cardAction(ctx: Context, holder: Frame, item: Catalog.Item, owned
 		state.TextXAlignment = Enum.TextXAlignment.Center
 		return
 	end
+	-- Voiture gratuite d'une catégorie pas encore ouverte : le niveau qui l'ouvre.
+	if isOwned and item.Level and MenuKit.Level(ctx) < item.Level then
+		local state = Widgets.Label(holder, string.format("🔒 NIVEAU %d", item.Level), 12, Enum.Font.GothamBlack, Widgets.COLOR_DIM)
+		state.Size = UDim2.fromScale(1, 1)
+		state.TextXAlignment = Enum.TextXAlignment.Center
+		return
+	end
 	if isOwned then
 		local button = ctx.Button(holder, if equipped then "PORTÉ ✓" else "PORTER", 0, CARD_WIDTH, function()
 			if not equipped then
@@ -325,9 +342,12 @@ local function cardAction(ctx: Context, holder: Frame, item: Catalog.Item, owned
 		if item.Credits then
 			-- Crédits à gauche, Robux à droite.
 			local half = (CARD_WIDTH - 6) / 2
-			local price = item.Credits :: number
+			-- Événement éclair « Voiture rare » : sa voiture est moins chère.
+			local listed = item.Credits :: number
+			local price = FlashEvents.CreditPrice(listed, if item.Kind == "Car" then item.CarClass else nil, workspace:GetServerTimeNow())
 			local affordable = wallet ~= nil and wallet.Credits >= price
-			local button = ctx.Button(holder, Credits.Format(price), 0, if tier then half else CARD_WIDTH, function()
+			local label = if price < listed then "⚡ " .. Credits.Format(price) else Credits.Format(price)
+			local button = ctx.Button(holder, label, 0, if tier then half else CARD_WIDTH, function()
 				ctx.Action("Buy", item.Id)
 			end)
 			if affordable then
@@ -406,8 +426,7 @@ end
 
 -- Les cartes des objets d'une sorte, trois par rangée, sans titre.
 -- `ownedOnly` : seulement ce qu'on possède (INVENTAIRE).
-function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOnly: boolean?)
-	local items, owned = shownItems(ctx, kind, ownedOnly)
+local function cardRows(ctx: Context, b: Builder, items: { Catalog.Item }, owned: { [string]: boolean })
 	local row: Frame? = nil
 	for index, item in ipairs(items) do
 		local column = (index - 1) % CARD_COLUMNS + 1
@@ -415,6 +434,32 @@ function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOn
 			row = b:Row(CARD_HEIGHT + CARD_GAP)
 		end
 		itemCard(ctx, row :: Frame, column, item, owned)
+	end
+end
+
+function ShopPage.ItemRows(ctx: Context, b: Builder, kind: Catalog.Kind, ownedOnly: boolean?)
+	local items, owned = shownItems(ctx, kind, ownedOnly)
+	if kind ~= "Car" then
+		cardRows(ctx, b, items, owned)
+		return
+	end
+	-- Voitures : par catégorie, avec le niveau qui ouvre ses voitures gratuites.
+	for _, class in ipairs(CarClasses.LIST) do
+		local ofClass = {}
+		for _, item in ipairs(items) do
+			if item.CarClass == class.Id then
+				table.insert(ofClass, item)
+			end
+		end
+		if #ofClass > 0 then
+			local level = CarModels.CLASS_LEVELS[class.Id] or 1
+			b:Text(string.format(
+				"%s · 3 gratuites%s, 5 à débloquer en crédits ou en Robux",
+				Format.Upper(class.Name),
+				if level > 1 then string.format(" dès le niveau %d", level) else ""
+			), 13, Theme.YELLOW)
+			cardRows(ctx, b, ofClass, owned)
+		end
 	end
 end
 
@@ -448,12 +493,18 @@ function ShopPage.Catalog(ctx: Context, b: Builder)
 		chosen = kinds[1]
 	end
 	b:Section("Objets")
-	local chips = b:Row(34)
+	-- Les pastilles, CHIPS_PER_ROW par ligne.
 	local gap = 6
-	local width = (MenuKit.CONTENT_WIDTH - gap * (#kinds - 1)) / #kinds
+	local perRow = math.min(CHIPS_PER_ROW, #kinds)
+	local width = (MenuKit.CONTENT_WIDTH - gap * (perRow - 1)) / perRow
+	local chips: Frame? = nil
 	for index, kind in ipairs(kinds) do
+		local column = (index - 1) % perRow
+		if column == 0 then
+			chips = b:Row(34)
+		end
 		local selected = kind == chosen
-		local chip = ctx.Button(chips, KIND_CHIPS[kind] or Format.Upper(Catalog.KIND_NAMES[kind]), (index - 1) * (width + gap), width, function()
+		local chip = ctx.Button(chips :: Frame, KIND_CHIPS[kind] or Format.Upper(Catalog.KIND_NAMES[kind]), column * (width + gap), width, function()
 			ctx.View.ShopKind = kind
 			ctx.Rebuild()
 		end)

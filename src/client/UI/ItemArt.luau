@@ -32,6 +32,7 @@ local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
@@ -88,9 +89,11 @@ local function inertCopy(template: Model): Model
 	return model
 end
 
--- La voiture d'une catégorie, peinte de la livrée, prête à copier (nil : pas de gabarit).
-local function preparedCar(classId: string, livery: Livery.Livery?): Model?
-	local key = classId .. "|" .. (if livery then Livery.Key(livery) else "")
+-- Une voiture (CarModels.luau), peinte de la livrée, prête à copier (nil : pas de gabarit).
+local function preparedCar(carId: string, livery: Livery.Livery?): Model?
+	local carModel = CarModels.Get(carId)
+	local classId = if carModel then carModel.Class else CarClasses.DEFAULT
+	local key = carId .. "|" .. (if livery then Livery.Key(livery) else "")
 	local cached = prepared[key]
 	if cached then
 		return cached
@@ -102,7 +105,10 @@ local function preparedCar(classId: string, livery: Livery.Livery?): Model?
 	local model = inertCopy(template)
 	model:PivotTo(PREPARE_AT)
 	model.Parent = workspace
-	BodyKits.Apply(model, CarClasses.Get(classId).Body)
+	-- Sa carrosserie, si la livrée la garde (LiveryPainter lit ces attributs).
+	model:SetAttribute("CarClass", classId)
+	model:SetAttribute("CarModel", carId)
+	BodyKits.Apply(model, CarClasses.ForCar(classId, carId).Body)
 	local kit = model:FindFirstChild("BodyKit")
 	if kit then
 		for _, item in ipairs(kit:GetDescendants()) do
@@ -124,8 +130,8 @@ end
 
 local partArt: (Frame, Catalog.Item, number) -> ()
 
-local function carViewport(parent: Frame, classId: string, livery: Livery.Livery?)
-	local model = preparedCar(classId, livery)
+local function carViewport(parent: Frame, carId: string, livery: Livery.Livery?)
+	local model = preparedCar(carId, livery)
 	if not model then
 		return false
 	end
@@ -256,19 +262,15 @@ local function coinArt(parent: Frame, amount: number, size: number)
 	Theme.TextInk(value, 2)
 end
 
--- Modèle du jeu qui représente chaque catégorie (CarBodies.LIST) sur les vignettes.
-local CLASS_BODIES: { [string]: number } = {
-	Rally2 = 2, -- Kaze, citadine WRC
-	Rally4 = 6, -- Hoshi
-	GroupB = 4, -- Raijin, coupé des années 80
-}
-
 -- Icône d'une pièce de carrosserie, selon son emplacement.
 local PART_ICONS: { [string]: string } = {
 	Wing = "✈️",
 	Bumper = "🛡️",
 	Hood = "💡",
 	Flares = "📐",
+	Pattern = "🎨",
+	Sponsor = "🏷️",
+	Finish = "✨",
 }
 
 -- Une pièce : les jantes en couleur (un cercle et ses branches), une icône sinon.
@@ -343,19 +345,25 @@ function ItemArt.New(parent: Instance, subject: Subject, width: number, livery: 
 	local item = if subject.Item then Catalog.Get(subject.Item) else nil
 	if item then
 		if item.Kind == "Car" then
-			-- Une voiture du catalogue est une CATÉGORIE : on la montre avec un
-			-- modèle du jeu qui lui est propre (CLASS_BODIES), aux couleurs du
-			-- joueur -- jamais avec la carrosserie importée du gabarit.
-			local classId = item.CarClass or CarClasses.DEFAULT
+			-- Une voiture : sa propre carrosserie (CarModels.luau : Design), aux
+			-- couleurs du joueur.
 			local shown = table.clone(livery or Livery.Default(0))
-			shown.Body = CLASS_BODIES[classId] or 2
-			if not carViewport(card, classId, shown) then
+			shown.Body = 0
+			if not carViewport(card, item.Id, shown) then
 				iconArt(card, "🏎️", nil, tone, size)
 			end
 		elseif item.Kind == "Part" then
 			partArt(card, item, size)
 		elseif item.Kind == "Smoke" then
 			smokeArt(card, item.Color or Theme.TEXT, item.Color2)
+		elseif item.Kind == "Backfire" then
+			-- La flamme : sa couleur et son cœur, comme une fumée bicolore, et l'icône.
+			smokeArt(card, item.Color2 or Theme.YELLOW, item.Color)
+			iconArt(card, "🔥", "BANG !", tone, size)
+		elseif item.Kind == "Headlight" then
+			-- La lumière des phares : un halo de sa couleur, et l'ampoule.
+			smokeArt(card, item.Color or Theme.TEXT, Color3.new(1, 1, 1))
+			iconArt(card, "💡", nil, tone, size)
 		elseif item.Kind == "Celebration" then
 			iconArt(card, EFFECT_ICONS[item.Effect or ""] or KIND_ICONS.Celebration.Icon, nil, tone, size)
 		else
@@ -375,7 +383,7 @@ end
 	Sa voiture telle qu'elle roulera (modèle, pièces, livrée), en grand :
 	l'aperçu de l'inventaire.
 ]]
-function ItemArt.Car(parent: Instance, classId: string, livery: Livery.Livery, width: number, height: number): Frame
+function ItemArt.Car(parent: Instance, carId: string, livery: Livery.Livery, width: number, height: number): Frame
 	local card = Instance.new("Frame")
 	card.Name = "CarPreview"
 	card.Size = UDim2.fromOffset(width, height)
@@ -389,7 +397,7 @@ function ItemArt.Car(parent: Instance, classId: string, livery: Livery.Livery, w
 	stripes.Position = UDim2.fromScale(-0.1, 0)
 	local kana = Theme.Kana(card, "マイカー", math.floor(height * 0.35), 0.88)
 	kana.Position = UDim2.fromOffset(-12, 0)
-	if not carViewport(card, classId, livery) then
+	if not carViewport(card, carId, livery) then
 		iconArt(card, "🏎️", nil, Theme.ACCENT, math.min(width, height))
 	end
 	card.Parent = parent

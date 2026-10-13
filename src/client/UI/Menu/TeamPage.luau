@@ -64,37 +64,6 @@ local function colorStepper(ctx: Context, b: Builder, label: string, value: numb
 	valueLabel.TextColor3 = Livery.ContrastOf(color)
 end
 
--- Champ de saisie sur une ligne ; le texte va dans ctx.View[key].
-local function textField(ctx: Context, b: Builder, label: string, key: string, placeholder: string, maxLength: number)
-	local row = b:Row(34)
-	local text = Widgets.Label(row, label, 14)
-	text.Size = UDim2.new(0, 120, 1, 0)
-	local box = Instance.new("TextBox")
-	box.Position = UDim2.fromOffset(130, 2)
-	box.Size = UDim2.new(1, -130, 1, -4)
-	box.BackgroundColor3 = Theme.PANEL_2
-	box.BorderSizePixel = 0
-	box.ClearTextOnFocus = false
-	box.TextXAlignment = Enum.TextXAlignment.Left
-	box.FontFace = Theme.BODY_BOLD
-	box.TextSize = 16
-	box.TextColor3 = Theme.TEXT
-	box.PlaceholderColor3 = Theme.DIM
-	box.PlaceholderText = placeholder
-	box.Text = ctx.View[key] or ""
-	Theme.Corner(box)
-	local padding = Instance.new("UIPadding")
-	padding.PaddingLeft = UDim.new(0, 8)
-	padding.Parent = box
-	box:GetPropertyChangedSignal("Text"):Connect(function()
-		if utf8.len(box.Text) and (utf8.len(box.Text) :: number) > maxLength then
-			box.Text = string.sub(box.Text, 1, (utf8.offset(box.Text, maxLength + 1) :: number) - 1)
-		end
-		ctx.View[key] = box.Text
-	end)
-	box.Parent = row
-end
-
 local function inviteSection(ctx: Context, b: Builder, state: any)
 	local invite = state.Invite
 	if not invite then
@@ -116,8 +85,8 @@ end
 local function createSection(ctx: Context, b: Builder)
 	b:Section("Fonder une écurie")
 	b:Text(string.format("Jusqu'à %d pilotes sous les mêmes couleurs, un sigle devant vos noms, et un classement des écuries à chaque saison.", Teams.MAX_MEMBERS), 13, Widgets.COLOR_DIM)
-	textField(ctx, b, "Nom", "TeamName", "Les Fous du Volant", Teams.NAME_MAX)
-	textField(ctx, b, "Sigle", "TeamTag", "FDV", Teams.TAG_MAX)
+	MenuKit.TextField(ctx, b, "Nom", "TeamName", "Les Fous du Volant", Teams.NAME_MAX)
+	MenuKit.TextField(ctx, b, "Sigle", "TeamTag", "FDV", Teams.TAG_MAX)
 	local color = ctx.View.TeamColor or 1
 	local stripe = ctx.View.TeamStripe or 3
 	colorStepper(ctx, b, "Carrosserie", color, function(value)

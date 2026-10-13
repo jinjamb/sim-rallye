@@ -16,6 +16,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Rolls = require(ReplicatedStorage.Shared.Economy.Rolls)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local EconomyService = require(script.Parent.EconomyService)
 local AchievementService = require(script.Parent.AchievementService)
@@ -35,7 +36,8 @@ local function roll(player: Player)
 		Remotes.RollResult:FireClient(player, { Error = "Plus de tirage : un nouveau à chaque niveau, et avec les trois défis du jour." })
 		return
 	end
-	local item = Rolls.Draw(random, profile.RollPity)
+	-- Événement éclair « Tirages boostés » : les raretés Usine et plus montent.
+	local item = Rolls.Draw(random, profile.RollPity, FlashEvents.RollBoost(os.time()))
 	if not item then
 		Remotes.RollResult:FireClient(player, { Error = "Rien à tirer pour l'instant." })
 		return

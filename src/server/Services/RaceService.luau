@@ -77,9 +77,13 @@ local RecordService = require(script.Parent.RecordService)
 local StyleService = require(script.Parent.StyleService)
 local ChallengeService = require(script.Parent.ChallengeService)
 local EconomyService = require(script.Parent.EconomyService)
+local ReferralService = require(script.Parent.ReferralService)
+local MedalCalibration = require(script.Parent.MedalCalibration)
+local FlashEventService = require(script.Parent.FlashEventService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
-local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Plausibility = require(script.Parent.Plausibility)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 
 local RaceService = {}
 
@@ -136,6 +140,10 @@ type Member = {
 }
 
 type Runner = {
+	-- Garde-fous (Plausibility.luau) : accélération suivie, et pilote suspect
+	-- dont les tours ne comptent plus pour les records ni les médailles.
+	Tracker: Plausibility.Tracker,
+	Suspect: boolean,
 	Player: Player,
 	UserId: number,
 	Name: string,
@@ -202,6 +210,10 @@ type Race = {
 	-- Catégorie de voiture de la course (CarClasses.luau) : tout le monde la
 	-- conduit (prêtée à qui ne l'a pas), records du tour de cette catégorie.
 	CarClass: string,
+	-- Météo choisie par l'hôte (Weather.luau), et sa prévision, tirée au
+	-- départ de la première manche et gardée jusqu'au retour en salle d'attente.
+	Weather: Weather.Mode,
+	Forecast: Weather.Forecast?,
 	HostUserId: number,
 	Members: { Member },
 	State: RaceState,
@@ -270,6 +282,7 @@ local function lobbyList()
 				Format = race.Format,
 				Contacts = race.Contacts,
 				CarClass = race.CarClass,
+				Weather = race.Weather,
 				Host = hostName,
 				Count = #race.Members,
 				Max = MAX_PLAYERS,
@@ -297,6 +310,8 @@ local function raceSnapshot(race: Race)
 		Format = race.Format,
 		Contacts = race.Contacts,
 		CarClass = race.CarClass,
+		Weather = race.Weather,
+		Forecast = race.Forecast,
 		HostUserId = race.HostUserId,
 		State = race.State,
 		Round = race.Round,
@@ -570,6 +585,8 @@ local function finishRunner(race: Race, runner: Runner, crossing: number)
 	runner.Finished = true
 	if runner.Player.Parent then
 		ChallengeService.DailyEvent(runner.Player, "RaceFinished", 1)
+		ReferralService.Qualify(runner.Player) -- un filleul qui prend le volant
+		FlashEventService.Finished(runner.Player) -- événement éclair « Tirage offert »
 	end
 	runner.RaceTime = crossing - (race.StartTime :: number)
 	if runner.JokerCount == 0 then
@@ -680,6 +697,11 @@ startRound = function(race: Race, round: number)
 		end
 	end
 
+	-- La météo de la course : la même averse pour tous, manche après manche.
+	if not race.Forecast then
+		race.Forecast = Weather.New(race.Weather, serverNow())
+	end
+
 	race.Runners = {}
 	race.Pairs = {}
 	for slot, member in ipairs(members) do
@@ -700,6 +722,8 @@ startRound = function(race: Race, round: number)
 			LapTimes = {},
 			BestLap = nil,
 			LastLap = nil,
+			Tracker = Plausibility.NewTracker(),
+			Suspect = false,
 			JokerCount = 0,
 			InJoker = false,
 			JumpStart = false,
@@ -729,6 +753,7 @@ startRound = function(race: Race, round: number)
 				Contacts = race.Contacts,
 				Held = true,
 				CarClass = race.CarClass,
+				Attributes = if race.Forecast then Weather.ToAttributes(race.Forecast) else nil,
 			})
 			pending -= 1
 			-- Parti de la course pendant le chargement : sa voiture n'a rien à faire sur la grille.
@@ -890,6 +915,8 @@ local function createRace(padId: string, circuit: Circuit.Circuit, host: Player)
 		Format = "Sprint",
 		Contacts = true,
 		CarClass = hostClass(host),
+		Weather = "Dry",
+		Forecast = nil,
 		HostUserId = host.UserId,
 		Members = {},
 		State = "Lobby",
@@ -1073,6 +1100,7 @@ closeEvent = function(race: Race)
 		end
 	end
 	race.State = "Lobby"
+	race.Forecast = nil
 	race.Round = 1
 	race.RoundCount = if race.Format == "Event" then 2 else 1
 	race.Runners = {}
@@ -1182,12 +1210,12 @@ local function onSettings(player: Player, payload: any)
 	if type(payload.Contacts) == "boolean" then
 		race.Contacts = payload.Contacts
 	end
-	-- Catégorie : parmi les voitures que l'hôte possède (les autres la reçoivent en prêt).
-	if CarClasses.Exists(payload.CarClass) then
-		local item = Catalog.CarItem(payload.CarClass)
-		if item and EconomyService.Owns(player, item.Id) then
-			race.CarClass = payload.CarClass
-		end
+	if payload.Weather ~= nil then
+		race.Weather = Weather.Sanitize(payload.Weather)
+	end
+	-- Catégorie : parmi celles où l'hôte a une voiture (les autres la reçoivent en prêt).
+	if CarClasses.Exists(payload.CarClass) and CarService.OwnsClass(player, payload.CarClass) then
+		race.CarClass = payload.CarClass
 	end
 	sendRaceState(race)
 	broadcastLobby()
@@ -1279,6 +1307,12 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 
 	local previousValid = runner.Valid
 	runner.Valid += gained
+	-- Accélération impossible (Plausibility) : la course continue, mais ses
+	-- tours ne compteront ni pour les records ni pour les médailles.
+	if not runner.Suspect and Plausibility.Accelerating(runner.Tracker, now, runner.Valid) then
+		runner.Suspect = true
+		warn(string.format("[Garde-fou] %s : accélération impossible, tours hors records", runner.Name))
+	end
 	runner.LastRaw = location.Progress
 	runner.LastPosition = position
 	runner.LastTime = now
@@ -1328,8 +1362,12 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		-- record ni pour les médailles (Medals.luau : seuils d'un tour lancé).
 		local record = false
 		local medal: number? = nil
-		if runner.Laps > 1 then
-			local lapMs = math.floor(lapTime * 1000 + 0.5)
+		local lapMs = math.floor(lapTime * 1000 + 0.5)
+		-- Un tour bien plus rapide que le platine : pas un vrai tour.
+		if lapMs < Plausibility.MinimumLapMs(race.TrackId, length, race.CarClass) then
+			runner.Suspect = true
+		end
+		if runner.Laps > 1 and not runner.Suspect then
 			local limits = Medals.ForCircuit(race.TrackId, length, race.CarClass)
 			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key, race.CarClass), limits)
 			record = RecordService.SubmitLap(player, circuit.Key, race.CarClass, lapMs)
@@ -1338,6 +1376,7 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 				medal = after -- nouvelle médaille sur ce circuit
 			end
 			if RunService:IsStudio() then
+				MedalCalibration.Lap(race.TrackId, race.CarClass, length, lapMs)
 				print(string.format("[Médailles] %s en %s, tour %d : %.2f s, %.1f km/h de moyenne", race.TrackId, race.CarClass, runner.Laps, lapTime, Medals.AverageKmh(length, lapMs)))
 			end
 		end

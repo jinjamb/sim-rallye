@@ -13,9 +13,9 @@
 	Limite : une MeshPart texturée (TextureID, SurfaceAppearance) garde sa
 	texture, la couleur n'y change rien. Le numéro, lui, apparaît toujours.
 
-	NUMÉROS : un rond blanc cerclé de la couleur du joueur, sur chaque flanc et
-	sur le toit. Leurs emplacements sont trouvés par des rayons lancés vers la
-	carrosserie (flancs à mi-hauteur, toit par-dessus) sur la première voiture
+	NUMÉROS : un rond blanc cerclé de la couleur du joueur, sur chaque flanc
+	(pas sur le toit). Leurs emplacements sont trouvés par des rayons lancés
+	vers la carrosserie, à mi-hauteur des flancs, sur la première voiture
 	posée dans le monde, puis réutilisés. Panneaux sans masse ni collision,
 	soudés au châssis : la physique n'en voit rien. Le style du numéro
 	(Livery.PLATES) change le fond, le chiffre et le cercle.
@@ -30,20 +30,56 @@
 	MODÈLES (CarBodies.luau) : Apply pose d'abord le modèle et les pièces
 	choisis dans la livrée. Numéros et bandes dépendent de la forme : leurs
 	emplacements sont gardés PAR FORME (CarBodies.ShapeKey).
+
+	FINITIONS (Livery.FINISHES, TRIM_FINISHES) : matériau et reflets de la
+	peinture, et des garnitures noires d'une zone ; « Standard » rend le
+	matériau d'origine (retenu sur la pièce avant la première finition).
+
+	PEINTURE PAR PIÈCE : une pièce d'un modèle du jeu porte sa zone (attribut
+	PaintZone) ; si la livrée donne une couleur à cette zone (Livery.Paints),
+	la pièce la prend, sinon elle garde sa peinture d'origine (la couleur de
+	la livrée, ou BaseColor pour les garnitures).
+
+	SPONSORS (Livery.SPONSORS) : un autocollant dessiné en texte (pas
+	d'image) sur le capot, sur chaque portière devant le numéro, et sur le
+	toit. Emplacements trouvés par des rayons, comme les numéros, et gardés
+	par forme. Le texte du capot et du toit se lit depuis la caméra de
+	poursuite (le haut du texte vers l'avant de la voiture).
+
+	MOTIF : une image répétée (Texture) sur les faces visibles (pas le
+	dessous) de chaque pièce peinte dans la couleur principale, teintée dans
+	la couleur du motif. Rien tant que l'image du motif n'est pas importée
+	(Livery.PATTERNS : Image = 0).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local CarBodies = require(ReplicatedStorage.Shared.Vehicle.CarBodies)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 
 local LiveryPainter = {}
 
 local PAINT_ATTRIBUTE = "LiveryPaint"
 local PANEL_NAME = "LiveryNumber"
 local STRIPE_NAME = "LiveryStripe"
+local SPONSOR_NAME = "LiverySponsor"
+-- Sponsors : taille (largeur, hauteur en studs) et position par emplacement.
+local SPONSOR_SIZES: { [string]: Vector2 } = {
+	SponsorHood = Vector2.new(2.6, 0.8),
+	SponsorDoors = Vector2.new(1.5, 0.55),
+	SponsorRoof = Vector2.new(3.2, 1.0),
+}
+local DOOR_SPONSOR_Z = -1.85 -- devant le numéro de portière
+local ROOF_SPONSOR_Z = 1.0
+local DEFAULT_HOOD_Z = -4.6
+local SPONSOR_LIFT = 0.07 -- au-dessus de la peinture et des bandes
+local PATTERN_NAME = "LiveryPattern"
+local ZONE_ATTRIBUTE = "PaintZone"
+local BASE_COLOR_ATTRIBUTE = "BaseColor"
+-- Faces qui reçoivent le motif : tout sauf le dessous, qu'on ne voit pas.
+local PATTERN_FACES = { Enum.NormalId.Top, Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right }
 local SIDE_PANEL = 3.2
-local ROOF_PANEL = 4.2
 local STRIPE_STEP = 0.8 -- studs entre deux points d'une bande
 local STRIPE_LIFT = 0.035 -- au-dessus de la peinture (sous les numéros, à 0.06)
 local STRIPE_THICKNESS = 0.03
@@ -60,12 +96,15 @@ local EXCLUDED_WORDS = {
 }
 
 type Anchor = { Offset: CFrame, Size: number }
+-- Un emplacement de sponsor : où, et dans quel sens (le haut du texte).
+type SponsorAnchor = { Offset: CFrame, Size: Vector2 }
 -- Un point d'une bande, dans le repère du châssis (Hit false : rien touché).
 type StripePoint = { Hit: boolean, Point: Vector3, Normal: Vector3 }
 local MISS: StripePoint = { Hit = false, Point = Vector3.zero, Normal = Vector3.yAxis }
 
 -- Par forme de carrosserie (CarBodies.ShapeKey, attribut « DesignKey » de la voiture).
 local anchorsByShape: { [string]: { Anchor } } = {}
+local sponsorsByShape: { [string]: { [string]: { SponsorAnchor } } } = {} -- puis par emplacement
 local stripesByShape: { [string]: { [number]: { StripePoint } } } = {} -- puis par décalage latéral
 
 local function shapeOf(car: Model): string
@@ -161,7 +200,7 @@ end
 local function bodyRayParams(car: Model): RaycastParams?
 	local include: { Instance } = {}
 	for _, item in ipairs(car:GetDescendants()) do
-		if item:IsA("BasePart") and item.CanQuery and item.Name ~= PANEL_NAME and item.Name ~= STRIPE_NAME
+		if item:IsA("BasePart") and item.CanQuery and item.Name ~= PANEL_NAME and item.Name ~= STRIPE_NAME and item.Name ~= SPONSOR_NAME
 			and not isExcluded(item, car) then
 			table.insert(include, item)
 		end
@@ -207,7 +246,6 @@ local function computeAnchors(car: Model, chassis: BasePart): { Anchor }
 		local outward = frame.RightVector * side
 		cast(flankCenter + outward * reach, -outward * reach, sideSize)
 	end
-	cast(frame.Position + frame.UpVector * reach, -frame.UpVector * reach, ROOF_PANEL)
 	return found
 end
 
@@ -350,6 +388,98 @@ local function makePanel(car: Model, chassis: BasePart, anchor: Anchor, number: 
 	part.Parent = car
 end
 
+-- Emplacements des sponsors, relatifs au châssis : capot, portières, toit.
+local function computeSponsorAnchors(car: Model, chassis: BasePart): { [string]: { SponsorAnchor } }
+	local found: { [string]: { SponsorAnchor } } = { SponsorHood = {}, SponsorDoors = {}, SponsorRoof = {} }
+	local params = bodyRayParams(car)
+	if not params then
+		return found
+	end
+	local _, size = car:GetBoundingBox()
+	local reach = math.max(size.X, size.Y, size.Z) / 2 + 6
+	local base = chassis.CFrame
+	-- Un rayon dans le repère du châssis ; `up` : le haut du texte (repère du châssis).
+	local function cast(slot: string, origin: Vector3, direction: Vector3, up: Vector3)
+		local hit = workspace:Raycast(base:PointToWorldSpace(origin), base:VectorToWorldSpace(direction), params)
+		if not hit then
+			return
+		end
+		local position = base:PointToObjectSpace(hit.Position)
+		local normal = base:VectorToObjectSpace(hit.Normal)
+		local lifted = position + normal * SPONSOR_LIFT
+		table.insert(found[slot], { Offset = CFrame.lookAt(lifted, lifted + normal, up), Size = SPONSOR_SIZES[slot] })
+	end
+	local forward = Vector3.new(0, 0, -1) -- l'avant du châssis
+	local hoodZ = car:GetAttribute("HoodZ")
+	cast("SponsorHood", Vector3.new(0, reach, if type(hoodZ) == "number" then hoodZ else DEFAULT_HOOD_Z), Vector3.new(0, -2 * reach, 0), forward)
+	cast("SponsorRoof", Vector3.new(0, reach, ROOF_SPONSOR_Z), Vector3.new(0, -2 * reach, 0), forward)
+	local flankY = car:GetAttribute("FlankY")
+	local y = if type(flankY) == "number" then flankY else 0
+	for _, side in ipairs({ -1, 1 }) do
+		cast("SponsorDoors", Vector3.new(side * reach, y, DOOR_SPONSOR_Z), Vector3.new(-side * 2 * reach, 0, 0), Vector3.yAxis)
+	end
+	-- Le toit doit être le dessus de la voiture (pas un capot plongeant sous un aileron).
+	local roof = found.SponsorRoof[1]
+	local hood = found.SponsorHood[1]
+	if roof and hood and roof.Offset.Position.Y < hood.Offset.Position.Y + 0.5 then
+		found.SponsorRoof = {}
+	end
+	return found
+end
+
+-- Un autocollant de sponsor (texte et fond), posé sur la carrosserie.
+local function makeSponsor(car: Model, chassis: BasePart, anchor: SponsorAnchor, sponsor: Livery.SponsorStyle, text: string, background: Color3?)
+	local part = Instance.new("Part")
+	part.Name = SPONSOR_NAME
+	part.Size = Vector3.new(anchor.Size.X, anchor.Size.Y, 0.05)
+	part.Transparency = 1
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.CastShadow = false
+	part.Massless = true
+	part.Anchored = chassis.Anchored
+	part.CFrame = chassis.CFrame * anchor.Offset
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Face = Enum.NormalId.Front
+	gui.CanvasSize = Vector2.new(anchor.Size.X, anchor.Size.Y) * 100
+	gui.LightInfluence = 0.6
+	gui.Parent = part
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.fromScale(1, 1)
+	frame.BorderSizePixel = 0
+	frame.BackgroundColor3 = background or Color3.new(0, 0, 0)
+	frame.BackgroundTransparency = if background then 0 else 1
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0.18, 0)
+	corner.Parent = frame
+	frame.Parent = gui
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.AnchorPoint = Vector2.new(0.5, 0.5)
+	label.Position = UDim2.fromScale(0.5, 0.5)
+	label.Size = UDim2.fromScale(0.9, 0.78)
+	label.Font = sponsor.Font
+	label.TextScaled = true
+	label.TextColor3 = sponsor.Ink
+	label.Text = text
+	if not background then
+		-- Sans fond : le texte cerné, lisible sur n'importe quelle couleur.
+		local stroke = Instance.new("UIStroke")
+		stroke.Color = Color3.fromRGB(16, 16, 20)
+		stroke.Thickness = 3
+		stroke.Parent = label
+	end
+	label.Parent = frame
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = chassis
+	weld.Part1 = part
+	weld.Parent = part
+	part.Parent = car
+end
+
 --[[
 	Calcule d'avance les emplacements des numéros et le tracé de toutes les
 	bandes, sur une voiture posée dans le monde et dont les pièces répondent
@@ -373,22 +503,114 @@ function LiveryPainter.Prepare(car: Model)
 			stripeOf(car, chassis, lane.X)
 		end
 	end
+	if sponsorsByShape[shape] == nil then
+		sponsorsByShape[shape] = computeSponsorAnchors(car, chassis)
+	end
+end
+
+-- Matériau et reflets d'origine d'une pièce, retenus avant la première finition.
+local ORIGINAL_MATERIAL = "OriginalMaterial"
+local ORIGINAL_REFLECTANCE = "OriginalReflectance"
+local function applyFinish(part: BasePart, finish: Livery.Finish?)
+	local savedMaterial = part:GetAttribute(ORIGINAL_MATERIAL)
+	if savedMaterial == nil then
+		part:SetAttribute(ORIGINAL_MATERIAL, part.Material.Name)
+		part:SetAttribute(ORIGINAL_REFLECTANCE, part.Reflectance)
+	end
+	local material = finish and finish.Material
+	if material then
+		part.Material = material
+		part.Reflectance = finish and finish.Reflectance or 0
+		return
+	end
+	-- Standard : le matériau d'origine.
+	local name = part:GetAttribute(ORIGINAL_MATERIAL)
+	local original = if type(name) == "string" then (Enum.Material :: any)[name] else nil
+	if original then
+		part.Material = original
+	end
+	local reflectance = part:GetAttribute(ORIGINAL_REFLECTANCE)
+	part.Reflectance = if type(reflectance) == "number" then reflectance else 0
+end
+
+-- Le motif sur une pièce : une image répétée par face visible.
+local function addPattern(part: BasePart, style: Livery.PatternStyle, color: Color3)
+	for _, face in ipairs(PATTERN_FACES) do
+		local texture = Instance.new("Texture")
+		texture.Name = PATTERN_NAME
+		texture.Texture = "rbxassetid://" .. tostring(style.Image)
+		texture.Face = face
+		texture.StudsPerTileU = style.Tile
+		texture.StudsPerTileV = style.Tile
+		texture.Color3 = color
+		texture.Transparency = style.Transparency
+		texture.Parent = part
+	end
+end
+
+-- La carrosserie de la voiture (attributs CarModel, sinon CarClass : sa voiture de référence).
+local function designOf(car: Model): CarModels.Design?
+	local model = CarModels.Get(car:GetAttribute("CarModel"))
+	if not model then
+		local classId = car:GetAttribute("CarClass")
+		model = if type(classId) == "string" then CarModels.Reference(classId) else nil
+	end
+	return if model then model.Design else nil
 end
 
 -- Peinture, bandes et numéros. La voiture doit être dans le monde (rayons).
-function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
+function LiveryPainter.Apply(car: Model, wanted: Livery.Livery)
 	local chassis = car:FindFirstChild("Chassis")
 	if not chassis or not chassis:IsA("BasePart") then
 		return
 	end
+	-- « La carrosserie de la voiture » (Body = 0) : celle de sa fiche.
+	local livery = Livery.WithDesign(wanted, designOf(car))
 	local color = Livery.ColorOf(livery)
 	-- Le modèle et ses pièces d'abord : la peinture et les numéros se posent dessus.
 	CarBodies.Apply(car, livery, color)
+	-- Aucun motif, ou image pas encore importée : rien à poser.
+	local style = Livery.PATTERNS[livery.Pattern or 1]
+	local pattern: Livery.PatternStyle? = if style and style.Image ~= 0 then style else nil
+	local patternColor = Livery.PatternColorOf(livery)
+	-- Finitions : la peinture, et les garnitures noires.
+	local finish = Livery.FINISHES[livery.Finish or 1]
+	local trimFinish = Livery.TRIM_FINISHES[livery.TrimFinish or 1]
 	for _, item in ipairs(car:GetDescendants()) do
-		if item:IsA("BasePart") and item:GetAttribute(PAINT_ATTRIBUTE) == true then
-			item.Color = color
-		elseif item.Name == PANEL_NAME or item.Name == STRIPE_NAME then
+		if item.Name == PANEL_NAME or item.Name == STRIPE_NAME or item.Name == PATTERN_NAME or item.Name == SPONSOR_NAME then
 			item:Destroy()
+		elseif item:IsA("BasePart") then
+			-- Une zone peinte à part prend sa couleur (et reste unie) ; sinon, la peinture d'origine.
+			local zone = item:GetAttribute(ZONE_ATTRIBUTE)
+			local zoneColor = if type(zone) == "string" then Livery.ZoneColorOf(livery, zone) else nil
+			local painted = item:GetAttribute(PAINT_ATTRIBUTE) == true
+			if zoneColor then
+				item.Color = zoneColor
+				applyFinish(item, finish)
+			elseif painted then
+				item.Color = color
+				applyFinish(item, finish)
+			else
+				local base = item:GetAttribute(BASE_COLOR_ATTRIBUTE)
+				if typeof(base) == "Color3" then
+					item.Color = base
+				end
+				-- Garniture d'une zone (boucliers, bas de caisse, rétroviseurs...) : sa finition.
+				if type(zone) == "string" and trimFinish then
+					if trimFinish.Body then
+						item.Color = color
+						applyFinish(item, finish)
+					else
+						if trimFinish.Color then
+							item.Color = trimFinish.Color
+						end
+						applyFinish(item, trimFinish)
+					end
+				end
+			end
+			if pattern and painted and not zoneColor and item.Transparency < 1 then
+				addPattern(item, pattern, patternColor)
+			end
 		end
 	end
 	car:SetAttribute("RaceNumber", livery.Number)
@@ -415,6 +637,32 @@ function LiveryPainter.Apply(car: Model, livery: Livery.Livery)
 	local plate = Livery.PLATES[livery.Plate] or Livery.PLATES[1]
 	for _, anchor in ipairs(anchorsByShape[shape] or {}) do
 		makePanel(car, chassis, anchor, livery.Number, color, plate)
+	end
+
+	-- Sponsors : capot, portières, toit.
+	if sponsorsByShape[shape] == nil and car:IsDescendantOf(workspace) then
+		sponsorsByShape[shape] = computeSponsorAnchors(car, chassis)
+	end
+	local sponsorAnchors = sponsorsByShape[shape] or {}
+	for _, slot in ipairs(Livery.SPONSOR_SLOTS) do
+		local sponsor = Livery.SPONSORS[(livery :: any)[slot.Field] or 1]
+		if sponsor and (livery :: any)[slot.Field] ~= 1 then
+			local text = sponsor.Text
+			local background = sponsor.Background
+			if text == nil then
+				-- Écurie : son sigle, à sa couleur.
+				local tag = car:GetAttribute("TeamTag")
+				local teamColor = car:GetAttribute("TeamColor")
+				text = if type(tag) == "string" then tag else nil
+				local swatch = if type(teamColor) == "number" then Livery.COLORS[teamColor] else nil
+				background = if swatch then swatch.Color else background
+			end
+			if text and text ~= "" then
+				for _, anchor in ipairs(sponsorAnchors[slot.Field] or {}) do
+					makeSponsor(car, chassis, anchor, sponsor, text, background)
+				end
+			end
+		end
 	end
 end
 

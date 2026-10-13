@@ -38,7 +38,7 @@ function CareerPage.LapRecords(ctx: Context, b: Builder, trackId: string, classI
 	local limits = Medals.ForCircuit(trackId, circuit.Length, classId)
 	local tier = Medals.TierOf(mine, limits)
 	local nextTier, nextMs = Medals.Next(mine, limits)
-	local text = string.format("%s — ton record : %s", circuit.Name, if mine then Format.Time(mine / 1000) else "aucun")
+	local text = string.format("%s · ton record : %s", circuit.Name, if mine then Format.Time(mine / 1000) else "aucun")
 	if tier > 0 then
 		text ..= "  " .. Medals.Rich(tier)
 	end
@@ -104,7 +104,7 @@ local function progressLines(ctx: Context, b: Builder)
 		Format.Thousands(progress.Style)
 	), 13)
 	b:Text(string.format(
-		"XP : médailles, courses, victoires, podiums, points, spéciales terminées, et le style en compétition — dérapages, sauts, dépassements (%d points de style = 1 XP).",
+		"XP : médailles, courses, victoires, podiums, points, spéciales terminées, et le style en compétition : dérapages, sauts, dépassements (%d points de style = 1 XP).",
 		Progression.XP.STYLE_PER_XP
 	), 12, Widgets.COLOR_DIM)
 end
@@ -148,7 +148,7 @@ function CareerPage.Livery(ctx: Context, b: Builder)
 		changed.Number = ((current.Number - Livery.MIN_NUMBER + direction) % range) + Livery.MIN_NUMBER
 		send(changed)
 	end)
-	b:Text("Visible de tous : carrosserie, numéros sur les flancs et le toit. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
+	b:Text("Visible de tous : carrosserie, numéros sur les flancs. Bandes, style du numéro, couleurs à débloquer et aperçu : au GARAGE (zone violette du paddock).", 12, Widgets.COLOR_DIM)
 end
 
 -- Ta voiture : la catégorie (à porter ou à acheter), la couleur, le numéro.

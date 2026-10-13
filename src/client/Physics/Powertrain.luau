@@ -37,6 +37,7 @@ export type Powertrain = typeof(setmetatable({}, Powertrain)) & {
 	TorqueCurve: { CarClasses.TorquePoint },
 	TurboLag: number,
 	TurboShare: number,
+	AntiLag: number,
 	-- Pression du turbo (0..1) : la part TurboShare du couple la suit.
 	Boost: number,
 }
@@ -95,12 +96,15 @@ local ENGINE_BRAKE_RATIO = 0.25
 local LIMITER_HYSTERESIS = 250
 
 --[[
-	TURBO À RETARDEMENT (Groupe B) : la part TurboShare du couple suit la
+	TURBO À RETARDEMENT : la part TurboShare du couple suit la
 	pression, qui monte en TurboLag secondes quand on accélère et retombe
 	plus vite au lever de pied. Ré-accélérer en sortie de virage, c'est
 	attendre que ça pousse : il faut anticiper.
 ]]
 local BOOST_FALL_FACTOR = 3
+-- ANTI-LAG (fiche : AntiLag) : pied levé, au-dessus de ce régime, la pression
+-- ne descend pas sous AntiLag (l'allumage retardé fait tourner le turbo).
+local ANTI_LAG_MIN_RPM = 3000
 
 local RAD_PER_SEC_TO_RPM = 9.5492
 
@@ -151,6 +155,7 @@ function Powertrain.new(vehicleMass: number, wheelRadius: number, class: CarClas
 	self.TorqueCurve = class.TorqueCurve
 	self.TurboLag = class.TurboLag
 	self.TurboShare = class.TurboShare
+	self.AntiLag = class.AntiLag
 	self.Boost = 1
 
 	-- Rayon réel des roues du gabarit (Wheel.Radius = TireXX.Size.Y / 2), fourni
@@ -183,9 +188,14 @@ function Powertrain:_updateBoost(dt: number, throttle: number)
 		self.Boost = 1
 		return
 	end
-	local rate = if throttle > self.Boost then 1 / self.TurboLag else BOOST_FALL_FACTOR / self.TurboLag
+	-- Anti-lag : la pression gardée pied levé, tant que le moteur tourne assez vite.
+	local target = throttle
+	if self.EngineRPM >= ANTI_LAG_MIN_RPM then
+		target = math.max(target, self.AntiLag)
+	end
+	local rate = if target > self.Boost then 1 / self.TurboLag else BOOST_FALL_FACTOR / self.TurboLag
 	local step = rate * dt
-	self.Boost += math.clamp(throttle - self.Boost, -step, step)
+	self.Boost += math.clamp(target - self.Boost, -step, step)
 end
 
 function Powertrain:_revFreely(dt: number, target: number)

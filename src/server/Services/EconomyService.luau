@@ -25,6 +25,10 @@
 	AVANTAGES (Perks.luau) : les crédits gagnés en jouant sont multipliés
 	(pass Crédits ×2, bonus Roblox Premium) ; les achats, eux, ne le sont pas.
 
+	NOUVELLE GAMME (GarageVersion) : la Rally2 était de série, c'est
+	maintenant la Rally4. Un pilote arrivé avant garde sa Rally2 (possédée,
+	et portée s'il n'avait rien choisi d'autre).
+
 	PORTER (EquipItem) : un objet de chaque sorte, s'il est possédé. Les
 	objets portés sont montrés aux autres joueurs par la voiture
 	(EquippedChanged, branché sur CarService par Main.server.luau).
@@ -38,6 +42,7 @@ local RunService = game:GetService("RunService")
 local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Pass = require(ReplicatedStorage.Shared.Economy.Pass)
 local Perks = require(script.Parent.Perks)
@@ -102,6 +107,18 @@ function EconomyService.Earn(player: Player, amount: number, reason: string)
 	sendWallet(player, { Gain = gain, Reason = reason })
 end
 
+-- Niveau du pilote (branché sur ProgressService par Main.server.luau).
+EconomyService.LevelOf = function(_player: Player): number
+	return 1
+end
+
+-- L'objet est-il à lui ET utilisable (voiture gratuite : niveau atteint) ?
+function EconomyService.CanUse(player: Player, itemId: string): boolean
+	local profile = ProfileStore.Get(player)
+	local item = Catalog.Get(itemId)
+	return profile ~= nil and item ~= nil and Catalog.Usable(item, profile.Owned, EconomyService.LevelOf(player))
+end
+
 function EconomyService.GetCredits(player: Player): number
 	local profile = ProfileStore.Get(player)
 	return if profile then profile.Credits else 0
@@ -123,7 +140,7 @@ function EconomyService.Equipped(player: Player, kind: Catalog.Kind): Catalog.It
 	if profile then
 		local id = profile.Equipped[kind]
 		local item = Catalog.Get(id)
-		if item and item.Kind == kind and Catalog.Owns(profile.Owned, item.Id) then
+		if item and item.Kind == kind and Catalog.Usable(item, profile.Owned, EconomyService.LevelOf(player)) then
 			return item
 		end
 	end
@@ -157,10 +174,12 @@ local function buyItem(player: Player, itemId: any)
 	if not profile or not item then
 		return
 	end
-	local price = item.Credits
-	if not price or not Catalog.IsAvailable(item) or Catalog.Owns(profile.Owned, item.Id) then
+	local listed = item.Credits
+	if not listed or not Catalog.IsAvailable(item) or Catalog.Owns(profile.Owned, item.Id) then
 		return
 	end
+	-- Événement éclair « Voiture rare » : sa voiture est moins chère.
+	local price = FlashEvents.CreditPrice(listed, if item.Kind == "Car" then item.CarClass else nil, os.time())
 	if profile.Credits < price then
 		sendWallet(player, { Error = "Pas assez de crédits : il en manque " .. Credits.Format(price - profile.Credits) .. "." })
 		return
@@ -183,6 +202,10 @@ local function equipItem(player: Player, kind: any, itemId: any)
 		return
 	end
 	if profile.Equipped[item.Kind] == item.Id then
+		return
+	end
+	if item.Level and EconomyService.LevelOf(player) < item.Level then
+		sendWallet(player, { Error = string.format("%s : niveau %d requis.", item.Name, item.Level) })
 		return
 	end
 	profile.Equipped[item.Kind] = item.Id
@@ -317,8 +340,46 @@ end
 -- Démarrage
 --------------------------------------------------------------------------------
 
+-- La Rally2 de série d'avant la nouvelle gamme : gardée par ceux qui l'avaient.
+local LEGACY_CAR = "car_rally2"
+local function migrateGarage(player: Player, profile: Profile)
+	if profile.GarageVersion >= ProfileSchema.GARAGE_VERSION then
+		return
+	end
+	if profile.GarageVersion < 2 then
+		profile.Owned[LEGACY_CAR] = true
+		if profile.Equipped.Car == nil then
+			profile.Equipped.Car = LEGACY_CAR
+		end
+	end
+	local version = profile.GarageVersion
+	-- Version 3 : chaque voiture a sa carrosserie ; l'ancien modèle par défaut
+	-- (Kaze, jamais choisi) laisse place à celui de la voiture.
+	if version < 3 and profile.Livery.Body == 2 then
+		profile.Livery.Body = 0
+	end
+	profile.GarageVersion = ProfileSchema.GARAGE_VERSION
+	ProfileStore.Update(player.UserId, "nouvelle gamme", function(stored)
+		if stored.GarageVersion >= ProfileSchema.GARAGE_VERSION then
+			return false
+		end
+		if stored.GarageVersion < 2 then
+			stored.Owned[LEGACY_CAR] = true
+			if stored.Equipped.Car == nil then
+				stored.Equipped.Car = LEGACY_CAR
+			end
+		end
+		if stored.Livery.Body == 2 then
+			stored.Livery.Body = 0
+		end
+		stored.GarageVersion = ProfileSchema.GARAGE_VERSION
+		return true
+	end)
+end
+
 function EconomyService.Start()
-	ProfileStore.OnLoaded(function(player)
+	ProfileStore.OnLoaded(function(player, profile)
+		migrateGarage(player, profile)
 		sendWallet(player)
 		EconomyService.EquippedChanged(player)
 	end)

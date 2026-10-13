@@ -6,8 +6,9 @@
 	d'origine à la fin (Cleanup).
 
 		Nuit         : il fait nuit (éclairage local), phares sur la voiture.
-		Pluie        : adhérence de toutes les surfaces × RAIN_GRIP, ciel gris,
-		               pluie autour de la caméra.
+		Pluie        : la météo « pluie » (Weather.luau), posée par le serveur
+		               sur la voiture et appliquée par WeatherClient : rien à
+		               faire ici.
 		Boîte en 3e  : un seul rapport engagé (Car.GearLock).
 		Brouillard   : on y voit à quelques dizaines de mètres.
 		Sans frein à main : Car.HandbrakeDisabled.
@@ -18,15 +19,13 @@
 
 local Lighting = game:GetService("Lighting")
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local Surfaces = require(ReplicatedStorage.Shared.Vehicle.Surfaces)
 local CarClass = require(script.Parent.Parent.Physics.Car)
+local CarLights = require(script.Parent.Parent.Driving.CarLights)
 
 local StageModifier = {}
 
-local RAIN_GRIP = 0.8
 
 -- Faisceaux longue portée des phares (voir headlights) : distance devant la
 -- voiture (studs, à l'arrêt) et puissance, qui baisse au loin.
@@ -56,9 +55,11 @@ end
 
 local LIGHTING_PROPERTIES = { "ClockTime", "Brightness", "Ambient", "OutdoorAmbient", "FogStart", "FogEnd", "FogColor", "ExposureCompensation" }
 
--- Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z).
+-- Phares : deux projecteurs à l'avant du châssis (l'avant est en -Z), à la
+-- couleur des phares portés (Items/Headlights.luau).
 local function headlights(chassis: BasePart): () -> ()
 	local created: { Instance } = {}
+	local beamColor = CarLights.HeadlightColor(chassis.Parent)
 	local half = chassis.Size
 	for _, side in ipairs({ -1, 1 }) do
 		local attachment = Instance.new("Attachment")
@@ -70,7 +71,7 @@ local function headlights(chassis: BasePart): () -> ()
 		light.Range = 60
 		light.Angle = 70
 		light.Brightness = 6
-		light.Color = Color3.fromRGB(255, 244, 220)
+		light.Color = beamColor
 		light.Shadows = true
 		light.Parent = attachment
 		attachment.Parent = chassis
@@ -80,7 +81,7 @@ local function headlights(chassis: BasePart): () -> ()
 	local glow = Instance.new("PointLight")
 	glow.Range = 18
 	glow.Brightness = 0.6
-	glow.Color = Color3.fromRGB(255, 240, 210)
+	glow.Color = beamColor
 	glow.Parent = chassis
 	table.insert(created, glow)
 
@@ -107,7 +108,7 @@ local function headlights(chassis: BasePart): () -> ()
 		light.Range = BEAM_HEIGHT + 20
 		light.Angle = 120
 		light.Brightness = spec.Brightness
-		light.Color = Color3.fromRGB(255, 244, 220)
+		light.Color = beamColor
 		light.Shadows = false
 		light.Parent = holder
 		holder.Parent = workspace
@@ -144,40 +145,6 @@ local function headlights(chassis: BasePart): () -> ()
 	end
 end
 
--- Pluie : des traits qui tombent autour de la caméra.
-local function rain(): () -> ()
-	local holder = Instance.new("Part")
-	holder.Name = "Rain"
-	holder.Anchored = true
-	holder.CanCollide = false
-	holder.CanQuery = false
-	holder.CanTouch = false
-	holder.Transparency = 1
-	holder.Size = Vector3.new(160, 1, 160)
-	local emitter = Instance.new("ParticleEmitter")
-	emitter.EmissionDirection = Enum.NormalId.Bottom
-	emitter.Speed = NumberRange.new(90, 110)
-	emitter.Lifetime = NumberRange.new(0.6, 0.9)
-	emitter.Rate = 900
-	emitter.Size = NumberSequence.new(0.08)
-	-- Étirées en traits (Squash < 0 : allongées dans le sens du mouvement).
-	emitter.Squash = NumberSequence.new(-2.5)
-	emitter.Orientation = Enum.ParticleOrientation.VelocityParallel
-	emitter.Transparency = NumberSequence.new(0.45)
-	emitter.Color = ColorSequence.new(Color3.fromRGB(190, 205, 225))
-	emitter.LightEmission = 0.1
-	emitter.Parent = holder
-	holder.Parent = workspace
-	local connection = RunService.RenderStepped:Connect(function()
-		local camera = workspace.CurrentCamera
-		holder.CFrame = CFrame.new(camera.CFrame.Position + Vector3.new(0, 40, 0))
-	end)
-	return function()
-		connection:Disconnect()
-		holder:Destroy()
-	end
-end
-
 --[[
 	Applique la contrainte `id` à la voiture. Renvoie de quoi tout défaire.
 ]]
@@ -193,17 +160,6 @@ function StageModifier.Apply(car: CarClass.Car, id: string): () -> ()
 		Lighting.OutdoorAmbient = Color3.fromRGB(28, 32, 48)
 		Lighting.ExposureCompensation = 0.3
 		table.insert(cleanups, headlights(car.Chassis))
-	elseif id == "Rain" then
-		Surfaces.GripScale = RAIN_GRIP
-		table.insert(cleanups, function()
-			Surfaces.GripScale = 1
-		end)
-		Lighting.Brightness = 1.2
-		Lighting.OutdoorAmbient = Color3.fromRGB(105, 110, 120)
-		Lighting.FogColor = Color3.fromRGB(150, 156, 165)
-		Lighting.FogStart = 40
-		Lighting.FogEnd = 700
-		table.insert(cleanups, rain())
 	elseif id == "Fog" then
 		Lighting.FogColor = Color3.fromRGB(196, 200, 206)
 		Lighting.FogStart = 8
@@ -224,7 +180,7 @@ function StageModifier.Apply(car: CarClass.Car, id: string): () -> ()
 	-- Le brouillard du moteur ne se voit pas si une Atmosphere le remplace :
 	-- on la met de côté le temps du défi.
 	local atmosphere = Lighting:FindFirstChildOfClass("Atmosphere")
-	if atmosphere and (id == "Fog" or id == "Rain") then
+	if atmosphere and id == "Fog" then
 		atmosphere.Parent = nil
 		table.insert(cleanups, function()
 			atmosphere.Parent = Lighting
@@ -233,7 +189,7 @@ function StageModifier.Apply(car: CarClass.Car, id: string): () -> ()
 	-- Le ciel peint (nuages en plein soleil) resterait lumineux la nuit et sous
 	-- la pluie : sans lui, Roblox affiche son ciel dynamique (étoiles, gris).
 	local sky = Lighting:FindFirstChildOfClass("Sky")
-	if sky and (id == "Night" or id == "Fog" or id == "Rain") then
+	if sky and (id == "Night" or id == "Fog") then
 		sky.Parent = nil
 		table.insert(cleanups, function()
 			sky.Parent = Lighting

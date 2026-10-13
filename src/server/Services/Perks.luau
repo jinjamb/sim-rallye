@@ -2,17 +2,24 @@
 --[[
 	Perks.luau
 	Les avantages d'un joueur, lus par l'économie et la progression :
-		- pass de jeu possédés (Products.PASSES : Crédits ×2, VIP) ;
+		- pass de jeu possédés (Products.PASSES : Premium, Crédits ×2, VIP) ;
+		  le Premium vaut tous les autres (Perks.Has), plus les sessions
+		  privées (SessionService) et la voie premium du Rallye Pass de la
+		  saison d'achat (PassService) ;
 		- abonné Roblox Premium ;
 		- boost d'XP acheté (profil, XpBoostUntil) ;
-		- objets aléatoires payants interdits dans son pays (PolicyService).
+		- objets aléatoires payants interdits dans son pays (PolicyService) ;
+		- l'événement éclair « Pluie de crédits » (FlashEvents.luau).
 
 	Tenu à jour par MonetizationService ; volontairement sans dépendance vers
 	les services, pour qu'EconomyService et ProgressService puissent le lire
 	sans boucle de require.
 ]]
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 
 local Perks = {}
 
@@ -46,6 +53,16 @@ function Perks.HasPass(player: Player, key: string): boolean
 	return stateOf(player).Passes[key] == true
 end
 
+-- Le pass Premium de Sim Rallye (à ne pas confondre avec Roblox Premium : IsPremium).
+function Perks.HasPremiumPass(player: Player): boolean
+	return Perks.HasPass(player, "premium")
+end
+
+-- Un avantage de pass : le pass lui-même, ou le Premium qui les contient tous.
+function Perks.Has(player: Player, key: string): boolean
+	return Perks.HasPass(player, key) or Perks.HasPremiumPass(player)
+end
+
 function Perks.SetPremium(player: Player, premium: boolean)
 	stateOf(player).Premium = premium
 end
@@ -70,17 +87,17 @@ end
 
 -- Multiplicateur des crédits gagnés en jouant (pas des achats).
 function Perks.CreditMultiplier(player: Player): number
-	local multiplier = if Perks.HasPass(player, "credits_x2") then 2 else 1
+	local multiplier = if Perks.Has(player, "credits_x2") then 2 else 1
 	if Perks.IsPremium(player) then
 		multiplier += Perks.PREMIUM_CREDIT_BONUS
 	end
-	return multiplier
+	return multiplier * FlashEvents.CreditMultiplier(os.time())
 end
 
 -- Multiplicateur de l'XP gagnée (en plus des événements double XP).
 function Perks.XpMultiplier(player: Player): number
 	local multiplier = 1
-	if Perks.HasPass(player, "vip") then
+	if Perks.Has(player, "vip") then
 		multiplier += Perks.VIP_XP_BONUS
 	end
 	if Perks.XpBoostUntil(player) > os.time() then

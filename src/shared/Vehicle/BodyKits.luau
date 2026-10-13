@@ -5,6 +5,8 @@
 	gabarit (CarClasses.luau : Body) :
 		Rally2    la carrosserie du gabarit, telle quelle ;
 		Rally4    sans le grand aileron : un simple becquet de toit ;
+		WRC       grand aileron du gabarit, lame avant et canards, ailes
+		          ouvertes, écope de toit ;
 		Groupe B  aileron haut à double étage, prises d'air sur les flancs,
 		          ailes encore élargies.
 
@@ -34,6 +36,19 @@ local KITS: { [string]: { Hide: { string }, Add: { PartSpec } } } = {
 		Hide = { "Wing", "WingPost" },
 		Add = {
 			{ Name = "RoofSpoiler", Size = Vector3.new(5.2, 0.16, 1.0), Offset = CFrame.new(0, 3.5, 3.2) * CFrame.Angles(math.rad(-8), 0, 0) },
+		},
+	},
+	WRC = {
+		Hide = {},
+		Add = {
+			{ Name = "Splitter", Size = Vector3.new(6.2, 0.14, 1.1), Offset = CFrame.new(0, 0.15, -7.2) },
+			{ Name = "Canard", Size = Vector3.new(0.9, 0.1, 0.7), Offset = CFrame.new(-2.9, 0.75, -6.9) * CFrame.Angles(0, 0, math.rad(12)) },
+			{ Name = "Canard", Size = Vector3.new(0.9, 0.1, 0.7), Offset = CFrame.new(2.9, 0.75, -6.9) * CFrame.Angles(0, 0, math.rad(-12)) },
+			{ Name = "RoofScoop", Size = Vector3.new(1.2, 0.35, 1.0), Offset = CFrame.new(0, 3.45, -0.6) },
+			{ Name = "WideFlare", Size = Vector3.new(0.35, 0.8, 3.0), Offset = CFrame.new(-3.3, 0.6, 4.45) },
+			{ Name = "WideFlare", Size = Vector3.new(0.35, 0.8, 3.0), Offset = CFrame.new(3.3, 0.6, 4.45) },
+			{ Name = "WideFlare", Size = Vector3.new(0.35, 0.8, 3.0), Offset = CFrame.new(-3.3, 0.6, -4.45) },
+			{ Name = "WideFlare", Size = Vector3.new(0.35, 0.8, 3.0), Offset = CFrame.new(3.3, 0.6, -4.45) },
 		},
 	},
 	GroupB = {

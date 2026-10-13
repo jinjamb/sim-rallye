@@ -61,7 +61,7 @@ local LOOK_BACK_HEIGHT = 4.5
 local LOOK_BACK_FOCUS = 30 -- studs derrière la voiture
 local LOOK_BACK_FOV = 75
 
-local BASE_FOV = 70
+local BASE_FOV = 70 -- par défaut ; réglable (onglet OPTIONS : ChaseCamera.SetFieldOfView)
 local FOV_BOOST = 20
 local FULL_EFFECT_SPEED = 160 -- studs/s (~km/h) : effets de vitesse au maximum
 local FOV_SMOOTH_TIME = 0.4
@@ -129,6 +129,20 @@ function ChaseCamera:Enter()
 	for i, wheel in ipairs(self.Car.Wheels) do
 		self.PreviousCompression[i] = wheel.Compression
 	end
+end
+
+-- Réglages du joueur (onglet OPTIONS), communs à toutes les caméras de poursuite.
+local shakeScale = 1
+function ChaseCamera.SetFieldOfView(degrees: number)
+	BASE_FOV = math.clamp(degrees, 50, 100)
+end
+function ChaseCamera.SetShakeScale(scale: number)
+	shakeScale = math.clamp(scale, 0, 2)
+end
+
+-- Secousse franche (un choc contre une autre voiture : Dents.luau), de 0 à 1.
+function ChaseCamera:Jolt(strength: number)
+	self.BumpEnergy = math.max(self.BumpEnergy, BUMP_MAX * math.clamp(strength, 0, 1))
 end
 
 function ChaseCamera:Exit()
@@ -226,7 +240,8 @@ function ChaseCamera:Update(dt: number)
 	local pitch = shake(3, SPEED_SHAKE_ANGLE, BUMP_SHAKE_ANGLE)
 	local roll = shake(4, SPEED_SHAKE_ANGLE, BUMP_SHAKE_ANGLE)
 
-	self.Camera.CFrame = self.Base * CFrame.new(offset) * CFrame.Angles(pitch, 0, roll)
+	-- Secousses dosées par le réglage du joueur (0 : aucune).
+	self.Camera.CFrame = self.Base * CFrame.new(offset * shakeScale) * CFrame.Angles(pitch * shakeScale, 0, roll * shakeScale)
 end
 
 return ChaseCamera

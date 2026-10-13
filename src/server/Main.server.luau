@@ -37,9 +37,15 @@ local ProgressService = require(Services.ProgressService)
 local GarageService = require(Services.GarageService)
 local EconomyService = require(Services.EconomyService)
 local MonetizationService = require(Services.MonetizationService)
+local GiftService = require(Services.GiftService)
+local ModerationService = require(Services.ModerationService)
+local AdminCommands = require(Services.AdminCommands)
 local RecordService = require(Services.RecordService)
 local ChallengeService = require(Services.ChallengeService)
 local GhostService = require(Services.GhostService)
+local ReferralService = require(Services.ReferralService)
+local TutorialService = require(Services.TutorialService)
+local MedalCalibration = require(Services.MedalCalibration)
 local StageService = require(Services.StageService)
 local StyleService = require(Services.StyleService)
 local SchoolService = require(Services.SchoolService)
@@ -49,6 +55,8 @@ local HornService = require(Services.HornService)
 local RollService = require(Services.RollService)
 local PassService = require(Services.PassService)
 local TeamService = require(Services.TeamService)
+local SessionService = require(Services.SessionService)
+local ChampionshipService = require(Services.ChampionshipService)
 local PaddockService = require(Services.PaddockService)
 
 -- Crochets entre services (sans dépendance circulaire entre modules).
@@ -56,7 +64,14 @@ GarageService.LiveryChanged = CarService.RefreshLivery
 EconomyService.EquippedChanged = CarService.RefreshEquipped
 EconomyService.PassPremiumGranted = PassService.OnPremium
 TeamService.Changed = CarService.RefreshTeam
+StageService.RallyLegStarted = ChampionshipService.LegStarted
+StageService.RallyLegFinished = ChampionshipService.StageFinished
+StageService.RallyPenalty = ChampionshipService.Penalty
 ProgressService.Changed = CarService.RefreshProgress
+EconomyService.LevelOf = function(player: Player): number
+	local snapshot = ProgressService.Get(player)
+	return if snapshot then snapshot.Level else 1
+end
 RaceService.PodiumHandler = PaddockService.Podium :: any
 
 PaddockService.Start()
@@ -65,6 +80,9 @@ CarService.Start()
 GarageService.Start()
 EconomyService.Start()
 MonetizationService.Start()
+GiftService.Start()
+ModerationService.Start()
+AdminCommands.Start() -- en dernier : toutes les commandes sont déclarées
 RecordService.Start()
 StageService.Start()
 ChallengeService.Start()
@@ -77,6 +95,11 @@ HornService.Start()
 RollService.Start()
 PassService.Start()
 TeamService.Start()
+SessionService.Start()
+ReferralService.Start()
+TutorialService.Start()
+MedalCalibration.Start()
+ChampionshipService.Start()
 AchievementService.Start()
 
 ProfileStore.Start()

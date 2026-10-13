@@ -18,7 +18,7 @@
 	Rpm DOIT être le régime auquel l'échantillon a été enregistré : sur les séries
 	du Creator Store, c'est en général le nombre à la fin du nom.
 
-	Tous les sons ci-dessous sont publiés dans le Creator Store (relevés le
+	Tous les sons viennent du Creator Store (le V8 LS3 : relevé le
 	2026-10-03). Pour en tester d'autres : create.roblox.com/store/audio,
 	chercher "engacc", "engdec", "eng on", "eng off", ou un nom de moteur.
 ]]
@@ -49,13 +49,14 @@ export type EngineProfile = {
 	(0..1 : la rocaille d'un échappement libre). Chaque catégorie de voiture
 	a la sienne (CarClasses.luau : Engine), et les sons moteur à débloquer
 	(Items/Engines.luau) en sont d'autres.
-	Pour l'instant, toutes partent du même enregistrement de V8 : ce sont
-	des variations, pas de vrais moteurs. Un vrai enregistrement s'ajoute
-	dans RECORDINGS, et une tonalité le cite (Recording).
+	Chaque tonalité cite son enregistrement (Recording). Un enregistrement
+	pas encore branché (série vide, voir STORE) est remplacé par le V8
+	(LS3), transposé de FallbackPitch.
 ]]
 export type EngineTone = {
 	Recording: string,
 	PitchScale: number,
+	FallbackPitch: number, -- transposition du V8 tant que l'enregistrement manque
 	Low: number,
 	Mid: number,
 	High: number,
@@ -100,27 +101,70 @@ local LS3: EngineProfile = {
 	},
 }
 
+--[[
+	MOTEURS À BRANCHER (Creator Store) : une série par type de moteur, à
+	remplir comme LS3 ci-dessus : pour chaque échantillon, son identifiant
+	et le régime auquel il a été enregistré (le nombre à la fin du nom, en
+	général). Au moins deux échantillons par famille ; plus ils sont serrés,
+	plus le son est naturel. Une série vide est remplacée par le V8,
+	transposé (FallbackPitch de la tonalité).
+	Où chercher : create.roblox.com/store/audio, « engacc » / « engdec »,
+	« eng on » / « eng off », ou le nom d'un moteur (« 4 cylinder »,
+	« boxer », « rotary », « inline 5 »...).
+]]
+local function series(name: string, volume: number, onLoad: { EngineSample }, offLoad: { EngineSample }): EngineProfile
+	return { Name = name, Volume = volume, OnLoad = onLoad, OffLoad = offLoad }
+end
+
+local STORE: { [string]: EngineProfile } = {
+	I3 = series("3 cylindres turbo (Rally4)", 0.4, {}, {}),
+	I4 = series("4 cylindres turbo (Rally2)", 0.4, {}, {}),
+	I4R = series("4 cylindres anti-lag (WRC)", 0.4, {}, {}),
+	I5 = series("5 cylindres turbo (Groupe B)", 0.4, {}, {}),
+	Boxer4 = series("4 cylindres à plat (boxer)", 0.4, {}, {}),
+	V6 = series("V6", 0.4, {}, {}),
+	Flat6 = series("6 cylindres à plat", 0.4, {}, {}),
+	Rotary = series("Rotatif", 0.4, {}, {}),
+}
+
 SoundBank.RECORDINGS = {
 	LS3 = LS3,
 } :: { [string]: EngineProfile }
+for key, profile in pairs(STORE) do
+	if #profile.OnLoad >= 2 and #profile.OffLoad >= 2 then
+		SoundBank.RECORDINGS[key] = profile
+	end
+end
 
-local function tone(pitch: number, low: number, mid: number, high: number, distortion: number, volume: number?): EngineTone
-	return { Recording = "LS3", PitchScale = pitch, Low = low, Mid = mid, High = high, Distortion = distortion, Volume = volume or 1 }
+local function tone(recording: string, fallbackPitch: number, low: number, mid: number, high: number, distortion: number, volume: number?): EngineTone
+	return {
+		Recording = recording,
+		PitchScale = 1,
+		FallbackPitch = fallbackPitch,
+		Low = low,
+		Mid = mid,
+		High = high,
+		Distortion = distortion,
+		Volume = volume or 1,
+	}
 end
 
 SoundBank.TONES = {
 	-- Catégories de voitures (son de série).
-	Rally2 = tone(1.18, -3, 0, 2, 0.08),
-	Rally4 = tone(1.32, -5, 1, 3, 0.05, 0.9),
-	GroupB = tone(1.08, 2, 0, 1, 0.25, 1.1),
+	Rally4 = tone("I3", 1.32, 0, 0, 1, 0, 0.9),
+	Rally2 = tone("I4", 1.18, 0, 0, 0, 0),
+	WRC = tone("I4R", 1.26, 0, 1, 2, 0.05, 1.05),
+	GroupB = tone("I5", 1.08, 1, 0, 0, 0.1, 1.1),
 	-- Sons moteur à débloquer (Items/Engines.luau).
-	V8 = tone(1, 0, 0, 0, 0),
-	Open = tone(1.12, 3, -1, 2, 0.35, 1.1),
-	Sport = tone(1.25, -2, 1, 4, 0.1),
-	Turbo = tone(1.2, -4, 2, 5, 0.15),
-	Screamer = tone(1.45, -6, 0, 6, 0.05),
-	Vintage = tone(0.95, 4, 2, -4, 0.45, 1.1),
-	Legend = tone(1.1, 3, 1, 3, 0.3, 1.15),
+	V8 = tone("LS3", 1, 0, 0, 0, 0),
+	Open = tone("I4", 1.12, 3, -1, 2, 0.35, 1.1),
+	Sport = tone("V6", 1.25, -1, 1, 2, 0),
+	Turbo = tone("I4R", 1.2, -3, 2, 5, 0.1),
+	Screamer = tone("Flat6", 1.45, -2, 0, 3, 0),
+	Vintage = tone("V6", 0.95, 4, 2, -4, 0.4, 1.1),
+	Legend = tone("I5", 1.1, 3, 1, 2, 0.3, 1.15),
+	Boxer = tone("Boxer4", 1.0, 2, 0, 0, 0.05),
+	Rotary = tone("Rotary", 1.5, -2, 1, 3, 0.1),
 } :: { [string]: EngineTone }
 
 SoundBank.DEFAULT_TONE = "Rally2"
@@ -128,6 +172,25 @@ SoundBank.DEFAULT_TONE = "Rally2"
 function SoundBank.Tone(toneId: string?): EngineTone
 	return SoundBank.TONES[toneId or SoundBank.DEFAULT_TONE] or SoundBank.TONES[SoundBank.DEFAULT_TONE]
 end
+
+--[[
+	ÉCHAPPEMENT (Driving/Exhaust.luau), sons courts joués une fois :
+		Backfire     retour de flamme (lever de pied franc, passage de
+		             rapport, rupteur) : une explosion. Un retour de flamme
+		             porté (Items/Backfires.luau) peut avoir la sienne (Sound) ;
+		AntiLagPops  crépitements de l'anti-lag, pied levé.
+	Plusieurs identifiants par liste : l'un d'eux au hasard, transposé un peu
+	(moins répétitif). Listes vides : les flammes sans le son. À chercher dans
+	le Creator Store : « backfire », « explosion », « exhaust pop », « anti
+	lag », « crackle ».
+]]
+SoundBank.Backfire = {} :: { string }
+
+-- Choc entre voitures (Driving/Dents.luau), joué au point de choc, plus fort
+-- quand la bosse est grosse. Vide : les étincelles sans le son. À chercher
+-- dans le Creator Store : « car crash », « metal impact », « car hit ».
+SoundBank.Crash = {} :: { string }
+SoundBank.AntiLagPops = {} :: { string }
 
 -- Crissement de pneu sur surface dure (boucle). Joué une fois PAR ROUE.
 SoundBank.TireScreech = id(109487442763183) -- "Tire Squealing Screeching Loop"
@@ -141,5 +204,23 @@ SoundBank.TarmacRoll = id(9112886486) -- "Tire Constant 2"
 -- Vent : il monte avec le carré de la vitesse, comme la pression aérodynamique.
 -- PAS ENCORE ÉCOUTÉ : à remplacer s'il sonne mal ou ne boucle pas proprement.
 SoundBank.Wind = id(5813077875) -- "wind"
+
+-- Pluie sur la carrosserie, en boucle (WeatherClient.luau), plus forte avec
+-- l'averse. "" : pas encore choisie (la pluie reste muette) ; à prendre dans
+-- la sonothèque Roblox (Creator Store > Audio, « rain loop »).
+SoundBank.Rain = ""
+
+--[[
+	FEUX DE DÉPART du rallycross (Race/RaceHud.luau) : un bip à chaque feu
+	rouge qui s'allume, puis le signal du départ quand ils passent au vert.
+	Par défaut, le « ping » électronique livré avec Roblox (rbxasset://, rien à
+	télécharger) : grave pour les rouges, aigu et plus long pour le vert
+	(Pitch). Pour un vrai son de feux, Creator Store > Audio : « start beep »,
+	« race countdown », « start lights », « countdown beep ».
+]]
+SoundBank.StartLights = {
+	Red = { Id = "rbxasset://sounds/electronicpingshort.wav", Pitch = 0.8, Volume = 0.7 },
+	Green = { Id = "rbxasset://sounds/electronicpingshort.wav", Pitch = 1.6, Volume = 0.9 },
+}
 
 return SoundBank

@@ -23,6 +23,7 @@ local Products = require(ReplicatedStorage.Shared.Economy.Products)
 local Rarity = require(ReplicatedStorage.Shared.Economy.Rarity)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 local Achievements = require(ReplicatedStorage.Shared.Progression.Achievements)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
@@ -33,6 +34,7 @@ local Format = require(ReplicatedStorage.Shared.Util.Format)
 local MainMenu = require(script.Parent.Parent.UI.Menu.MainMenu)
 local MenuKit = require(script.Parent.Parent.UI.Menu.MenuKit)
 local Toast = require(script.Parent.Parent.UI.Toast)
+local FriendInvite = require(script.Parent.Parent.Core.FriendInvite)
 local Theme = require(script.Parent.Parent.UI.Theme)
 local RaceHud = require(script.Parent.RaceHud)
 local Minimap = require(script.Parent.Minimap)
@@ -75,6 +77,9 @@ export type RaceClient = typeof(setmetatable({}, RaceClient)) & {
 	Pass: any, -- Rallye Pass (PassService)
 	Drift: any, -- Roi du drift (ChallengeService)
 	Team: any, -- écurie (TeamService)
+	Session: any, -- session : publique ou privée, son code (SessionService)
+	Referral: any, -- parrainage : amis récompensés, montants (ReferralService)
+	Championship: any, -- championnats : rallye en cours, rallyes, classements
 	Achievements: { [string]: number }?, -- trophées obtenus (AchievementService)
 	-- Cérémonie du podium : caméra fixe sur le podium jusqu'à PodiumUntil.
 	PodiumUntil: number,
@@ -111,6 +116,9 @@ function RaceClient.new(options: Options): RaceClient
 	self.Pass = nil
 	self.Drift = nil
 	self.Team = nil
+	self.Session = nil
+	self.Referral = nil
+	self.Championship = nil
 	self.Achievements = nil
 	self.PodiumUntil = 0
 	self.ReopenMenuAt = nil
@@ -134,6 +142,28 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Team" then
 			if type(payload) == "table" then
 				Remotes.TeamAction:FireServer(payload.Action, payload)
+			end
+		elseif action == "Championship" then
+			if type(payload) == "table" then
+				Remotes.ChampionshipAction:FireServer(payload.Action, payload)
+				-- Courir ou reprendre : la voiture apparaît au départ, le menu se ferme.
+				if payload.Action == "Start" or payload.Action == "Continue" then
+					self.Menu:SetOpen(false)
+				end
+			end
+		elseif action == "Session" then
+			-- Inviter : l'invitation de Roblox, côté client ; le reste : SessionService.
+			if type(payload) == "table" and payload.Action == "Invite" then
+				local session = self.Session
+				local code = if session and session.Private and type(session.Code) == "string" then session.Code else nil
+				task.spawn(function()
+					local problem = FriendInvite.Prompt(code)
+					if problem then
+						Toast.Show(problem, Theme.RED)
+					end
+				end)
+			elseif type(payload) == "table" then
+				Remotes.SessionAction:FireServer(payload.Action, payload.Code)
 			end
 		elseif action == "Roll" then
 			Remotes.RequestRoll:FireServer()
@@ -172,7 +202,7 @@ function RaceClient.new(options: Options): RaceClient
 		elseif action == "Play" then
 			-- Spéciale, essais libres, ou salle d'attente d'un circuit (PaddockService).
 			if type(payload) == "table" then
-				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId)
+				Remotes.PlayMode:FireServer(payload.Mode, payload.TrackId, payload.Weather)
 			end
 			-- La salle d'attente s'affiche dans le menu : on le laisse ouvert.
 			if type(payload) ~= "table" or payload.Mode ~= "Rallycross" then
@@ -243,6 +273,9 @@ function RaceClient:_refreshMenu()
 		Pass = self.Pass,
 		Drift = self.Drift,
 		Team = self.Team,
+		Session = self.Session,
+		Referral = self.Referral,
+		Championship = self.Championship,
 		Achievements = self.Achievements,
 	})
 end
@@ -317,19 +350,19 @@ function RaceClient:_onEvent(kind: string, data: any)
 		Banner.Show("JOKER OBLIGATOIRE", "Une fois par course, par la branche orange de la mini-carte · sinon +5 s", Widgets.COLOR_ORANGE, 3.5)
 	elseif kind == "Lap" then
 		local lap = tonumber(data.Lap) or 0
-		local text = string.format("TOUR %d — %s", lap, Format.Time(tonumber(data.Time)))
+		local text = string.format("TOUR %d · %s", lap, Format.Time(tonumber(data.Time)))
 		local color = Widgets.COLOR_TEXT
 		if data.Record then
-			text ..= " — RECORD PERSO DU CIRCUIT !"
+			text ..= " · RECORD PERSO DU CIRCUIT !"
 			color = Widgets.COLOR_ACCENT
 		elseif data.Best and lap > 1 then
-			text ..= " — MEILLEUR TOUR"
+			text ..= " · MEILLEUR TOUR"
 			color = Widgets.COLOR_GREEN
 		end
 		if race and lap == race.Laps - 1 then
 			local myRow = self:_myRow()
 			local jokerDue = myRow ~= nil and myRow.J == 0
-			text = "DERNIER TOUR" .. (if jokerDue then " — JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
+			text = "DERNIER TOUR" .. (if jokerDue then " · JOKER À FAIRE !" else "") .. "  ·  " .. Format.Time(tonumber(data.Time))
 			color = if jokerDue then Widgets.COLOR_ORANGE else Widgets.COLOR_TEXT
 			if jokerDue then
 				Banner.Show("JOKER PAS FAIT !", "Dernier tour : prends la branche orange, sinon +5 s à l'arrivée", Widgets.COLOR_ORANGE, 4, true)
@@ -342,7 +375,7 @@ function RaceClient:_onEvent(kind: string, data: any)
 			local circuit = if race then Tracks.Get(race.TrackId) else nil
 			Banner.Show(
 				tier.Title,
-				string.format("%s — tour en %s", if circuit then circuit.Name else "Circuit", Format.Time(tonumber(data.Time))),
+				string.format("%s · tour en %s", if circuit then circuit.Name else "Circuit", Format.Time(tonumber(data.Time))),
 				tier.Color,
 				4,
 				true
@@ -357,7 +390,7 @@ function RaceClient:_onEvent(kind: string, data: any)
 	elseif kind == "Overtake" then
 		local points = tonumber(data.Points) or 0
 		hud:ShowMessage(
-			"DÉPASSEMENT — " .. tostring(data.Name) .. (if points > 0 then "  +" .. Format.Thousands(points) else ""),
+			"DÉPASSEMENT · " .. tostring(data.Name) .. (if points > 0 then "  +" .. Format.Thousands(points) else ""),
 			Widgets.COLOR_GREEN,
 			2
 		)
@@ -371,13 +404,13 @@ function RaceClient:_onEvent(kind: string, data: any)
 			hud:ShowMessage("JOKER EN TROP : un seul suffit", Widgets.COLOR_ORANGE)
 		end
 	elseif kind == "Penalty" then
-		hud:ShowMessage(string.format("PÉNALITÉ +%s s — %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
+		hud:ShowMessage(string.format("PÉNALITÉ +%s s · %s", tostring(data.Seconds), Format.Upper(tostring(data.Reason))), Widgets.COLOR_RED, 3.5)
 	elseif kind == "Chequered" then
-		hud:ShowMessage("DRAPEAU À DAMIER — " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
+		hud:ShowMessage("DRAPEAU À DAMIER · " .. tostring(data.Winner) .. " gagne", Widgets.COLOR_TEXT, 3)
 	elseif kind == "Finished" then
 		local returnIn = tonumber(data.ReturnIn) or 6
 		hud:ShowMessage(
-			string.format("ARRIVÉE — P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
+			string.format("ARRIVÉE · P%d · retour au paddock dans %d s (V : regarder la course)", tonumber(data.Position) or 0, returnIn),
 			Widgets.COLOR_ACCENT,
 			returnIn
 		)
@@ -549,6 +582,95 @@ function RaceClient:SetAchievements(earned: any, news: any)
 				Banner.Show("TROPHÉE", achievement.Name .. "  ·  " .. achievement.Description, Theme.ACCENT, 4.5, true)
 			end
 		end
+	end
+end
+
+-- Championnats : l'état (menu) et les annonces du rallye en cours.
+function RaceClient:SetChampionship(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Championship = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	local leg, done, finished, penalty = news.Leg, news.LegDone, news.Finished, news.Penalty
+	if type(leg) == "table" then
+		local weather = Weather.Sanitize(leg.Weather)
+		Banner.Show(
+			string.format("SPÉCIALE %d/%d", leg.Index, leg.Count),
+			string.format("%s · %s%s", tostring(leg.Name), tostring(leg.Rally), if weather == "Dry" then "" else " · " .. string.lower(Weather.MODE_NAMES[weather])),
+			Theme.ACCENT,
+			4,
+			true
+		)
+	elseif type(done) == "table" then
+		Banner.Show(
+			string.format("SPÉCIALE %d/%d TERMINÉE", done.Index, done.Count),
+			string.format("%s · cumul %s · suivante : %s dans %d s", Format.Ms(done.Ms), Format.Ms(done.Total), tostring(done.Next), done.Liaison),
+			Theme.GREEN,
+			5,
+			true
+		)
+	elseif type(finished) == "table" then
+		Banner.Show(
+			"RALLYE TERMINÉ",
+			string.format("%s · %s%s", tostring(finished.Rally), Format.Ms(finished.Total), if finished.Best then " · record perso !" else ""),
+			Theme.ACCENT,
+			6,
+			true
+		)
+	elseif type(penalty) == "table" then
+		Toast.Show(string.format("<b>+%d s de pénalité</b> · %s", penalty.Seconds, tostring(penalty.Reason)), Theme.RED)
+	elseif type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
+	end
+end
+
+-- Session : publique ou privée, son code ; un message s'affiche.
+function RaceClient:SetSession(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Session = state
+	self:_refreshMenu()
+	if type(news) == "table" and type(news.Message) == "string" then
+		Toast.Show(news.Message, if news.Error then Theme.RED else Theme.ACCENT)
+	end
+end
+
+--[[
+	Parrainage : amis récompensés (menu) ; les nouvelles : bienvenue de la
+	part du parrain, bonus du filleul qui prend le volant, récompense du
+	parrain (les crédits et le tirage ont aussi leur notification).
+]]
+function RaceClient:SetReferral(state: any, news: any)
+	if type(state) ~= "table" then
+		return
+	end
+	self.Referral = state
+	self:_refreshMenu()
+	if type(news) ~= "table" then
+		return
+	end
+	if type(news.Welcome) == "string" then
+		Banner.Show(
+			"Invité par " .. news.Welcome,
+			string.format("Termine ta première spéciale : +%d CR pour toi, et une récompense pour %s.", tonumber(state.NewcomerCredits) or 0, news.Welcome),
+			Theme.CYAN,
+			5
+		)
+	elseif type(news.Inviter) == "string" then
+		Banner.Show("Bonus de parrainage", string.format("+%d CR · %s est récompensé aussi. Merci d'être venu !", tonumber(news.Bonus) or 0, news.Inviter), Theme.CYAN, 4)
+	elseif type(news.Rewarded) == "number" then
+		Banner.Show(
+			if news.Rewarded > 1 then string.format("%d amis parrainés", news.Rewarded) else "Ami parrainé",
+			string.format("Ton invitation a payé : +%d CR et %d tirage%s.", tonumber(news.Credits) or 0, tonumber(news.Rolls) or 0, if (tonumber(news.Rolls) or 0) > 1 then "s" else ""),
+			Theme.CYAN,
+			5,
+			true
+		)
 	end
 end
 

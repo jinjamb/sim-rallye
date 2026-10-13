@@ -14,7 +14,7 @@
 		  donne la chose à la réception du paiement. Cinq produits suffisent
 		  pour tout le catalogue, présent et futur ;
 		- pack de démarrage (une fois), boost d'XP, tirages.
-	PASS DE JEU (achat unique, permanent) : Crédits ×2, VIP.
+	PASS DE JEU (achat unique, permanent) : Premium (tout d'un coup), Crédits ×2, VIP.
 
 	À FAIRE SUR ROBLOX (une fois) : créer chaque produit dans le Creator
 	Dashboard (Expérience > Monétisation > Produits de développeur ; et Pass
@@ -83,7 +83,7 @@ Products.LIST = {
 	{ Key = "credits_l", ProductId = 0, Name = "Caisse d'équipe", Grant = { Credits = 8000 }, SuggestedRobux = 299 },
 	{ Key = "credits_xl", ProductId = 0, Name = "Budget d'usine", Grant = { Credits = 20000 }, SuggestedRobux = 649 },
 	-- Rallye Pass : la voie premium de la saison en cours (Pass.luau), à racheter à chaque saison.
-	{ Key = "pass_premium", ProductId = 0, Name = "Rallye Pass premium", Grant = { PassPremium = true }, SuggestedRobux = 399 },
+	{ Key = "pass_premium", ProductId = 0, Name = "Rallye Pass premium", Grant = { PassPremium = true }, SuggestedRobux = 249 },
 
 	-- Paliers d'achat : objets et déblocages (voir plus haut).
 	{ Key = "tier_49", ProductId = 0, Name = "Achat · 49 R$", Grant = {}, SuggestedRobux = 49, Tier = 49 },
@@ -118,6 +118,18 @@ Products.LIST = {
 } :: { Product }
 
 Products.PASSES = {
+	{
+		-- Tout d'un coup : les deux pass ci-dessous, les sessions privées et,
+		-- en cadeau, la voie premium du Rallye Pass de la saison d'achat
+		-- (PassService) ; les saisons suivantes se rachètent comme pour tout
+		-- le monde. Les voitures et les cosmétiques restent à gagner en jouant.
+		-- Prix : les deux pass seuls valent déjà 698 R$.
+		Key = "premium",
+		GamePassId = 0,
+		Name = "Premium Sim Rallye",
+		Description = "Tout d'un coup, pour toujours : VIP (XP +25 %, badge doré), crédits ×2 et sessions privées entre amis. En cadeau : le Rallye Pass premium de la saison en cours.",
+		SuggestedRobux = 699,
+	},
 	{
 		Key = "credits_x2",
 		GamePassId = 0,
@@ -209,11 +221,9 @@ function Products.ForItem(itemId: string): Product?
 	if not item or item.Free or item.Starter then
 		return nil
 	end
-	local robux = RARITY_ROBUX[item.Rarity] or 99
-	-- Une voiture vaut plus qu'un cosmétique de même rareté.
-	if item.Kind == "Car" then
-		robux = math.max(robux, 199)
-	end
+	-- Prix imposé par l'objet (les voitures : voir Items/Cars.luau), sinon
+	-- d'après sa rareté.
+	local robux = item.Robux or RARITY_ROBUX[item.Rarity] or 99
 	return Products.TierFor(robux)
 end
 

@@ -32,7 +32,7 @@ local Horn = require(script.Parent.Driving.Horn)
 local RollReveal = require(script.Parent.UI.RollReveal)
 local Toast = require(script.Parent.UI.Toast)
 local Announcer = require(script.Parent.UI.Announcer)
-local XpEventNotice = require(script.Parent.UI.XpEventNotice)
+local EventNotice = require(script.Parent.UI.EventNotice)
 local CopilotVoice = require(script.Parent.Audio.CopilotVoice)
 local Pacenotes = require(ReplicatedStorage.Shared.Stage.Pacenotes)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
@@ -42,10 +42,16 @@ local Banner = require(script.Parent.UI.Banner)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
 local RaceClient = require(script.Parent.Race.RaceClient)
+local RaceHud = require(script.Parent.Race.RaceHud)
+local ChaseCamera = require(script.Parent.Camera.ChaseCamera)
 local Garage = require(script.Parent.UI.Garage)
 local Theme = require(script.Parent.UI.Theme)
 local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Tutorial = require(script.Parent.Tutorial.Tutorial)
+local Slipstream = require(script.Parent.Driving.Slipstream)
+local Dents = require(script.Parent.Driving.Dents)
+local Settings = require(script.Parent.Core.Settings)
 
 local player = Players.LocalPlayer
 local camera = workspace.CurrentCamera
@@ -79,6 +85,9 @@ local isTouch = TouchControls.IsTouchDevice()
 --------------------------------------------------------------------------------
 -- Ce qui dure toute la partie
 --------------------------------------------------------------------------------
+
+-- Bosses des voitures après un contact (toutes les voitures, chez chacun).
+Dents.Start()
 
 -- Les voitures des autres joueurs vivent dès maintenant, même à pied.
 local remoteCars = RemoteCars.new(player.UserId)
@@ -136,6 +145,16 @@ local function drivenClass(): string
 	local wallet = raceClient:GetWallet()
 	local item = Catalog.Get(if wallet then wallet.Equipped.Car else nil)
 	return CarClasses.Get(if item then item.CarClass else nil).Id
+end
+
+-- La voiture conduite (CarModels.luau) ; à pied, celle choisie au garage.
+local function drivenCar(): string?
+	local current = session
+	if current then
+		return current.CarModel
+	end
+	local wallet = raceClient:GetWallet()
+	return if wallet then wallet.Equipped.Car else nil
 end
 
 local function setupFor(classId: string): CarSetup.Setup
@@ -206,6 +225,28 @@ raceClient = RaceClient.new({
 	end,
 })
 
+-- Réglages (onglet OPTIONS) qui touchent ce que Main tient : aide des
+-- commandes, mini-carte de la course, boîte de la voiture en cours.
+Settings.OnChanged(function(id: string, value: any)
+	if id == "FieldOfView" then
+		ChaseCamera.SetFieldOfView(value)
+	elseif id == "CameraShake" then
+		ChaseCamera.SetShakeScale(value)
+	elseif id == "Dents" then
+		Dents.SetEnabled(value)
+	elseif id == "Minimap" then
+		RaceHud.ShowMinimap = value
+		raceClient.Hud:RefreshMinimap()
+	elseif id == "ControlsHint" then
+		controlsHint:SetCollapsed(not value)
+	elseif id == "Gearbox" then
+		local current = session
+		if current then
+			current.Car.Powertrain.Gearbox:SetAutomatic(value == true)
+		end
+	end
+end)
+
 -- Ralenti : "Own" = son meilleur passage, "Opponent" = le fantôme affronté.
 --[[
 	Le ralenti est local : personne d'autre ne le voit, et le jeu ne ralentit
@@ -269,6 +310,9 @@ local garage = Garage.new(playerGui, {
 	end,
 	GetCarClass = function()
 		return drivenClass()
+	end,
+	GetCarModel = function()
+		return drivenCar()
 	end,
 	-- Objets possédés : les pièces gagnées aux tirages débloquent leur variante.
 	GetOwned = function()
@@ -448,16 +492,16 @@ local function setControl(granted: boolean)
 	if granted then
 		CharacterControls.SetEnabled(false)
 		if current:IsRacing() then
-			print("[Car] En course — R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
+			print("[Car] En course : R/F rapports, M boîte, T remise en piste, C menu (abandon), V spectateur après l'arrivée")
 		else
-			print("[Car] Au volant — R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), K klaxon, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
+			print("[Car] Au volant : R/F rapports, M boîte auto/manuelle, T remise en piste, Retour arrière recommencer, P réglages, L classement, G fantôme (le tien, ton rival, le record), K klaxon, C menu, H retour au paddock, Q descendre, F2 télémétrie, F3 journal")
 		end
 	else
 		if not raceClient:IsSpectating() then
 			CharacterControls.ResetCamera()
 		end
 		CharacterControls.SetEnabled(true)
-		print("[Car] Hors de la voiture — E pour reprendre le volant, C pour le menu")
+		print("[Car] Hors de la voiture : E pour reprendre le volant, C pour le menu")
 	end
 	applyDrivingUi()
 end
@@ -566,8 +610,17 @@ local function startSession(model: Model)
 		return
 	end
 	session = created
+	-- Boîte de vitesses au départ : le choix du joueur (onglet OPTIONS).
+	created.Car.Powertrain.Gearbox:SetAutomatic(Settings.Value("Gearbox") == true)
+	-- Les chocs de SA voiture secouent la caméra.
+	Dents.LocalModel = model
+	Dents.OnLocalHit = function(_zone: number, amount: number)
+		if session == created then
+			created.ChaseCamera:Jolt(amount * 2)
+		end
+	end
 	-- Réglages et adversaire fantôme de la catégorie de cette voiture.
-	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId))
+	setupMenu:SetClass(created.ClassId, setupFor(created.ClassId), created.CarModel)
 	ghostChallenge:SetClass(created.ClassId)
 	-- Sa spéciale : son classement (L), son ralenti, l'adversaire fantôme.
 	currentStage = created.StageId
@@ -666,14 +719,54 @@ Remotes.ProfileLoaded.OnClientEvent:Connect(function(profile: any)
 	end
 	raceClient:SetProfile(profile.Stats, profile.Laps)
 	raceClient:SetLivery(profile.Livery)
+	-- Réglages du joueur (onglet OPTIONS), appliqués tout de suite.
+	Settings.Load(profile.Options)
+	raceClient:RefreshMenu()
 end)
 
 print("[Paddock] Bienvenue ! C : menu (spéciale, rallycross, essais libres, records). Au paddock : une zone par circuit, zone jaune = ta voiture, zone violette = garage (couleur, numéro, réglages). H : retour au paddock")
 
--- Arrivée dans le jeu : le menu principal, pour choisir tout de suite à quoi jouer.
-task.delay(2, function()
+--[[
+	Arrivée dans le jeu : un nouveau pilote part tout de suite au volant
+	(tutoriel express, Tutorial.luau) ; les autres trouvent le menu principal,
+	pour choisir à quoi jouer. L'état du tutoriel arrive avec le profil.
+]]
+local MENU_DELAY = 2 -- secondes avant d'ouvrir le menu à l'arrivée
+local TUTORIAL_WAIT = 8 -- secondes au plus à attendre le profil pour savoir
+local arrivedAt = os.clock()
+local arrivalHandled = false
+
+local function openMenuIfIdle()
 	if not hasControl() and not isRacing() then
 		raceClient:OpenMenu()
+	end
+end
+
+local tutorial = Tutorial.new({
+	PlayerGui = playerGui,
+	IsTouch = isTouch,
+	IsDriving = hasControl,
+	-- Tutoriel fini ou passé : la suite se choisit dans le menu.
+	OnFinished = function()
+		raceClient:OpenMenu()
+	end,
+})
+
+Remotes.Tutorial.OnClientEvent:Connect(function(state: any, news: any)
+	-- Le premier état reçu décide de l'arrivée : tutoriel tout de suite, ou menu.
+	local first = not arrivalHandled
+	arrivalHandled = true
+	if tutorial:SetState(state, news, first) or not first then
+		return
+	end
+	task.delay(math.max(0, MENU_DELAY - (os.clock() - arrivedAt)), openMenuIfIdle)
+end)
+
+-- Profil en retard (DataStore lent) : le menu quand même.
+task.delay(TUTORIAL_WAIT, function()
+	if not arrivalHandled then
+		arrivalHandled = true
+		openMenuIfIdle()
 	end
 end)
 
@@ -706,9 +799,16 @@ Remotes.Leaderboard.OnClientEvent:Connect(function(boards: any)
 end)
 
 -- Annonces à tout le serveur (records, platine, roi du drift, grands
--- trophées), et l'événement double XP en cours, dans le bandeau du haut.
+-- trophées), et l'événement en cours (double XP, événement éclair), dans le
+-- bandeau du haut.
 Remotes.Announce.OnClientEvent:Connect(Announcer.FromServer)
-XpEventNotice.Start()
+-- Pass offerts : réponse aux commandes des admins, et cadeau reçu (GiftService).
+Remotes.GiftMessage.OnClientEvent:Connect(function(text: any)
+	if type(text) == "string" then
+		Toast.Show(text, Theme.ACCENT)
+	end
+end)
+EventNotice.Start()
 
 -- Voix du copilote : les phrases de la spéciale se préparent dès l'arrivée.
 task.defer(CopilotVoice.Prepare, Pacenotes.Generate(), 1)
@@ -716,6 +816,21 @@ task.defer(CopilotVoice.Prepare, Pacenotes.Generate(), 1)
 -- Trophées : la liste (menu, onglet CARRIÈRE), et l'annonce d'un nouveau.
 Remotes.Achievements.OnClientEvent:Connect(function(earned: any, news: any)
 	raceClient:SetAchievements(earned, news)
+end)
+
+-- Championnats : rallye en cours, rallyes, classements, annonces.
+Remotes.ChampionshipState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetChampionship(state, news)
+end)
+
+-- Parrainage : amis récompensés (rubrique « Jouer entre amis »), et ses bonnes nouvelles.
+Remotes.ReferralState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetReferral(state, news)
+end)
+
+-- Session (publique ou privée, son code) : rubrique « Jouer entre amis ».
+Remotes.SessionState.OnClientEvent:Connect(function(state: any, news: any)
+	raceClient:SetSession(state, news)
 end)
 
 -- Écurie : son état (menu, onglet ÉCURIE), ses invitations, le classement.
@@ -765,7 +880,7 @@ Remotes.Wallet.OnClientEvent:Connect(function(wallet: any, news: any)
 	-- Une autre voiture choisie, à pied : ses réglages, son classement, ses fantômes.
 	if not session then
 		local classId = drivenClass()
-		setupMenu:SetClass(classId, setupFor(classId))
+		setupMenu:SetClass(classId, setupFor(classId), drivenCar())
 		ghostChallenge:SetClass(classId)
 	end
 	refreshLeaderboard()
@@ -830,6 +945,7 @@ UserInputService.InputBegan:Connect(function(input: InputObject, gameProcessed: 
 		actions.Horn()
 	elseif key == Enum.KeyCode.N then
 		local mode = CopilotVoice.Cycle(1)
+		Settings.SyncCopilot()
 		Toast.Show("Voix du copilote : <b>" .. CopilotVoice.MODE_NAMES[mode] .. "</b>", Theme.BLUE)
 		raceClient:RefreshMenu()
 	-- Manette : B / RB montent, X / LB descendent (deux jeux de palettes, au choix).
@@ -853,8 +969,15 @@ end)
 local TELEMETRY_INTERVAL = 0.1 -- 10 Hz : assez pour le son et les roues des autres
 local telemetryAccumulator = 0
 
+-- Aspiration : dans le sillage d'une autre voiture, moins de traînée.
+local slipstream = Slipstream.new(playerGui)
+
 RunService.RenderStepped:Connect(function(dt: number)
 	remoteCars:Update(dt)
+	tutorial:Update(dt)
+	local drafting = session
+	local leader = slipstream:Update(dt, if drafting and drafting.HasControl then drafting.Car else nil, remoteCars:GetVisibleCars())
+	remoteCars:SetDraftLeader(leader)
 
 	-- Une course qui part (revanche, salle rejointe) reprend la main sur le ralenti.
 	if replay:IsActive() and raceClient:IsRaceUnderway() then
@@ -884,7 +1007,8 @@ RunService.RenderStepped:Connect(function(dt: number)
 					screech,
 					audioState.GravelSlide,
 					audioState.GravelShare,
-					audioState.TarmacShare
+					audioState.TarmacShare,
+					audioState.Brake
 				)
 			end
 		end

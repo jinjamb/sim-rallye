@@ -22,6 +22,10 @@
 	tirages (le compteur repart à zéro à chaque Usine, Prototype, Légende).
 
 	DOUBLON : un objet déjà possédé est converti en crédits (DUPLICATE_CREDITS).
+
+	BOOST (événement éclair « Tirages boostés », FlashEvents.luau) : les
+	poids des raretés Usine et plus sont multipliés ; les probabilités
+	affichées suivent.
 ]]
 
 local Catalog = require(script.Parent.Catalog)
@@ -62,7 +66,7 @@ export type Odds = { Rarity: string, Chance: number, Items: { Catalog.Item } }
 	Probabilités de chaque rareté (0..1, total 1), dans l'ordre des raretés.
 	`guaranteed` : la garantie joue (seules les raretés Usine et plus).
 ]]
-function Rolls.Odds(guaranteed: boolean?): { Odds }
+function Rolls.Odds(guaranteed: boolean?, boost: number?): { Odds }
 	local pool = Rolls.Pool()
 	local total = 0
 	local list: { Odds } = {}
@@ -70,8 +74,9 @@ function Rolls.Odds(guaranteed: boolean?): { Odds }
 		local info = Rarity.Get(id)
 		local items = pool[id]
 		if items and #items > 0 and info.Weight > 0 and (not guaranteed or info.Rank >= Rolls.PITY_RANK) then
-			total += info.Weight
-			local entry: Odds = { Rarity = id, Chance = info.Weight, Items = items }
+			local weight = if info.Rank >= Rolls.PITY_RANK then info.Weight * (boost or 1) else info.Weight
+			total += weight
+			local entry: Odds = { Rarity = id, Chance = weight, Items = items }
 			table.insert(list, entry)
 		end
 	end
@@ -87,10 +92,11 @@ function Rolls.IsGuaranteed(pity: number): boolean
 end
 
 -- Tire un objet. `random` : le générateur du serveur.
-function Rolls.Draw(random: Random, pity: number): Catalog.Item?
-	local odds = Rolls.Odds(Rolls.IsGuaranteed(pity))
+-- `boost` : multiplicateur des raretés Usine et plus (événement éclair).
+function Rolls.Draw(random: Random, pity: number, boost: number?): Catalog.Item?
+	local odds = Rolls.Odds(Rolls.IsGuaranteed(pity), boost)
 	if #odds == 0 then
-		odds = Rolls.Odds(false)
+		odds = Rolls.Odds(false, boost)
 	end
 	if #odds == 0 then
 		return nil

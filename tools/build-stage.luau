@@ -10,10 +10,15 @@
 	STAGE = nil : toutes les spéciales ; STAGE = "neige" : une seule.
 	Relançable autant de fois que voulu : il réécrit toute la zone.
 
-	THÈME (Stages.luau, Theme) :
-		Forest  herbe, forêts de pins et de feuillus, champignons ;
-		Snow    neige partout (accotements, collines plus hautes : des
-		        montagnes), roche grise dans les talus raides, pins enneigés.
+	THÈME (Stages.luau, Theme ; réglages dans THEMES ci-dessous) :
+		Forest       herbe, forêts de pins et de feuillus, champignons ;
+		Snow         neige partout (accotements, collines plus hautes : des
+		             montagnes), roche grise dans les talus raides, pins enneigés ;
+		Mountain     route de col : herbe rase, ardoise dans les talus, hautes
+		             collines, surtout des pins ;
+		Garrigue     terre sèche du sud : accotements de sable, collines basses,
+		             buissons et quelques pins ;
+		Countryside  bocage : herbe, petites collines, feuillus et cerisiers.
 
 	MÉTHODE : CHAMP DE HAUTEUR.
 	La première version empilait des blocs (FillBlock) tournés selon le cap. Sur
@@ -52,8 +57,57 @@ local Stages = require(stageFolder:WaitForChild("Stages"))
 local Scenery = require(ReplicatedStorage.Shared:WaitForChild("World"):WaitForChild("Scenery"):Clone())
 
 -- `StageTrack` : la spéciale à construire (Stages.Get), mêmes champs et fonctions.
+--[[
+	Réglages de chaque thème : matériaux des accotements, du sous-sol (visible
+	dans les talus raides) et des collines ; hauteur des collines ; arbres
+	(part de chaque sorte, le reste en feuillus) ; champignons au pied des
+	arbres. Matériaux LISSES seulement (pas Rock, hérissé par Roblox).
+]]
+type ThemeSettings = {
+	Shoulder: Enum.Material,
+	Subsoil: Enum.Material,
+	Hill: Enum.Material,
+	HillAmplitude: number,
+	HillFade: number,
+	Trees: { { Kind: string, Share: number } },
+	Mushrooms: boolean,
+}
+
+local THEMES: { [string]: ThemeSettings } = {
+	Forest = {
+		Shoulder = Enum.Material.Grass, Subsoil = Enum.Material.Ground, Hill = Enum.Material.LeafyGrass,
+		HillAmplitude = 46, HillFade = 130,
+		Trees = {}, -- Scenery.PickKind : la forêt garde son mélange d'origine
+		Mushrooms = true,
+	},
+	Snow = {
+		Shoulder = Enum.Material.Snow, Subsoil = Enum.Material.Slate, Hill = Enum.Material.Snow,
+		HillAmplitude = 80, HillFade = 170,
+		Trees = { { Kind = "PineSnow", Share = 0.8 }, { Kind = "Pine", Share = 0.12 }, { Kind = "Bush", Share = 0.08 } },
+		Mushrooms = false,
+	},
+	Mountain = {
+		Shoulder = Enum.Material.Grass, Subsoil = Enum.Material.Slate, Hill = Enum.Material.Grass,
+		HillAmplitude = 95, HillFade = 180,
+		Trees = { { Kind = "Pine", Share = 0.75 }, { Kind = "Bush", Share = 0.15 } },
+		Mushrooms = false,
+	},
+	Garrigue = {
+		Shoulder = Enum.Material.Sand, Subsoil = Enum.Material.Ground, Hill = Enum.Material.Ground,
+		HillAmplitude = 40, HillFade = 120,
+		Trees = { { Kind = "Bush", Share = 0.6 }, { Kind = "Pine", Share = 0.3 } },
+		Mushrooms = false,
+	},
+	Countryside = {
+		Shoulder = Enum.Material.Grass, Subsoil = Enum.Material.Ground, Hill = Enum.Material.LeafyGrass,
+		HillAmplitude = 28, HillFade = 110,
+		Trees = { { Kind = "Sakura", Share = 0.12 }, { Kind = "Bush", Share = 0.25 }, { Kind = "Pine", Share = 0.1 } },
+		Mushrooms = true,
+	},
+}
+
 local function buildStage(StageTrack: any)
-	local snow = StageTrack.Theme == "Snow"
+	local theme = THEMES[StageTrack.Theme] or THEMES.Forest
 
 	local terrain = workspace.Terrain
 	local samples = StageTrack.GetSamples()
@@ -68,10 +122,10 @@ local function buildStage(StageTrack: any)
 	local EMBANK_SLOPE = 0.6 -- pente du talus (studs de descente par stud)
 	local EMBANK_REACH = 60 -- largeur du talus au-delà du couloir
 	local FLOOR_DEPTH = 8 -- le fond de vallée est à (point le plus bas du tracé - ça)
-	local SHOULDER_MATERIAL = if snow then Enum.Material.Snow else Enum.Material.Grass
+	local SHOULDER_MATERIAL = theme.Shoulder
 	-- Visible seulement dans les talus raides (roche grise en montagne ; Slate et
 	-- non Rock, que Roblox rend hérissé).
-	local SUBSOIL_MATERIAL = if snow then Enum.Material.Slate else Enum.Material.Ground
+	local SUBSOIL_MATERIAL = theme.Subsoil
 	local SURFACE_LAYER = 8 -- épaisseur peinte avec le matériau de surface
 	-- Balises de bord de route : rapprochées, elles rythment la vitesse.
 	local MARKER_SPACING = 20
@@ -109,9 +163,9 @@ local function buildStage(StageTrack: any)
 	-- Collines (Scenery.Hills) : elles montent loin de la route et de la Baseplate
 	-- (paddock, piste d'essai), qu'elles laissent à plat.
 	-- En montagne : plus hautes, des sommets enneigés.
-	local HILL_AMPLITUDE = if snow then 80 else 46
-	local HILL_FADE = if snow then 170 else 130
-	local HILL_MATERIAL = if snow then Enum.Material.Snow else Enum.Material.LeafyGrass
+	local HILL_AMPLITUDE = theme.HillAmplitude
+	local HILL_FADE = theme.HillFade
+	local HILL_MATERIAL = theme.Hill
 	local BASEPLATE_KEEP = 300 -- demi-côté de la zone gardée telle quelle autour de la Baseplate
 	-- Forêts sur les collines, au-delà des arbres du bord de route.
 	local FOREST_COUNT = 1500
@@ -124,11 +178,17 @@ local function buildStage(StageTrack: any)
 
 	-- Une sorte d'arbre selon le thème (`sakura` : part des cerisiers en forêt).
 	local function treeKind(rng: Random, sakura: number): any
-		if snow then
-			local roll = rng:NextNumber()
-			return if roll < 0.8 then "PineSnow" elseif roll < 0.92 then "Pine" else "Bush"
+		if #theme.Trees == 0 then
+			return Scenery.PickKind(rng, sakura)
 		end
-		return Scenery.PickKind(rng, sakura)
+		local roll = rng:NextNumber()
+		for _, tree in ipairs(theme.Trees) do
+			if roll < tree.Share then
+				return tree.Kind
+			end
+			roll -= tree.Share
+		end
+		return "Leafy"
 	end
 
 	local function smoothstep(t: number): number
@@ -491,7 +551,7 @@ local function buildStage(StageTrack: any)
 					Scenery.Tree(decor, spot, rng, treeKind(rng, 0.06))
 					treeCount += 1
 					-- Champignons rouges au pied de quelques arbres.
-					if not snow and rng:NextNumber() < 0.12 then
+					if theme.Mushrooms and rng:NextNumber() < 0.12 then
 						local nearby = spot + Vector3.new(rng:NextNumber(-5, 5), 0, rng:NextNumber(-5, 5))
 						local ground = groundHeightAt(nearby.X, nearby.Z)
 						if ground then

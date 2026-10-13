@@ -21,7 +21,13 @@
 	(attribut Weekly) a son propre classement (ChallengeService).
 
 	À l'arrivée : le record (RecordService), le fantôme attendu (GhostService),
-	le résultat au joueur (RunValidated), la progression et les défis du jour.
+	le résultat au joueur (RunValidated), la progression, les défis du jour,
+	et le tutoriel express (TutorialService).
+
+	VOITURE DE RALLYE (attribut Championship : mode championnat) : départ,
+	arrivée, retour au départ et passage refusé sont aussi signalés au mode
+	championnat, par des crochets branchés dans Main.server.luau
+	(ChampionshipService dépend, par RaceService, de ce service).
 ]]
 
 local Players = game:GetService("Players")
@@ -32,6 +38,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Plausibility = require(script.Parent.Plausibility)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local RecordService = require(script.Parent.RecordService)
 local GhostService = require(script.Parent.GhostService)
@@ -39,6 +46,9 @@ local ChallengeService = require(script.Parent.ChallengeService)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
+local TutorialService = require(script.Parent.TutorialService)
+local MedalCalibration = require(script.Parent.MedalCalibration)
+local FlashEventService = require(script.Parent.FlashEventService)
 
 local StageService = {}
 
@@ -51,6 +61,7 @@ local START_LATERAL_MARGIN = 8 -- studs au-delà du bord de la route, au départ
 local STYLE_GRACE = 5 -- secondes
 
 type Run = {
+	Tracker: Plausibility.Tracker?, -- accélération du passage en cours (Plausibility.luau)
 	Running: boolean,
 	StartTime: number,
 	LastProgress: number?,
@@ -65,6 +76,17 @@ type Run = {
 }
 
 local runs: { [Player]: Run } = {}
+
+-- Crochets du mode championnat (branchés par Main.server.luau sur ChampionshipService).
+StageService.RallyLegStarted = function(_player: Player) end
+StageService.RallyLegFinished = function(_player: Player, _stageId: string, _ms: number) end
+StageService.RallyPenalty = function(_player: Player, _reason: string) end
+
+-- La voiture du joueur court-elle un rallye (mode championnat) ?
+local function inRally(player: Player): boolean
+	local car = workspace:FindFirstChild("Car_" .. player.UserId)
+	return car ~= nil and car:GetAttribute("Championship") ~= nil
+end
 
 -- Passage chronométré en cours (ou fini depuis moins de STYLE_GRACE s) :
 -- les points de style comptent (StyleService).
@@ -101,6 +123,10 @@ local function stageFinished(player: Player, clean: boolean, weekly: boolean)
 	if weekly then
 		ChallengeService.DailyEvent(player, "WeeklyRun", 1)
 	end
+	-- La première : fin du tutoriel express (et du parrainage d'un filleul).
+	TutorialService.StageFinished(player)
+	-- Événement éclair « Tirage offert ».
+	FlashEventService.Finished(player)
 end
 
 local function onWeeklyFinish(player: Player, ms: number, key: string, clean: boolean)
@@ -148,6 +174,7 @@ local function onFinish(player: Player, ms: number, clean: boolean, stageId: str
 
 	-- Calibrage des médailles (Medals.luau) : la vitesse moyenne de chaque temps validé.
 	if RunService:IsStudio() then
+		MedalCalibration.Stage(stageId, classId, ms)
 		print(string.format(
 			"[Médailles] Spéciale %s en %s : %.2f s, %.1f km/h de moyenne",
 			stageId,
@@ -169,10 +196,16 @@ local function onFinish(player: Player, ms: number, clean: boolean, stageId: str
 	ProgressService.AddCounters(player, 1, 0)
 	EconomyService.Earn(player, Credits.REWARDS.StageRun, "Spéciale terminée")
 	stageFinished(player, clean, false)
+	if inRally(player) then
+		StageService.RallyLegFinished(player, stageId, ms)
+	end
 end
 
 local function onInvalid(player: Player, reason: string)
 	Remotes.RunValidated:FireClient(player, { Valid = false, Reason = reason })
+	if inRally(player) then
+		StageService.RallyPenalty(player, reason)
+	end
 end
 
 -- Une mesure de chaque voiture : départ, arrivée, raccourcis.
@@ -217,13 +250,26 @@ local function sample(now: number)
 			if delta > maxStep then
 				run.Running = false
 				onInvalid(player, "raccourci")
+			elseif run.Tracker and Plausibility.Accelerating(run.Tracker :: Plausibility.Tracker, now, progress) then
+				-- Une voiture qui gagne de la vitesse plus vite que l'adhérence et la puissance ne le permettent.
+				run.Running = false
+				onInvalid(player, "accélération impossible")
 			elseif delta < -RESTART_BACKWARD then
-				run.Running = false -- retour au départ : rien à signaler
+				run.Running = false -- retour au départ : rien à signaler (sauf en rallye)
+				if inRally(player) then
+					StageService.RallyPenalty(player, "retour au départ")
+				end
 			elseif last < finishDistance and progress >= finishDistance then
 				run.Running = false
 				local ms = math.floor((crossingTime(finishDistance) - run.StartTime) * 1000 + 0.5)
-				-- Garde-fou ultime : impossible de couvrir la distance plus vite que ça.
-				local minimumMs = (finishDistance - startDistance) / MAX_PLAUSIBLE_SPEED * 1000
+				-- Garde-fous : impossible de couvrir la distance plus vite que ça,
+				-- ni d'aller bien plus vite que la médaille de platine (Plausibility).
+				local car = chassis.Parent
+				local classId = CarClasses.Get(if car then car:GetAttribute("CarClass") else nil).Id
+				local minimumMs = math.max(
+					(finishDistance - startDistance) / MAX_PLAUSIBLE_SPEED * 1000,
+					Plausibility.MinimumStageMs(classId, stageId)
+				)
 				if ms < minimumMs then
 					onInvalid(player, "temps impossible")
 				else
@@ -237,13 +283,17 @@ local function sample(now: number)
 			run.Running = true
 			run.Recovered = false
 			run.StartTime = crossingTime(startDistance)
+			run.Tracker = Plausibility.NewTracker()
+			if inRally(player) then
+				StageService.RallyLegStarted(player)
+			end
 		end
 	end
 end
 
 function StageService.Start()
 	ProfileStore.OnLoaded(function(player)
-		runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0, Recovered = false }
+		runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0, Recovered = false, Tracker = nil }
 	end)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		runs[player] = nil

@@ -4,7 +4,9 @@
 	Le garage du paddock : entrer dans la zone violette ouvre ce panneau.
 		- sa progression : niveau, licence, barre d'XP (Progression.luau) ;
 		- la livrée : couleur, numéro, bandes de course et leur couleur, style
-		  du numéro (sauvegardée, visible de tous en course) ;
+		  du numéro, motif et sa couleur (sauvegardée, visible de tous en
+		  course) ; la peinture pièce par pièce se fait dans le menu
+		  (INVENTAIRE), l'aperçu d'ici la montre ;
 		- accès aux réglages de la voiture (le menu P).
 	Derrière la zone, la voiture tourne sur sa plaque, aux couleurs choisies,
 	peinte exactement comme en jeu (LiveryPainter.luau). Cet aperçu est une
@@ -16,8 +18,6 @@
 	qu'elle utilise est débloqué (le serveur le vérifie aussi). En sortant du
 	garage, l'aperçu revient à la livrée sauvegardée.
 
-	Une seule voiture pour l'instant (la Rally2 du gabarit) : le choix du
-	modèle viendra avec d'autres gabarits.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -47,6 +47,8 @@ export type Callbacks = {
 	OpenSetup: () -> (),
 	-- Catégorie de la voiture choisie : sa carrosserie sur l'aperçu.
 	GetCarClass: () -> string,
+	-- La voiture choisie (CarModels.luau) : sa carrosserie si la livrée la garde (Body = 0).
+	GetCarModel: () -> string?,
 	-- Objets possédés (pièces gagnées aux tirages).
 	GetOwned: () -> { [string]: boolean },
 }
@@ -63,6 +65,9 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	StripesLabel: TextLabel,
 	StripeColorLabel: TextLabel,
 	PlateLabel: TextLabel,
+	PatternLabel: TextLabel,
+	PatternColorLabel: TextLabel,
+	FinishLabel: TextLabel,
 	-- Carrosserie (CarBodies.luau) : le modèle, puis une ligne par emplacement de pièce.
 	BodyLabel: TextLabel,
 	SlotLabels: { [string]: TextLabel },
@@ -76,11 +81,11 @@ export type Garage = typeof(setmetatable({}, Garage)) & {
 	ShowroomBase: CFrame?,
 	Angle: number,
 	Shown: string, -- livrée affichée sur l'aperçu (Livery.Key)
-	ShownClass: string, -- catégorie affichée sur l'aperçu (kit de carrosserie)
+	ShownClass: string, -- catégorie et voiture affichées sur l'aperçu (kit, carrosserie)
 }
 
 local PANEL_WIDTH = 380
-local PANEL_HEIGHT = 690
+local PANEL_HEIGHT = 804
 local BODY_ROW = 34 -- lignes de la carrosserie, un peu plus serrées
 local SPIN_SPEED = 0.35 -- rad/s
 local COLOR_LOCKED = Theme.ORANGE
@@ -149,7 +154,7 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	fill.Parent = track
 	self.XpFill = fill
 
-	local car = Widgets.Label(panel, "Voiture : Rally2, 4 roues motrices (une seule voiture pour l'instant)", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
+	local car = Widgets.Label(panel, "Peinture par pièce et accessoires : menu C › INVENTAIRE", 12, Enum.Font.GothamMedium, Widgets.COLOR_DIM)
 	car.Position = UDim2.fromOffset(16, 82)
 	car.Size = UDim2.new(1, -32, 0, 18)
 
@@ -189,7 +194,12 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 		end
 		local draft: any = table.clone(base)
 		local low = first or 1
-		draft[field] = ((draft[field] - low + direction) % count) + low
+		draft[field] = (((draft[field] or low) - low + direction) % count) + low
+		-- Une couleur de la palette remplace la couleur sur mesure de ce champ.
+		if base.Custom and base.Custom[field] then
+			draft.Custom = table.clone(base.Custom)
+			draft.Custom[field] = nil
+		end
 		self.Draft = draft
 		if self:_lockedText(draft) == nil then
 			callbacks.SetLivery(draft)
@@ -212,23 +222,38 @@ function Garage.new(playerGui: Instance, callbacks: Callbacks): Garage
 	self.PlateLabel = stepper(y + 152, "Style numéro", function(direction)
 		change("Plate", #Livery.PLATES, direction)
 	end)
+	self.PatternLabel = stepper(y + 190, "Motif", function(direction)
+		change("Pattern", #Livery.PATTERNS, direction)
+	end)
+	self.PatternColorLabel = stepper(y + 228, "Couleur motif", function(direction)
+		change("PatternColor", #Livery.COLORS, direction)
+	end)
+	self.FinishLabel = stepper(y + 266, "Finition", function(direction)
+		change("Finish", #Livery.FINISHES, direction)
+	end)
 
 	-- Carrosserie : le modèle et ses pièces. Une pièce que le modèle ne prend
-	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « — ».
+	-- pas (la carrosserie d'origine n'a que les jantes) s'affiche « - ».
 	local bodyTitle = Widgets.Label(panel, "CARROSSERIE", 14, Enum.Font.GothamBlack, Theme.ACCENT)
-	bodyTitle.Position = UDim2.fromOffset(16, y + 190)
+	bodyTitle.Position = UDim2.fromOffset(16, y + 304)
 	bodyTitle.Size = UDim2.new(1, -32, 0, 18)
-	local bodyY = y + 212
+	local bodyY = y + 326
 	self.BodyLabel = stepper(bodyY, "Modèle", function(direction)
-		change("Body", #CarBodies.LIST, direction)
+		-- 0 : la carrosserie de la voiture, puis chaque modèle.
+		change("Body", #CarBodies.LIST + 1, direction, 0)
 	end)
+	-- Les pièces principales ; les accessoires se choisissent dans le menu (INVENTAIRE).
 	self.SlotLabels = {}
-	for index, slot in ipairs(CarBodies.SLOTS) do
-		self.SlotLabels[slot.Key] = stepper(bodyY + index * BODY_ROW, slot.Name, function(direction)
-			change(slot.Key, #slot.Options, direction)
-		end)
+	local rows = 0
+	for _, slot in ipairs(CarBodies.SLOTS) do
+		if not slot.Accessory then
+			rows += 1
+			self.SlotLabels[slot.Key] = stepper(bodyY + rows * BODY_ROW, slot.Name, function(direction)
+				change(slot.Key, #slot.Options, direction)
+			end)
+		end
 	end
-	local setupY = bodyY + (#CarBodies.SLOTS + 1) * BODY_ROW + 10
+	local setupY = bodyY + (rows + 1) * BODY_ROW + 10
 
 	local setup = Widgets.Button(panel, "RÉGLAGES DE LA VOITURE (P)", function()
 		callbacks.OpenSetup()
@@ -270,11 +295,25 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 		{ Kind = "Stripes", Index = livery.Stripes },
 		{ Kind = "Color", Index = livery.StripeColor },
 		{ Kind = "Plate", Index = livery.Plate },
+		{ Kind = "Pattern", Index = livery.Pattern or 1 },
+		{ Kind = "Finish", Index = livery.Finish or 1 },
+		{ Kind = "TrimFinish", Index = livery.TrimFinish or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorHood or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorDoors or 1 },
+		{ Kind = "Sponsor", Index = livery.SponsorRoof or 1 },
+		{ Kind = "Color", Index = livery.PatternColor or 4 },
 		{ Kind = "Body", Index = livery.Body },
 	}
+	for _, color in pairs(livery.Paints or {}) do
+		table.insert(checks, { Kind = "Color", Index = color })
+	end
+	if livery.Custom and next(livery.Custom) ~= nil then
+		table.insert(checks, { Kind = "Custom", Index = 1 })
+	end
 	local body = CarBodies.Get(livery.Body)
 	for _, slot in ipairs(CarBodies.SLOTS) do
-		if CarBodies.HasSlot(body, slot.Key) then
+		-- Carrosserie de la voiture (Body = 0) : ses pièces sont à elle ; jantes et accessoires restent au joueur.
+		if CarBodies.HasSlot(body, slot.Key) and (livery.Body ~= 0 or slot.Key == "Rims" or slot.Accessory) then
 			table.insert(checks, { Kind = slot.Key :: any, Index = (livery :: any)[slot.Key] })
 		end
 	end
@@ -287,7 +326,7 @@ function Garage:_lockedText(livery: Livery.Livery): string?
 			table.insert(lines, Livery.ItemName(check.Kind, check.Index) .. " : " .. Progression.Describe(item.Requirement))
 		end
 	end
-	return if #lines > 0 then "Verrouillé — " .. table.concat(lines, " · ") .. ". Essai seulement : non sauvegardé." else nil
+	return if #lines > 0 then "Verrouillé : " .. table.concat(lines, " · ") .. ". Essai seulement : non sauvegardé." else nil
 end
 
 local function valueText(name: string, unlocked: boolean): string
@@ -319,7 +358,7 @@ function Garage:_refresh()
 
 	local livery = self:_shown()
 	if not livery then
-		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel, self.BodyLabel }) do
+		for _, label in ipairs({ self.ColorLabel, self.NumberLabel, self.StripesLabel, self.StripeColorLabel, self.PlateLabel, self.PatternLabel, self.PatternColorLabel, self.FinishLabel, self.BodyLabel }) do
 			label.Text = "…"
 		end
 		for _, label in pairs(self.SlotLabels) do
@@ -348,28 +387,47 @@ function Garage:_refresh()
 	self.StripesLabel.Text = valueText(stripes.Name, stripesUnlocked)
 	plain(self.StripesLabel, stripesUnlocked)
 	local stripeColor = Livery.COLORS[livery.StripeColor] or Livery.COLORS[3]
-	self.StripeColorLabel.Text = valueText(stripeColor.Name, Progression.IsUnlocked("Color", livery.StripeColor, progress, owned))
-	swatch(self.StripeColorLabel, stripeColor.Color)
+	self.StripeColorLabel.Text = valueText(if livery.Custom and livery.Custom.StripeColor then livery.Custom.StripeColor else stripeColor.Name, Progression.IsUnlocked("Color", livery.StripeColor, progress, owned))
+	swatch(self.StripeColorLabel, Livery.StripeColorOf(livery))
 	local plate = Livery.PLATES[livery.Plate] or Livery.PLATES[1]
 	local plateUnlocked = Progression.IsUnlocked("Plate", livery.Plate, progress, owned)
 	self.PlateLabel.Text = valueText(plate.Name, plateUnlocked)
 	plain(self.PlateLabel, plateUnlocked)
+	local patternIndex = livery.Pattern or 1
+	local pattern = Livery.PATTERNS[patternIndex] or Livery.PATTERNS[1]
+	local patternUnlocked = Progression.IsUnlocked("Pattern", patternIndex, progress, owned)
+	self.PatternLabel.Text = valueText(pattern.Name, patternUnlocked)
+	plain(self.PatternLabel, patternUnlocked)
+	local patternColor = Livery.COLORS[livery.PatternColor or 4] or Livery.COLORS[4]
+	self.PatternColorLabel.Text = valueText(if livery.Custom and livery.Custom.PatternColor then livery.Custom.PatternColor else patternColor.Name, Progression.IsUnlocked("Color", livery.PatternColor or 4, progress, owned))
+	swatch(self.PatternColorLabel, Livery.PatternColorOf(livery))
+	local finishIndex = livery.Finish or 1
+	local finish = Livery.FINISHES[finishIndex] or Livery.FINISHES[1]
+	local finishUnlocked = Progression.IsUnlocked("Finish", finishIndex, progress, owned)
+	self.FinishLabel.Text = valueText(finish.Name, finishUnlocked)
+	plain(self.FinishLabel, finishUnlocked)
 
-	-- Carrosserie : le modèle, et chaque pièce (« — » si le modèle ne la prend pas).
+	-- Carrosserie : le modèle, et chaque pièce (« - » si le modèle ne la prend pas).
+	local ownBody = livery.Body == 0
 	local body = CarBodies.Get(livery.Body)
 	local bodyUnlocked = Progression.IsUnlocked("Body", livery.Body, progress, owned)
-	self.BodyLabel.Text = valueText(body.Name, bodyUnlocked)
+	self.BodyLabel.Text = if ownBody then "De la voiture" else valueText(body.Name, bodyUnlocked)
 	plain(self.BodyLabel, bodyUnlocked)
 	for _, slot in ipairs(CarBodies.SLOTS) do
 		local label = self.SlotLabels[slot.Key]
-		if CarBodies.HasSlot(body, slot.Key) then
+		if not label then
+			continue -- accessoire : choisi dans le menu
+		elseif ownBody and slot.Key ~= "Rims" then
+			label.Text = "De la voiture"
+			plain(label, true)
+		elseif CarBodies.HasSlot(body, slot.Key) then
 			local index = (livery :: any)[slot.Key] or 1
 			local option = slot.Options[index] or slot.Options[1]
 			local unlocked = Progression.IsUnlocked(slot.Key :: any, index, progress, owned)
 			label.Text = valueText(option.Name, unlocked)
 			plain(label, unlocked)
 		else
-			label.Text = "—"
+			label.Text = "-"
 			label.BackgroundTransparency = 1
 			label.TextColor3 = Widgets.COLOR_DIM
 		end
@@ -470,16 +528,21 @@ function Garage:Update(dt: number, position: Vector3?)
 		self.Shown = ""
 		self.ShownClass = ""
 	end
-	local model = self.Showroom
+	local model: Model? = self.Showroom
 	local base = self.ShowroomBase
 	if model and base then
 		self.Angle = (self.Angle + SPIN_SPEED * dt) % (math.pi * 2)
 		model:PivotTo(CFrame.new(base.Position) * CFrame.Angles(0, self.Angle, 0) * base.Rotation)
-		-- Carrosserie de la catégorie choisie (BodyKits.luau), inerte comme le reste.
+		-- La voiture choisie : son kit (BodyKits.luau) et sa carrosserie, inertes comme le reste.
 		local classId = self.Callbacks.GetCarClass()
-		if classId ~= self.ShownClass then
-			self.ShownClass = classId
-			BodyKits.Apply(model, CarClasses.Get(classId).Body)
+		local carId = self.Callbacks.GetCarModel()
+		local shownCar = classId .. "|" .. tostring(carId)
+		if shownCar ~= self.ShownClass then
+			self.ShownClass = shownCar
+			self.Shown = "" -- même livrée, autre voiture : on repeint
+			model:SetAttribute("CarClass", classId)
+			model:SetAttribute("CarModel", carId)
+			BodyKits.Apply(model, CarClasses.ForCar(classId, carId).Body)
 			local kit = model:FindFirstChild("BodyKit")
 			if kit then
 				for _, item in ipairs(kit:GetDescendants()) do

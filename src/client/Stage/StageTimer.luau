@@ -360,7 +360,7 @@ function StageTimer:SetOfficialResult(result: any)
 		-- Défi de la semaine : son classement à lui, pas de médaille.
 		local text = "OFFICIEL " .. Format.Time(result.Ms / 1000)
 		if result.WeeklyBest then
-			text ..= " — MEILLEUR DE TA SEMAINE !"
+			text ..= " · MEILLEUR DE TA SEMAINE !"
 			self.WeeklyBestMs = result.Ms
 			self.BestTime = result.Ms / 1000
 			Banner.Show(
@@ -376,7 +376,7 @@ function StageTimer:SetOfficialResult(result: any)
 	elseif result.Valid and type(result.Ms) == "number" then
 		local text = "OFFICIEL " .. Format.Time(result.Ms / 1000)
 		if result.PersonalBest then
-			text ..= " — RECORD PERSO !"
+			text ..= " · RECORD PERSO !"
 			self.BestTime = result.Ms / 1000
 			self.OfficialBestMs = result.Ms
 			announceRecord(result.Ms, if type(result.PreviousMs) == "number" then result.PreviousMs else nil, self.ClassId, self.Track.Id)
@@ -511,7 +511,7 @@ function StageTimer:_refresh(now: number)
 				tone = self.OfficialColor
 			end
 		else
-			self.StatusLabel.Text = "ARRIVÉE — VALIDATION…"
+			self.StatusLabel.Text = "ARRIVÉE · VALIDATION…"
 		end
 		self.TimeLabel.Text = Format.Time(self.FinalTime)
 		self.TimeLabel.TextColor3 = if isBest then COLOR_FASTER else COLOR_TEXT

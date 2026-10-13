@@ -46,6 +46,8 @@ local PaddockLayout = require(ReplicatedStorage.Shared.Paddock.PaddockLayout)
 local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
+local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local Weekly = require(ReplicatedStorage.Shared.Challenges.Weekly)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
 local Format = require(ReplicatedStorage.Shared.Util.Format)
@@ -198,10 +200,12 @@ local function buildPaddock()
 	for _, pad in ipairs(PaddockLayout.RACE_PADS) do
 		padRing(folder, pad)
 		local circuit = Tracks.Get(pad.Id)
-		local _, frame = board(folder, pad.Position + Vector3.new(0, 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
+		-- Rangée arrière : panneau plus haut, visible au-dessus de la rangée avant.
+		local back = pad.Position.Z < PaddockLayout.SPAWN.Z - 60
+		local _, frame = board(folder, pad.Position + Vector3.new(0, if back then 12 else 4, -pad.Radius - 4), Vector2.new(20, 11), pad.Color)
 		label(frame, if circuit then string.upper(circuit.Name) else pad.Id, 30, 90, Enum.Font.GothamBlack, pad.Color)
 		label(frame, if circuit then circuit.Description else "", 130, 50, Enum.Font.GothamMedium, Color3.fromRGB(200, 202, 210))
-		local record = label(frame, "Record du tour : —", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
+		local record = label(frame, "Record du tour : -", 190, 52, Enum.Font.GothamBold, Color3.fromRGB(245, 200, 55))
 		if circuit then
 			local medals = label(frame, "Médailles   " .. Medals.RichLine(Medals.ForCircuit(pad.Id, circuit.Length)), 246, 36, Enum.Font.GothamBold, Color3.fromRGB(200, 202, 210))
 			medals.RichText = true
@@ -315,7 +319,7 @@ local function updateSigns()
 			table.insert(lines, string.format("%d en course", status.Racing))
 		end
 		sign.Status.Text = table.concat(lines, "\n")
-		sign.Record.Text = recordText[padId] or "Record du tour : —"
+		sign.Record.Text = recordText[padId] or "Record du tour : -"
 	end
 end
 
@@ -330,7 +334,7 @@ local function onTrackRecords(boards: any)
 	for padId, boardData in pairs(byTrack) do
 		local entries = type(boardData) == "table" and boardData.Entries
 		local best = type(entries) == "table" and entries[1]
-		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s — %s", Format.Ms(best.Ms), best.Name) else "Record du tour : —"
+		recordText[padId] = if best then string.format("Record du tour (Rally2) : %s · %s", Format.Ms(best.Ms), best.Name) else "Record du tour : -"
 	end
 end
 
@@ -388,7 +392,8 @@ local function refuse(player: Player, message: string)
 	Remotes.RaceEvent:FireClient(player, "Error", { Message = message })
 end
 
-local function onPlayMode(player: Player, mode: any, trackId: any)
+-- `weather` : la météo choisie pour une spéciale (Weather.luau), sec sinon.
+local function onPlayMode(player: Player, mode: any, trackId: any, weather: any)
 	local now = os.clock()
 	if now - (lastPlayAt[player] or -math.huge) < PLAY_COOLDOWN then
 		return
@@ -404,9 +409,14 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 		if type(trackId) ~= "string" or not Lessons.Get(trackId) then
 			return
 		end
-	elseif mode == "Stage" then
+	elseif mode == "Stage" or mode == "EventCar" then
 		-- trackId : la spéciale choisie (Stages.luau) ; la spéciale par défaut sinon.
 		if trackId ~= nil and not Stages.Exists(trackId) then
+			return
+		end
+		-- La voiture rare de l'événement éclair : seulement pendant l'événement.
+		if mode == "EventCar" and not FlashEvents.RareCar(os.time()) then
+			refuse(player, "L'événement « Voiture rare » est terminé : rendez-vous au prochain !")
 			return
 		end
 	elseif mode ~= "Practice" and mode ~= "Weekly" then
@@ -419,9 +429,14 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 	end
 	lastPlayAt[player] = now
 
-	if mode == "Stage" then
+	if mode == "Stage" or mode == "EventCar" then
 		local track = Stages.Get(if type(trackId) == "string" then trackId else nil)
-		CarService.Spawn(player, track.StartFrame(), { Attributes = { Stage = track.Id } })
+		local forecast = Weather.New(weather, workspace:GetServerTimeNow())
+		CarService.Spawn(player, track.StartFrame(), {
+			Attributes = Weather.ToAttributes(forecast, { Stage = track.Id }),
+			-- Événement éclair : la voiture rare, prêtée (CarService : Loaned).
+			CarClass = if mode == "EventCar" then FlashEvents.RareCar(os.time()) else nil,
+		})
 	elseif mode == "Lesson" then
 		local lesson = Lessons.Get(trackId) :: Lessons.Lesson
 		-- Les leçons sont réglées pour la Rally2 : c'est elle qu'on prend.
@@ -429,8 +444,10 @@ local function onPlayMode(player: Player, mode: any, trackId: any)
 	elseif mode == "Weekly" then
 		local week = Weekly.Current()
 		local track = Stages.Get(Stages.DEFAULT)
+		-- Défi « pluie » : la météo pluie, pour tous les concurrents de la semaine.
+		local forecast = Weather.New(if week.Modifier.Id == "Rain" then "Rain" else "Dry", workspace:GetServerTimeNow())
 		CarService.Spawn(player, track.StartFrame(), {
-			Attributes = { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id },
+			Attributes = Weather.ToAttributes(forecast, { Weekly = week.Key, Modifier = week.Modifier.Id, Stage = track.Id }),
 			CarClass = week.CarClass, -- la voiture de la semaine, prêtée au besoin
 		})
 	elseif mode == "Practice" then

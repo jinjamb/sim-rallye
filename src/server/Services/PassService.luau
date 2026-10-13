@@ -21,6 +21,7 @@ local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local EconomyService = require(script.Parent.EconomyService)
 local AchievementService = require(script.Parent.AchievementService)
+local Perks = require(script.Parent.Perks)
 
 local PassService = {}
 
@@ -134,12 +135,42 @@ function PassService.OnPremium(player: Player)
 	sendPass(player, { Premium = true })
 end
 
+--[[
+	Pass Premium de Sim Rallye (MonetizationService, ou au chargement) : en
+	cadeau, la voie premium de la SAISON D'ACHAT seulement -- la saison où le
+	pass est vu pour la première fois, retenue dans le profil. Les saisons
+	suivantes se rachètent comme pour tout le monde.
+]]
+function PassService.EnsurePremium(player: Player)
+	local profile = ProfileStore.Get(player)
+	if not profile then
+		return
+	end
+	local season = Pass.Current().Key
+	if profile.PremiumPassSeason == nil then
+		profile.PremiumPassSeason = season
+		ProfileStore.Defer(player, "PremiumPassSeason", function(stored)
+			if stored.PremiumPassSeason == nil then
+				stored.PremiumPassSeason = season
+			end
+		end)
+	end
+	if profile.PremiumPassSeason ~= season or stateOf(profile).Premium then
+		return
+	end
+	PassService.OnPremium(player)
+end
+
 function PassService.Start()
 	ProfileStore.OnLoaded(function(player, profile)
 		-- Nouvelle saison, ou premium acheté hors ligne : on met à jour.
 		grantReached(player, stateOf(profile))
 		save(player)
 		sendPass(player)
+		-- Pass Premium déjà connu (sinon : MonetizationService, une fois vérifié).
+		if Perks.HasPremiumPass(player) then
+			PassService.EnsurePremium(player)
+		end
 	end)
 end
 

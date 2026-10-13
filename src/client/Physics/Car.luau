@@ -3,6 +3,7 @@ local WheelClass = require(script.Parent.Wheel)
 local PowertrainClass = require(script.Parent.Powertrain)
 local AerodynamicsClass = require(script.Parent.Aerodynamics)
 local DifferentialClass = require(script.Parent.Differential)
+local Arcade = require(script.Parent.Arcade)
 local InputManager = require(script.Parent.Parent.Core.InputManager)
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
@@ -20,6 +21,7 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	Powertrain: PowertrainClass.Powertrain,
 	Aerodynamics: AerodynamicsClass.Aerodynamics,
 	MaxSteerAngle: number,
+	SteerAssist: number, -- 0..1 : aide au braquage (voir AIDE AU BRAQUAGE)
 	MaxBrakeForce: number,
 	HandbrakeForce: number,
 	BrakeBiasFront: number,
@@ -48,6 +50,7 @@ export type Car = typeof(setmetatable({}, Car)) & {
 	-- engagé (nil = boîte libre), frein à main hors service.
 	GearLock: number?,
 	HandbrakeDisabled: boolean,
+	AirTime: number, -- secondes depuis que les quatre roues ont quitté le sol (Arcade.luau)
 }
 
 --[[
@@ -129,12 +132,14 @@ local CENTER_DIFF = { Split = 0.6, PreloadRatio = 0.05, PowerLock = 0.4, CoastLo
 local ANTI_ROLL_FRONT_RATIO = 0.6
 local ANTI_ROLL_REAR_RATIO = 0.42
 
-function Car.new(chassis: BasePart, classId: string?): Car
+-- `carId` : la voiture (CarModels.luau), qui retouche la fiche de sa catégorie.
+function Car.new(chassis: BasePart, classId: string?, carId: string?): Car
 	local self = (setmetatable({}, Car) :: any) :: Car
 	self.Chassis = chassis
-	self.Class = CarClasses.Get(classId)
-	self.Aerodynamics = AerodynamicsClass.new(chassis)
+	self.Class = CarClasses.ForCar(classId, carId)
+	self.Aerodynamics = AerodynamicsClass.new(chassis, self.Class.DragRatio, self.Class.AeroBalance)
 	self.MaxSteerAngle = 45 -- réglable (CarSetup.SteerAngle)
+	self.SteerAssist = 1 -- réglable (CarSetup.SteerAssist)
 	self.BrakeBiasFront = 0.65 -- voir le calibrage de BRAKE_FORCE_RATIO
 	self.Wheels = {}
 	self.WheelsByName = {}
@@ -147,6 +152,7 @@ function Car.new(chassis: BasePart, classId: string?): Car
 	self.Held = false
 	self.GearLock = nil
 	self.HandbrakeDisabled = false
+	self.AirTime = 0
 
 	local fl = chassis:WaitForChild("WheelFL") :: Attachment
 	local fr = chassis:WaitForChild("WheelFR") :: Attachment
@@ -210,6 +216,7 @@ function Car:ApplySetup(input: CarSetup.Setup)
 	self.Setup = setup
 
 	self.MaxSteerAngle = setup.SteerAngle
+	self.SteerAssist = setup.SteerAssist
 	InputManager:SetHighSpeedSteer(setup.HighSpeedSteer)
 
 	self.BrakeBiasFront = setup.BrakeBias
@@ -219,8 +226,9 @@ function Car:ApplySetup(input: CarSetup.Setup)
 	self.FrontDiff.CoastLock = setup.FrontCoastLock
 	self.RearDiff.PowerLock = setup.RearPowerLock
 	self.RearDiff.CoastLock = setup.RearCoastLock
-	-- Traction : tout à l'avant, quel que soit le réglage.
-	self.CenterDiff.Split = if self.Class.Drive == "FWD" then 0 else setup.CenterSplit
+	-- Traction : tout à l'avant ; propulsion : tout à l'arrière, quel que soit le réglage.
+	local drive = self.Class.Drive
+	self.CenterDiff.Split = if drive == "FWD" then 0 elseif drive == "RWD" then 1 else setup.CenterSplit
 	self.CenterDiff.PowerLock = setup.CenterLock
 	-- Le central est moins bloqué en frein moteur qu'en traction (rampes 1.5 voie).
 	self.CenterDiff.CoastLock = setup.CenterLock * 0.5
@@ -311,6 +319,53 @@ end
 	vers le HAUT à gauche et le tire vers le BAS à droite : le roulis diminue, et la
 	charge (donc le grip) est transférée vers l'extérieur du virage.
 ]]
+--[[
+	AIDE AU BRAQUAGE.
+	Un pneu tient le mieux à un petit angle de dérive (~9° sur l'asphalte,
+	~14° sur la terre : Surfaces.luau). Au-delà, il glisse et perd de
+	l'adhérence. Or au clavier, appuyer sur une flèche braque presque à fond :
+	à 50 km/h, ~43° de braquage quand la voiture n'en demande que ~18°. Les
+	roues avant travaillent alors à 3-4 fois leur dérive idéale : sur la
+	terre le pneu le pardonne (il garde ~96 % de son adhérence), sur
+	l'asphalte il en perd 15 à 20 % -- la voiture « pousse » tout droit.
+
+	L'aide limite donc le braquage, DANS LE SENS OÙ L'ON BRAQUE, à la
+	direction de la vitesse de l'essieu avant plus la dérive idéale du sol
+	(avec une marge), comme un pilote qui dose le volant. Elle ne contre-braque
+	jamais à la place du pilote et ne retourne jamais le volant : en glisse,
+	le contre-braquage reste entier, et braquer vers l'intérieur garde au
+	moins ASSIST_MIN_SHARE du braquage demandé. Sans effet à basse vitesse (épingles,
+	manœuvres), où le plein braquage sert.
+]]
+local ASSIST_START_SPEED = 15 -- studs/s (~15 km/h) : en dessous, aucune aide
+local ASSIST_FULL_SPEED = 35 -- aide complète au-delà
+local ASSIST_SLIP_MARGIN = 1.25 -- jusqu'à 25 % au-delà de la dérive idéale
+-- Part du braquage demandé toujours gardée : en grosse glisse, braquer vers
+-- l'intérieur tourne encore un peu les roues (le volant ne semble jamais mort).
+local ASSIST_MIN_SHARE = 0.2
+
+function Car:_assistSteer(angle: number): number
+	if self.SteerAssist <= 0 or angle == 0 then
+		return angle
+	end
+	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
+	local cframe = self.Chassis.CFrame
+	local axle = (fl.Attachment.WorldPosition + fr.Attachment.WorldPosition) / 2
+	local velocity = self.Chassis:GetVelocityAtPosition(axle)
+	local forward = velocity:Dot(cframe.LookVector)
+	if forward <= ASSIST_START_SPEED then
+		return angle
+	end
+	-- Direction de la vitesse de l'essieu avant, positive à gauche (comme le braquage).
+	local heading = math.atan2(-velocity:Dot(cframe.RightVector), forward)
+	local peak = math.atan(math.max(fl.Surface.Tire.PeakSlipAngle, fr.Surface.Tire.PeakSlipAngle)) * ASSIST_SLIP_MARGIN
+	local limited = if angle > 0
+		then math.min(angle, math.max(angle * ASSIST_MIN_SHARE, heading + peak))
+		else math.max(angle, math.min(angle * ASSIST_MIN_SHARE, heading - peak))
+	local blend = math.clamp((forward - ASSIST_START_SPEED) / (ASSIST_FULL_SPEED - ASSIST_START_SPEED), 0, 1) * self.SteerAssist
+	return angle + (limited - angle) * blend
+end
+
 local function applyAxleAntiRoll(left: WheelClass.Wheel, right: WheelClass.Wheel, stiffness: number)
 	local delta = left.Compression - right.Compression
 	local force = delta * stiffness
@@ -380,8 +435,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 		et l'épingle au frein à main reste molle. Avec : l'arrière se bloque net
 		pendant que l'avant continue de tirer la voiture dans le virage.
 	]]
+	-- Une propulsion n'a rien à désaccoupler : le frein à main bloque l'arrière, c'est tout.
 	local fwd = self.Class.Drive == "FWD"
-	local rearDecoupled = inputs.handbrake or fwd
+	local rearDecoupled = (inputs.handbrake and self.Class.Drive == "AWD") or fwd
 
 	local fl, fr = self.WheelsByName.WheelFL, self.WheelsByName.WheelFR
 	local rl, rr = self.WheelsByName.WheelRL, self.WheelsByName.WheelRR
@@ -458,7 +514,7 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 	end
 
 	-- Ackermann Steering
-	local targetSteerAngle = math.rad(self.MaxSteerAngle * inputs.steer)
+	local targetSteerAngle = self:_assistSteer(math.rad(self.MaxSteerAngle * inputs.steer))
 	local leftAngle, rightAngle = 0, 0
 	if math.abs(targetSteerAngle) > 0.001 then
 		local turnRadius = self.Wheelbase / math.tan(targetSteerAngle)
@@ -477,6 +533,9 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 			brakeForce = math.max(brakeForce, self.HandbrakeForce * self.HandbrakePressure)
 		end
 
+		-- Couche arcade : ABS sur l'avant (une roue qui bloque est relâchée).
+		brakeForce = Arcade.BrakeForce(wheel.IsFront, wheel.LongSlipNorm, brakeForce, inputs.handbrake)
+
 		local wheelSteerAngle = 0
 		if wheel.IsFront then
 			wheelSteerAngle = wheel.IsLeft and leftAngle or rightAngle
@@ -488,6 +547,19 @@ function Car:Update(dt: number, inputs: InputManager.CarInputs)
 
 	-- PHASE 4 : aérodynamisme (sur le châssis, indépendant du contact au sol)
 	self.Aerodynamics:Apply(self.Chassis, dt)
+
+	-- PHASE 5 : couche arcade (Arcade.luau), pas sur la grille de départ.
+	local grounded = 0
+	for _, wheel in ipairs(self.Wheels) do
+		if wheel.IsGrounded then
+			grounded += 1
+		end
+	end
+	local airTime: number = self.AirTime
+	self.AirTime = if grounded == 0 then airTime + dt else 0
+	if not self.Held then
+		Arcade.Apply(self.Chassis, dt, inputs, grounded, self.AirTime)
+	end
 end
 
 return Car

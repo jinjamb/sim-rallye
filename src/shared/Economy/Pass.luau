@@ -17,15 +17,21 @@
 	saison donne d'un coup les récompenses premium des paliers déjà
 	atteints. Une récompense objet déjà possédée est convertie en crédits.
 
-	NOUVELLE SAISON : les récompenses se changent dans REWARDS ci-dessous
+	NOUVELLE SAISON : les récompenses se changent dans buildTiers ci-dessous
 	(les objets marqués Pass dans Items/ doivent y figurer).
+
+	RYTHME : une saison de 4 semaines, 20 paliers de 750 XP (15 000 XP) :
+	à ~1 000 à 1 800 XP par heure (Progression.luau), 8 à 15 h de jeu pour
+	aller au bout, soit 2 à 4 h par semaine. Plus long, presque personne ne
+	finit ; plus court, la voie premium (Products.luau, pass_premium) se
+	rachète trop souvent. Le classement des écuries suit les saisons.
 ]]
 
 local Pass = {}
 
-Pass.SEASON_WEEKS = 8
-Pass.TIER_COUNT = 30
-Pass.TIER_XP = 1000 -- XP de saison par palier
+Pass.SEASON_WEEKS = 4
+Pass.TIER_COUNT = 20
+Pass.TIER_XP = 750 -- XP de saison par palier
 Pass.FIRST_WEEK = 2962 -- semaine (Weekly.luau) du lundi 5 octobre 2026 : début de la saison 1
 Pass.DUPLICATE_CREDITS = 500 -- objet de récompense déjà possédé
 
@@ -47,17 +53,17 @@ export type Season = {
 local function buildTiers(): { Tier }
 	local tiers: { Tier } = {}
 	for tier = 1, Pass.TIER_COUNT do
-		local free: Reward = if tier % 5 == 0 then { Rolls = 1 } else { Credits = 150 + tier * 10 }
-		local premium: Reward = if tier % 3 == 0 then { Rolls = 1 } else { Credits = 300 + tier * 20 }
+		local free: Reward = if tier % 5 == 0 then { Rolls = 1 } else { Credits = 150 + tier * 15 }
+		local premium: Reward = if tier % 3 == 0 then { Rolls = 1 } else { Credits = 300 + tier * 30 }
 		tiers[tier] = { Free = free, Premium = premium }
 	end
 	-- Les objets du Pass (Items/ : Pass = true).
-	tiers[12].Free = { Item = "engine_turbo" }
-	tiers[20].Free = { Item = "smoke_tricolore" }
-	tiers[8].Premium = { Item = "horn_train" }
-	tiers[15].Premium = { Item = "smoke_neon" }
-	tiers[25].Premium = { Item = "cel_lightning" }
-	tiers[30].Premium = { Item = "engine_legend" }
+	tiers[8].Free = { Item = "engine_turbo" }
+	tiers[14].Free = { Item = "smoke_tricolore" }
+	tiers[5].Premium = { Item = "horn_train" }
+	tiers[10].Premium = { Item = "smoke_neon" }
+	tiers[16].Premium = { Item = "cel_lightning" }
+	tiers[20].Premium = { Item = "engine_legend" }
 	return tiers
 end
 

@@ -27,6 +27,7 @@ local Tracks = require(ReplicatedStorage.Shared.Tracks.Tracks)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local Progression = require(ReplicatedStorage.Shared.Progression.Progression)
 local XpEvents = require(ReplicatedStorage.Shared.Progression.XpEvents)
+local FlashEvents = require(ReplicatedStorage.Shared.Events.FlashEvents)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local ProfileSchema = require(script.Parent.Parent.Data.ProfileSchema)
@@ -44,18 +45,23 @@ local ProgressService = {}
 local lastProgress: { [Player]: Progression.Snapshot } = {}
 
 --[[
-	Palier de médaille par tracé : "stage" pour les spéciales (la meilleure
-	des spéciales : les déblocages demandent « une médaille en spéciale »),
-	l'id du circuit sinon. Le meilleur des catégories de voitures (chacune a
+	Palier de médaille par tracé : une clé par spéciale (Stages.MedalKey),
+	l'id du circuit pour un circuit, plus "stage" : la meilleure des
+	spéciales, pour les déblocages (« or sur une spéciale »), qui ne compte
+	ni dans l'XP ni dans les crédits. Le meilleur des catégories de voitures (chacune a
 	ses seuils) : changer de voiture ne fait pas regagner l'XP d'une médaille
 	déjà acquise.
 ]]
 local function medalsOf(profile: ProfileSchema.Profile): { [string]: number }
-	local medals: { [string]: number } = { stage = 0 }
+	local best = Stages.BEST_MEDAL_KEY
+	local medals: { [string]: number } = { [best] = 0 }
 	for _, class in ipairs(CarClasses.LIST) do
 		for _, stageId in ipairs(Stages.List()) do
 			local stage = profile.Records[ProfileSchema.StageKey(class.Id, stageId)]
-			medals.stage = math.max(medals.stage, Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id, stageId)))
+			local tier = Medals.TierOf(if stage then stage.Ms else nil, Medals.ForStage(class.Id, stageId))
+			local key = Stages.MedalKey(stageId)
+			medals[key] = math.max(medals[key] or 0, tier)
+			medals[best] = math.max(medals[best], tier)
 		end
 		for _, id in ipairs(Tracks.List()) do
 			local circuit = Tracks.Get(id)
@@ -79,6 +85,7 @@ function ProgressService.SnapshotOf(profile: ProfileSchema.Profile): Progression
 		WeeklyCompleted = profile.WeeklyCompleted,
 		DailyXp = profile.DailyXp,
 		BonusXp = profile.BonusXp,
+		ChampionshipXp = profile.ChampionshipXp,
 		Medals = medalsOf(profile),
 		Lessons = profile.Lessons,
 	})
@@ -98,13 +105,20 @@ local function rewardTransition(player: Player, previous: Progression.Snapshot, 
 	end
 	local medalCredits = 0
 	for track, tier in pairs(snapshot.Medals) do
-		for reached = (previous.Medals[track] or 0) + 1, tier do
-			medalCredits += Credits.REWARDS.Medal[reached] or 0
-		end
-		-- Une médaille de platine s'annonce à tout le serveur.
-		if tier == #Medals.TIERS and (previous.Medals[track] or 0) < tier then
-			local circuit = if track == "stage" then nil else Tracks.Get(track)
-			AnnounceService.Send("Platinum", player.DisplayName, "décroche le platine sur " .. (if circuit then "le circuit " .. circuit.Name else "la spéciale"))
+		-- "stage" (la meilleure des spéciales) : déjà comptée sous la clé de sa spéciale.
+		if track ~= Stages.BEST_MEDAL_KEY then
+			for reached = (previous.Medals[track] or 0) + 1, tier do
+				medalCredits += Credits.REWARDS.Medal[reached] or 0
+			end
+			-- Une médaille de platine s'annonce à tout le serveur.
+			if tier == #Medals.TIERS and (previous.Medals[track] or 0) < tier then
+				local stageId = Stages.FromMedalKey(track)
+				local circuit = if stageId then nil else Tracks.Get(track)
+				local where = if stageId then "la spéciale " .. Stages.Get(stageId).Name
+					elseif circuit then "le circuit " .. circuit.Name
+					else track
+				AnnounceService.Send("Platinum", player.DisplayName, "décroche le platine sur " .. where)
+			end
 		end
 	end
 	if medalCredits > 0 then
@@ -123,8 +137,10 @@ function ProgressService.Push(player: Player, announce: boolean)
 	end
 	local snapshot = ProgressService.SnapshotOf(profile)
 	local previous = lastProgress[player]
-	-- Double XP, VIP, boost : le surplus de ce qui vient d'être gagné.
-	local multiplier = XpEvents.Multiplier(os.time()) * Perks.XpMultiplier(player)
+	-- Double XP (week-end ou événement éclair : le plus fort), VIP, boost :
+	-- le surplus de ce qui vient d'être gagné.
+	local now = os.time()
+	local multiplier = math.max(XpEvents.Multiplier(now), FlashEvents.XpMultiplier(now)) * Perks.XpMultiplier(player)
 	if announce and previous and multiplier > 1 and snapshot.Xp > previous.Xp then
 		local bonus = math.floor((snapshot.Xp - previous.Xp) * (multiplier - 1))
 		if bonus > 0 then

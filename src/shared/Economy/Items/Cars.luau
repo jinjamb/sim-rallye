@@ -1,40 +1,36 @@
 --!strict
 --[[
 	Cars.luau
-	Les voitures du catalogue : une par catégorie (CarClasses.luau). La Rally2
-	est de série ; les autres s'achètent en crédits.
+	Les voitures du catalogue, construites à partir de leurs fiches
+	(Vehicle/CarModels.luau) : huit par catégorie, trois gratuites (prêtes
+	dès le niveau de la catégorie : Level) et cinq à acheter en crédits OU en
+	Robux (boutique).
+
+	PRIX EN ROBUX : moins cher que les packs de crédits qu'il faudrait
+	acheter pour la payer (Products.luau), pour que l'achat direct reste la
+	bonne affaire.
+
+	Les pilotes arrivés quand la Rally2 était de série la gardent
+	(EconomyService : GarageVersion).
 ]]
 
 local ItemTypes = require(script.Parent.Parent.ItemTypes)
+local CarModels = require(script.Parent.Parent.Parent.Vehicle.CarModels)
 
-local items: { ItemTypes.Item } = {
-	{
-		Id = "car_rally2",
+local items: { ItemTypes.Item } = {}
+for _, model in ipairs(CarModels.LIST) do
+	table.insert(items, {
+		Id = model.Id,
 		Kind = "Car",
-		Name = "Rally2",
-		Description = "4 roues motrices, 290 ch",
-		Rarity = "Serie",
-		Free = true,
-		CarClass = "Rally2",
-	},
-	{
-		Id = "car_rally4",
-		Kind = "Car",
-		Name = "Rally4",
-		Description = "Traction, 210 ch, agile",
-		Rarity = "Club",
-		Credits = 2500,
-		CarClass = "Rally4",
-	},
-	{
-		Id = "car_groupb",
-		Kind = "Car",
-		Name = "Groupe B",
-		Description = "4 roues motrices, 500 ch, turbo",
-		Rarity = "Legende",
-		Credits = 12000,
-		CarClass = "GroupB",
-	},
-}
+		Name = model.Name,
+		Description = model.Description,
+		Rarity = model.Rarity :: any,
+		Free = model.Free,
+		Credits = model.Credits,
+		Robux = model.Robux,
+		CarClass = model.Class,
+		Level = CarModels.LevelOf(model),
+	})
+end
 
 return items

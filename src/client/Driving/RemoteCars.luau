@@ -11,7 +11,7 @@
 		  télémétrie que le pilote diffuse (régime, charge, glissements) ;
 		- POUSSIÈRE : le même CarEffects, sur les surfaces que touchent nos rayons.
 	Télémétrie : attributs posés sur le châssis par CarService (Rpm, Load,
-	Steer, Screech, GravelSlide, GravelShare, TarmacShare, Driven).
+	Steer, Screech, GravelSlide, GravelShare, TarmacShare, Brake, Driven).
 
 	INSTANCES DE COURSE : on ne voit que les voitures du même "monde" que la
 	sienne -- même course (attribut RaceId de la voiture), ou toutes celles du
@@ -20,6 +20,8 @@
 	Masquage purement local (LocalTransparencyModifier) : rien n'est modifié pour
 	les autres joueurs.
 	Le nom du pilote flotte au-dessus de chaque voiture visible.
+	SILLAGE : derrière chaque voiture lancée, une traînée d'air ; celle de
+	la voiture qu'on aspire (Slipstream.luau) s'allume en cyan.
 ]]
 
 local CollectionService = game:GetService("CollectionService")
@@ -64,7 +66,52 @@ type View = {
 	NameTag: BillboardGui,
 	NameLabel: TextLabel,
 	Visible: boolean,
+	-- Sillage : une traînée de chaque côté de l'arrière, et leurs points d'attache.
+	Wake: { Trail },
+	WakePoints: { Attachment },
 }
+
+local WAKE_SPEED = 40 -- studs/s : en dessous, pas de sillage (Slipstream : MIN_SPEED)
+local WAKE_DEFAULT_Z = 7.3
+local WAKE_HALF_WIDTH = 2.6
+local WAKE_HEIGHT = 1.6
+local WAKE_COLOR = Color3.fromRGB(235, 240, 255)
+local WAKE_DRAFT_COLOR = Color3.fromRGB(0, 214, 255)
+local WAKE_TRANSPARENCY = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.82), NumberSequenceKeypoint.new(1, 1) })
+local WAKE_DRAFT_TRANSPARENCY = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.3), NumberSequenceKeypoint.new(1, 1) })
+
+-- Le sillage d'une voiture : deux traînées verticales aux coins arrière.
+local function makeWake(chassis: BasePart): ({ Trail }, { Attachment })
+	local trails, points = {}, {}
+	for _, side in ipairs({ -1, 1 }) do
+		local low = Instance.new("Attachment")
+		low.Name = "WakeLow"
+		low.Position = Vector3.new(side * WAKE_HALF_WIDTH, 0, WAKE_DEFAULT_Z)
+		low.Parent = chassis
+		local high = Instance.new("Attachment")
+		high.Name = "WakeHigh"
+		high.Position = Vector3.new(side * WAKE_HALF_WIDTH, WAKE_HEIGHT, WAKE_DEFAULT_Z)
+		high.Parent = chassis
+		local trail = Instance.new("Trail")
+		trail.Name = "Wake"
+		trail.Attachment0 = low
+		trail.Attachment1 = high
+		trail.FaceCamera = true
+		trail.Lifetime = 0.5
+		trail.MinLength = 0.3
+		trail.LightEmission = 0.4
+		trail.LightInfluence = 0.3
+		trail.WidthScale = NumberSequence.new(1, 0.25)
+		trail.Color = ColorSequence.new(WAKE_COLOR)
+		trail.Transparency = WAKE_TRANSPARENCY
+		trail.Enabled = false
+		trail.Parent = chassis
+		table.insert(trails, trail)
+		table.insert(points, low)
+		table.insert(points, high)
+	end
+	return trails, points
+end
 
 -- UserId du roi du drift de la semaine (ChallengeService), affiché sur sa voiture.
 local driftKing: number? = nil
@@ -112,6 +159,7 @@ end
 export type RemoteCars = typeof(setmetatable({}, RemoteCars)) & {
 	LocalUserId: number,
 	LocalRaceId: string?,
+	DraftLeader: number?, -- UserId de la voiture qu'on aspire
 	Views: { [BasePart]: View },
 }
 
@@ -127,6 +175,7 @@ function RemoteCars.new(localUserId: number): RemoteCars
 	local self = (setmetatable({}, RemoteCars) :: any) :: RemoteCars
 	self.LocalUserId = localUserId
 	self.LocalRaceId = nil
+	self.DraftLeader = nil
 	self.Views = {}
 
 	for _, chassis in ipairs(CollectionService:GetTagged(CAR_TAG)) do
@@ -211,6 +260,7 @@ function RemoteCars:_add(instance: Instance)
 	tag.Adornee = chassis
 	tag.Parent = chassis
 
+	local wake, wakePoints = makeWake(chassis)
 	local view: View = {
 		Model = model,
 		Chassis = chassis,
@@ -222,6 +272,8 @@ function RemoteCars:_add(instance: Instance)
 		NameTag = tag,
 		NameLabel = label,
 		Visible = true,
+		Wake = wake,
+		WakePoints = wakePoints,
 	}
 	self.Views[chassis] = view
 	self:_applyVisibility(view)
@@ -248,6 +300,35 @@ function RemoteCars:_remove(instance: Instance)
 	view.Effects:Destroy()
 	view.Smoke:Destroy()
 	view.NameTag:Destroy()
+	for _, item in ipairs(view.Wake) do
+		item:Destroy()
+	end
+	for _, point in ipairs(view.WakePoints) do
+		point:Destroy()
+	end
+end
+
+-- La voiture qu'on aspire (Slipstream.luau) : son sillage s'allume.
+function RemoteCars:SetDraftLeader(userId: number?)
+	self.DraftLeader = userId
+end
+
+-- Sillage d'une voiture : visible à pleine vitesse, en cyan si on l'aspire.
+local function updateWake(model: Model, points: { Attachment }, trails: { Trail }, driven: boolean, speed: number, drafted: boolean)
+	local z = model:GetAttribute("TailLightZ")
+	local rearZ = if type(z) == "number" then z else WAKE_DEFAULT_Z
+	for index, point in ipairs(points) do
+		local side = if index <= 2 then -1 else 1
+		local height = if index % 2 == 0 then WAKE_HEIGHT else 0
+		point.Position = Vector3.new(side * WAKE_HALF_WIDTH, height, rearZ)
+	end
+	local enabled = driven and speed >= WAKE_SPEED
+	for _, trail in ipairs(trails) do
+		trail.Enabled = enabled
+		trail.Color = ColorSequence.new(if drafted then WAKE_DRAFT_COLOR else WAKE_COLOR)
+		trail.Transparency = if drafted then WAKE_DRAFT_TRANSPARENCY else WAKE_TRANSPARENCY
+		trail.Lifetime = if drafted then 0.8 else 0.5
+	end
 end
 
 -- Même monde que soi : même course, ou tous les deux au paddock.
@@ -364,6 +445,8 @@ function RemoteCars:Update(dt: number)
 			end
 		end
 
+		local owner = view.Model:GetAttribute("OwnerUserId")
+		updateWake(view.Model, view.WakePoints, view.Wake, driven, velocity.Magnitude, owner ~= nil and owner == self.DraftLeader)
 		if driven then
 			local screech = attributeNumber(chassis, "Screech", 0)
 			-- Un seul niveau diffusé : la fumée sort des quatre roues à la fois.
@@ -372,6 +455,7 @@ function RemoteCars:Update(dt: number)
 				Rpm = attributeNumber(chassis, "Rpm", 1000),
 				Load = attributeNumber(chassis, "Load", 0),
 				Speed = velocity.Magnitude,
+				Brake = attributeNumber(chassis, "Brake", 0),
 				-- Un seul niveau diffusé : réparti sur les quatre roues.
 				Screech = { screech, screech, screech, screech },
 				GravelShare = attributeNumber(chassis, "GravelShare", 0),

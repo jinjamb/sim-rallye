@@ -117,8 +117,23 @@ end
 
 local function buildCircuit(circuit)
 	local samples = {}
+	-- Circuit d'hiver (de la neige sur la piste) : dégagements, collines et
+	-- arbres enneigés.
+	local winter = false
 	for _, sample in ipairs(circuit.Samples) do
 		table.insert(samples, sample)
+		if sample.Material == Enum.Material.Snow or sample.Material == Enum.Material.Ice then
+			winter = true
+		end
+	end
+	local HILL_MATERIAL = if winter then Enum.Material.Snow else HILL_MATERIAL
+	local RUNOFF_MATERIAL = if winter then Enum.Material.Snow else RUNOFF_MATERIAL
+	local FLOOR_MATERIAL = if winter then Enum.Material.Snow else FLOOR_MATERIAL
+	local function treeKind(rng: Random): any
+		if winter then
+			return if rng:NextNumber() < 0.85 then "PineSnow" else "Pine"
+		end
+		return Scenery.PickKind(rng, 0.07)
 	end
 	for _, sample in ipairs(circuit.JokerSamples) do
 		table.insert(samples, sample)
@@ -366,7 +381,7 @@ local function buildCircuit(circuit)
 	local beamCenter = base + Vector3.new(0, postHeight - 1.5, 0)
 	local facing = CFrame.lookAt(beamCenter, beamCenter - start.ForwardFlat) -- regarde vers la grille
 	local beam = anchoredPart(gantry, "Beam", Vector3.new(halfSpan * 2 + 2, 3, 1.5), facing, Color3.fromRGB(20, 20, 24), false)
-	banner(beam, "RALLYCROSS — " .. string.upper(circuit.Name), Color3.fromRGB(20, 20, 24), { Enum.NormalId.Front })
+	banner(beam, "RALLYCROSS · " .. string.upper(circuit.Name), Color3.fromRGB(20, 20, 24), { Enum.NormalId.Front })
 	for i = 1, 5 do
 		local offset = (i - 3) * 3.2
 		local light = anchoredPart(
@@ -471,7 +486,7 @@ local function buildCircuit(circuit)
 		local grove = math.noise(x / 180, z / 180, #circuit.Id + 0.5)
 		if (grove > -0.05 or rng:NextNumber() < 0.15) and not inPaddock(x, z) and roadClearance(Vector3.new(x, 0, z)) >= TREE_CLEARANCE then
 			local ground = groundHeightAt(x, z)
-			Scenery.Tree(decor, Vector3.new(x, ground, z), rng, Scenery.PickKind(rng, 0.07), rng:NextNumber(1, 1.4))
+			Scenery.Tree(decor, Vector3.new(x, ground, z), rng, treeKind(rng), rng:NextNumber(1, 1.4))
 			treeCount += 1
 			-- Rochers et champignons entre les arbres.
 			local roll = rng:NextNumber()

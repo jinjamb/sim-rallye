@@ -50,10 +50,11 @@ local GarageService = require(script.Parent.GarageService)
 local ProgressService = require(script.Parent.ProgressService)
 local EconomyService = require(script.Parent.EconomyService)
 local TeamService = require(script.Parent.TeamService)
-local Catalog = require(ReplicatedStorage.Shared.Economy.Catalog)
 local LiveryPainter = require(ReplicatedStorage.Shared.Cosmetics.LiveryPainter)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local CarModels = require(ReplicatedStorage.Shared.Vehicle.CarModels)
 local BodyKits = require(ReplicatedStorage.Shared.Vehicle.BodyKits)
+local CarDamage = require(ReplicatedStorage.Shared.Vehicle.CarDamage)
 
 local CarService = {}
 
@@ -132,6 +133,8 @@ local slotByPlayer: { [Player]: number } = {}
 local driverByChassis: { [BasePart]: Player } = {}
 local lastRequestAt: { [Player]: number } = {}
 local lastTelemetryAt: { [Player]: number } = {}
+local lastDamageAt: { [Player]: number } = {}
+local DAMAGE_MIN_INTERVAL = 0.12 -- secondes entre deux bosses signalées par un joueur
 -- En course, on ne descend pas de voiture (Q) : on abandonne depuis le menu.
 local lockedInCar: { [Player]: boolean } = {}
 local spawnGeneration: { [Player]: number } = {}
@@ -375,15 +378,40 @@ local function tagTeam(car: Model, player: Player)
 	car:SetAttribute("TeamColor", if team then team.Color else nil)
 end
 
--- Le joueur possède-t-il la voiture de cette catégorie ?
+-- Le joueur a-t-il une voiture de cette catégorie (possédée et utilisable) ?
 local function ownsClass(player: Player, classId: string): boolean
-	local item = Catalog.CarItem(classId)
-	return item ~= nil and EconomyService.Owns(player, item.Id)
+	for _, model in ipairs(CarModels.OfClass(classId)) do
+		if EconomyService.CanUse(player, model.Id) then
+			return true
+		end
+	end
+	return false
+end
+CarService.OwnsClass = ownsClass
+
+--[[
+	La voiture (CarModels.luau) qui roule dans la catégorie `classId` : celle
+	que le joueur porte si elle en est, sinon sa première voiture utilisable
+	de la catégorie, sinon la voiture de référence, prêtée. Renvoie aussi
+	si elle est prêtée.
+]]
+local function carFor(player: Player, classId: string): (string?, boolean)
+	local chosen = EconomyService.Equipped(player, "Car")
+	if chosen and chosen.CarClass == classId then
+		return chosen.Id, false
+	end
+	for _, model in ipairs(CarModels.OfClass(classId)) do
+		if EconomyService.CanUse(player, model.Id) then
+			return model.Id, false
+		end
+	end
+	local reference = CarModels.Reference(classId)
+	return if reference then reference.Id else nil, true
 end
 
 -- Objets portés que les autres voient ou entendent (Catalog.luau) : un
 -- attribut par sorte sur la voiture, lu par chaque client (RemoteCars).
-local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine" }
+local VISIBLE_KINDS = { "Smoke", "Horn", "Celebration", "Engine", "Backfire", "Headlight" }
 local function tagEquipped(car: Model, player: Player)
 	for _, kind in ipairs(VISIBLE_KINDS) do
 		local item = EconomyService.Equipped(player, kind :: any)
@@ -426,15 +454,18 @@ function CarService.Spawn(player: Player, frame: CFrame?, options: SpawnOptions?
 	-- Catégorie : moteur, boîte, pneus (client), records et carrosserie.
 	local chosen = EconomyService.Equipped(player, "Car")
 	local class = CarClasses.Get(opts.CarClass or (if chosen then chosen.CarClass else nil))
+	local carId, loaned = carFor(player, class.Id)
 	car:SetAttribute("CarClass", class.Id)
-	car:SetAttribute("Loaned", opts.CarClass ~= nil and not ownsClass(player, class.Id))
+	-- La voiture de la catégorie (CarModels) : physique, son, carrosserie, chez chaque client.
+	car:SetAttribute("CarModel", carId)
+	car:SetAttribute("Loaned", loaned)
 	car:SetAttribute("RaceId", opts.RaceId)
 	car:SetAttribute("Contacts", opts.Contacts == true)
 	for name, value in pairs(opts.Attributes or {}) do
 		car:SetAttribute(name, value)
 	end
 	car:PivotTo(target)
-	BodyKits.Apply(car, class.Body)
+	BodyKits.Apply(car, CarClasses.ForCar(class.Id, carId).Body)
 
 	local chassis = chassisOf(car)
 	if not chassis then
@@ -526,7 +557,8 @@ function CarService.RefreshEquipped(player: Player)
 	local chosen = EconomyService.Equipped(player, "Car")
 	local classId = CarClasses.Get(if chosen then chosen.CarClass else nil).Id
 	local imposed = car:GetAttribute("RaceId") ~= nil or car:GetAttribute("Weekly") ~= nil or car:GetAttribute("Lesson") ~= nil
-	if imposed or car:GetAttribute("CarClass") == classId then
+	-- Même voiture : rien à refaire (une autre voiture de la même catégorie se recrée aussi).
+	if imposed or car:GetAttribute("CarModel") == (if chosen then chosen.Id else nil) then
 		return
 	end
 	local chassis = chassisOf(car)
@@ -625,6 +657,7 @@ function CarService.Start()
 		slotByPlayer[player] = nil
 		lastRequestAt[player] = nil
 		lastTelemetryAt[player] = nil
+		lastDamageAt[player] = nil
 		driverStateByPlayer[player] = nil
 		lockedInCar[player] = nil
 		spawnGeneration[player] = nil
@@ -663,7 +696,31 @@ function CarService.Start()
 		end
 	end)
 
-	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any)
+	--[[
+		Bosses (CarDamage.luau) : signalées par le client du pilote, sur SA
+		voiture seulement, quand les contacts sont activés. Valeurs bornées et
+		cadence limitée : un client ne peut que cabosser sa propre voiture.
+	]]
+	Remotes.CarDamage.OnServerEvent:Connect(function(player: Player, zone: any, amount: any)
+		local now = os.clock()
+		if now - (lastDamageAt[player] or 0) < DAMAGE_MIN_INTERVAL then
+			return
+		end
+		local car = carByPlayer[player]
+		if not car or car:GetAttribute("Contacts") ~= true then
+			return
+		end
+		if type(zone) ~= "number" or zone ~= math.floor(zone) or zone < 1 or zone > CarDamage.ZONE_COUNT then
+			return
+		end
+		if type(amount) ~= "number" or amount ~= amount or amount <= 0 then
+			return
+		end
+		lastDamageAt[player] = now
+		CarDamage.Add(car, zone, math.min(amount, CarDamage.MAX_HIT))
+	end)
+
+	Remotes.CarTelemetry.OnServerEvent:Connect(function(player: Player, rpm: any, load: any, steer: any, screech: any, gravelSlide: any, gravelShare: any, tarmacShare: any, brake: any)
 		local now = os.clock()
 		if now - (lastTelemetryAt[player] or 0) < TELEMETRY_MIN_INTERVAL then
 			return
@@ -681,6 +738,7 @@ function CarService.Start()
 		chassis:SetAttribute("GravelSlide", finiteIn(gravelSlide, 0, 1))
 		chassis:SetAttribute("GravelShare", finiteIn(gravelShare, 0, 1))
 		chassis:SetAttribute("TarmacShare", finiteIn(tarmacShare, 0, 1))
+		chassis:SetAttribute("Brake", finiteIn(brake, 0, 1)) -- feux stop (CarLights)
 	end)
 
 	-- Filet de sécurité : mort, respawn, joueur téléporté loin de sa voiture.

@@ -26,6 +26,7 @@
 ]]
 
 local Tracks = require(script.Parent.Parent.Tracks.Tracks)
+local Stages = require(script.Parent.Parent.Stage.Stages)
 local Lessons = require(script.Parent.Parent.School.Lessons)
 local Format = require(script.Parent.Parent.Util.Format)
 local Catalog = require(script.Parent.Parent.Economy.Catalog)
@@ -88,8 +89,9 @@ end
 
 --[[
 	Ce que le profil sait, et dont tout se déduit. `Medals` : palier de médaille
-	(Medals.luau, 0 à 4) par tracé : "stage" pour la spéciale, l'identifiant
-	du circuit sinon (Tracks.luau).
+	(Medals.luau, 0 à 4) par tracé : "stage:<id>" par spéciale
+	(Stages.MedalKey), l'identifiant du circuit sinon (Tracks.luau), et
+	"stage" : la meilleure des spéciales (déblocages seulement, hors XP).
 ]]
 export type Record = {
 	Races: number,
@@ -101,6 +103,7 @@ export type Record = {
 	WeeklyCompleted: number, -- semaines où le défi a été terminé
 	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
 	BonusXp: number, -- XP en plus des événements double XP (XpEvents.luau)
+	ChampionshipXp: number, -- XP des rallyes terminés (mode championnat)
 	Medals: { [string]: number },
 	Lessons: { [string]: number }, -- médaille (0 à 4) par leçon de l'école (Lessons.luau)
 }
@@ -114,9 +117,13 @@ function Progression.XpOf(record: Record): number
 		+ record.WeeklyCompleted * Progression.XP.WEEKLY
 		+ record.DailyXp
 		+ record.BonusXp
+		+ record.ChampionshipXp
 		+ record.Style // Progression.XP.STYLE_PER_XP
-	for _, tier in pairs(record.Medals) do
-		xp += Progression.MEDAL_XP[tier] or 0
+	for track, tier in pairs(record.Medals) do
+		-- "stage" : la meilleure des spéciales, déjà comptée sous sa propre clé.
+		if track ~= Stages.BEST_MEDAL_KEY then
+			xp += Progression.MEDAL_XP[tier] or 0
+		end
 	end
 	for _, tier in pairs(record.Lessons) do
 		xp += Lessons.MEDAL_XP[tier] or 0
@@ -176,7 +183,9 @@ export type Requirement = {
 -- Objets possédés (identifiant -> true), pour les conditions Item.
 export type Owned = { [string]: boolean }
 
-export type Kind = "Color" | "Stripes" | "Plate" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+export type Kind = "Color" | "Stripes" | "Plate" | "Pattern" | "Sponsor" | "Finish" | "TrimFinish" | "Custom" | "Body" | "Wing" | "Bumper" | "Hood" | "Flares" | "Rims"
+	| "Mirrors" | "Roof" | "Skirts" | "Diffuser" | "Exhaust" | "Mudflaps"
+	| "Moustache" | "Grille" | "Canards" | "SunStrip" | "HoodPins" | "Tow" | "LightCovers" | "SideVents" | "WindowNet"
 export type Item = { Kind: Kind, Index: number, Requirement: Requirement }
 
 -- Tout ce qui n'est pas listé ici est libre (Livery.FREE_COLORS, etc.).
@@ -197,11 +206,48 @@ Progression.ITEMS = {
 	-- Style du numéro (Livery.PLATES)
 	{ Kind = "Plate", Index = 2, Requirement = { Level = 4 } }, -- Noir
 	{ Kind = "Plate", Index = 3, Requirement = { Level = 22 } }, -- Or (licence Élite)
+	-- Motifs (Livery.PATTERNS). « Item » : seulement aux tirages (Items/Parts.luau).
+	{ Kind = "Pattern", Index = 2, Requirement = { Level = 3 } }, -- Damier
+	{ Kind = "Pattern", Index = 3, Requirement = { Level = 5 } }, -- Pois
+	{ Kind = "Pattern", Index = 4, Requirement = { Level = 7 } }, -- Hexagones
+	{ Kind = "Pattern", Index = 5, Requirement = { Level = 10 } }, -- Carbone
+	{ Kind = "Pattern", Index = 6, Requirement = { Level = 12 } }, -- Camouflage
+	{ Kind = "Pattern", Index = 7, Requirement = { AnyMedal = 3 } }, -- Zébrures
+	{ Kind = "Pattern", Index = 8, Requirement = { Item = "part_pattern_flames" } }, -- Flammes
+	{ Kind = "Pattern", Index = 9, Requirement = { Item = "part_pattern_sakura" } }, -- Sakura
+	-- Finitions (Livery.FINISHES, TRIM_FINISHES) et couleurs sur mesure.
+	{ Kind = "Finish", Index = 2, Requirement = { Level = 2 } }, -- Brillant
+	{ Kind = "Finish", Index = 3, Requirement = { Level = 3 } }, -- Mat
+	{ Kind = "Finish", Index = 4, Requirement = { Level = 4 } }, -- Satiné
+	{ Kind = "Finish", Index = 5, Requirement = { Level = 6 } }, -- Métallisé
+	{ Kind = "Finish", Index = 6, Requirement = { Level = 10 } }, -- Nacré
+	{ Kind = "Finish", Index = 7, Requirement = { Item = "part_finish_chrome" } }, -- Chromé
+	{ Kind = "Finish", Index = 8, Requirement = { Level = 13 } }, -- Froissé
+	{ Kind = "Finish", Index = 9, Requirement = { Item = "part_finish_neon" } }, -- Néon
+	{ Kind = "TrimFinish", Index = 2, Requirement = { Level = 3 } }, -- Noir brillant
+	{ Kind = "TrimFinish", Index = 3, Requirement = { Level = 9 } }, -- Chromé
+	{ Kind = "TrimFinish", Index = 4, Requirement = { Level = 7 } }, -- Carbone
+	{ Kind = "TrimFinish", Index = 5, Requirement = { Level = 5 } }, -- Couleur caisse
+	{ Kind = "Custom", Index = 1, Requirement = { Level = 6 } }, -- Couleurs sur mesure (hexa)
+	-- Sponsors (Livery.SPONSORS) ; Sim Rallye (2) est libre. « Item » : aux tirages.
+	{ Kind = "Sponsor", Index = 3, Requirement = { Level = 2 } }, -- Kaze Oil
+	{ Kind = "Sponsor", Index = 4, Requirement = { Level = 3 } }, -- Sakura Tyres
+	{ Kind = "Sponsor", Index = 5, Requirement = { Level = 5 } }, -- Hayate Racing
+	{ Kind = "Sponsor", Index = 6, Requirement = { Level = 6 } }, -- Yama Motors
+	{ Kind = "Sponsor", Index = 7, Requirement = { Level = 8 } }, -- Raijin Energy
+	{ Kind = "Sponsor", Index = 8, Requirement = { Wins = 1 } }, -- Hoshi Lubes
+	{ Kind = "Sponsor", Index = 9, Requirement = { Level = 11 } }, -- Gomu Turbo
+	{ Kind = "Sponsor", Index = 10, Requirement = { AnyMedal = 3 } }, -- Kitsune
+	{ Kind = "Sponsor", Index = 11, Requirement = { Item = "part_sponsor_neon" } }, -- Neon Rally
+	{ Kind = "Sponsor", Index = 12, Requirement = { Item = "part_sponsor_dragon" } }, -- Dragon Brakes
 	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
 	{ Kind = "Body", Index = 3, Requirement = { Level = 6 } }, -- Yama
 	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
 	{ Kind = "Body", Index = 5, Requirement = { Level = 4 } }, -- Hayate
 	{ Kind = "Body", Index = 6, Requirement = { Level = 8 } }, -- Hoshi
+	{ Kind = "Body", Index = 7, Requirement = { Level = 5 } }, -- Tora
+	{ Kind = "Body", Index = 8, Requirement = { Level = 14 } }, -- Kumo
+	{ Kind = "Body", Index = 9, Requirement = { Level = 18 } }, -- Ryu
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye
@@ -218,6 +264,37 @@ Progression.ITEMS = {
 	{ Kind = "Rims", Index = 4, Requirement = { Level = 8 } }, -- Chrome
 	{ Kind = "Rims", Index = 5, Requirement = { Item = "part_rims_sakura" } }, -- Sakura
 	{ Kind = "Rims", Index = 6, Requirement = { Item = "part_rims_neon" } }, -- Néon
+	-- Accessoires (CarBodies.SLOTS : Accessory).
+	{ Kind = "Mirrors", Index = 2, Requirement = { Level = 3 } }, -- Course
+	{ Kind = "Mirrors", Index = 3, Requirement = { Level = 6 } }, -- Rallye
+	{ Kind = "Roof", Index = 2, Requirement = { Level = 4 } }, -- Écope
+	{ Kind = "Roof", Index = 3, Requirement = { Level = 8 } }, -- Aileron de requin
+	{ Kind = "Skirts", Index = 2, Requirement = { Level = 5 } }, -- Jupes
+	{ Kind = "Skirts", Index = 3, Requirement = { Level = 10 } }, -- Lames
+	{ Kind = "Diffuser", Index = 2, Requirement = { Level = 6 } }, -- Diffuseur
+	{ Kind = "Diffuser", Index = 3, Requirement = { Wins = 3 } }, -- Diffuseur course
+	{ Kind = "Exhaust", Index = 2, Requirement = { Level = 4 } }, -- Double
+	{ Kind = "Exhaust", Index = 3, Requirement = { Item = "part_exhaust_cannon" } }, -- Canon
+	{ Kind = "Mudflaps", Index = 3, Requirement = { Level = 7 } }, -- Longues
+	{ Kind = "Exhaust", Index = 4, Requirement = { Level = 9 } }, -- Quadruple
+	{ Kind = "Exhaust", Index = 5, Requirement = { Level = 12 } }, -- Latéral
+	{ Kind = "Exhaust", Index = 6, Requirement = { Level = 7 } }, -- Relevé
+	{ Kind = "Exhaust", Index = 7, Requirement = { Item = "part_exhaust_titanium" } }, -- Titane
+	{ Kind = "Moustache", Index = 3, Requirement = { Level = 4 } }, -- Lame
+	{ Kind = "Moustache", Index = 4, Requirement = { Level = 8 } }, -- Chromée
+	{ Kind = "Moustache", Index = 5, Requirement = { Item = "part_moustache_double" } }, -- Double
+	{ Kind = "Grille", Index = 2, Requirement = { Level = 3 } }, -- Nid d'abeille
+	{ Kind = "Grille", Index = 3, Requirement = { Level = 6 } }, -- Barres chromées
+	{ Kind = "Grille", Index = 4, Requirement = { Level = 9 } }, -- Grillage rallye
+	{ Kind = "Canards", Index = 3, Requirement = { Level = 8 } }, -- Doubles
+	{ Kind = "SunStrip", Index = 4, Requirement = { Level = 5 } }, -- Couleur caisse
+	{ Kind = "HoodPins", Index = 2, Requirement = { Level = 4 } }, -- Chromées
+	{ Kind = "Tow", Index = 2, Requirement = { Level = 3 } }, -- Sangles jaunes
+	{ Kind = "Tow", Index = 3, Requirement = { Level = 6 } }, -- Sangles bleues
+	{ Kind = "LightCovers", Index = 2, Requirement = { Level = 5 } }, -- Adhésif en croix
+	{ Kind = "LightCovers", Index = 3, Requirement = { Wins = 1 } }, -- Caches noirs
+	{ Kind = "SideVents", Index = 3, Requirement = { Level = 11 } }, -- Prises arrière
+	{ Kind = "WindowNet", Index = 3, Requirement = { AnyMedal = 3 } }, -- Rouge
 } :: { Item }
 
 function Progression.ItemFor(kind: Kind, index: number): Item?
@@ -285,8 +362,12 @@ end
 local TIER_NAMES = { "Bronze", "Argent", "Or", "Platine" }
 
 local function trackName(id: string): string
-	if id == "stage" then
-		return "la spéciale"
+	if id == Stages.BEST_MEDAL_KEY then
+		return "une spéciale"
+	end
+	local stageId = Stages.FromMedalKey(id)
+	if stageId then
+		return Stages.Get(stageId).Name
 	end
 	local circuit = Tracks.Get(id)
 	return if circuit then circuit.Name else id
@@ -350,8 +431,41 @@ function Progression.Enforce(wanted: any, current: any, fallback: any, snapshot:
 	keep("StripeColor", "Color")
 	keep("Stripes", "Stripes")
 	keep("Plate", "Plate")
+	for _, field in ipairs({ "SponsorHood", "SponsorDoors", "SponsorRoof" }) do
+		if result[field] ~= nil then
+			keep(field, "Sponsor")
+		end
+	end
+	if result.Finish ~= nil then
+		keep("Finish", "Finish")
+	end
+	if result.TrimFinish ~= nil then
+		keep("TrimFinish", "TrimFinish")
+	end
+	-- Couleurs sur mesure : tout ou rien, selon le déblocage.
+	if type(result.Custom) == "table" and next(result.Custom) ~= nil and not Progression.IsUnlocked("Custom", 1, snapshot, owned) then
+		result.Custom = {}
+	end
+	if result.Pattern ~= nil then
+		keep("Pattern", "Pattern")
+		keep("PatternColor", "Color")
+	end
+	-- Peinture par zone : une couleur verrouillée laisse la zone d'origine.
+	if type(result.Paints) == "table" then
+		local paints = {}
+		for zone, color in pairs(result.Paints) do
+			if Progression.IsUnlocked("Color", color, snapshot, owned) then
+				paints[zone] = color
+			end
+		end
+		result.Paints = paints
+	end
 	-- Modèle et pièces (CarBodies.luau) : le champ porte le nom de sa sorte.
-	for _, kind in ipairs({ "Body", "Wing", "Bumper", "Hood", "Flares", "Rims" } :: { Kind }) do
+	for _, kind in ipairs({
+		"Body", "Wing", "Bumper", "Hood", "Flares", "Rims",
+		"Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps",
+		"Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet",
+	} :: { Kind }) do
 		if result[kind] ~= nil then
 			keep(kind, kind)
 		end

@@ -19,8 +19,10 @@ Aerodynamics.__index = Aerodynamics
 
 export type Aerodynamics = typeof(setmetatable({}, Aerodynamics)) & {
 	DragCoefficient: number, -- traînée : F = k * v²
+	DragScale: number, -- 1 ; moins dans l'aspiration d'une autre voiture (Slipstream.luau)
 	DownforceFront: number, -- appui avant : F = k * vLongitudinale²
 	DownforceRear: number, -- appui arrière
+	RearBias: number, -- part de l'appui sur l'arrière
 	CenterOfPressureFront: number, -- position (studs, axe Z local) du point d'application avant
 	CenterOfPressureRear: number, -- idem à l'arrière
 	YawDamping: number, -- stabilité en ligne droite : couple opposé au lacet, croît avec la vitesse
@@ -35,8 +37,9 @@ local DOWNFORCE_RATIO = 0.25 -- appui total à REFERENCE_SPEED, en fraction du p
 	100 km/h  0.5 * 1.225 * 0.8 * 27.8² ~ 380 N pour ~13 kN de poids -> 3 %.
 	(L'ancienne valeur, 18 %, bridait surtout un moteur 3.5 fois trop puissant.)
 ]]
-local DRAG_RATIO = 0.03 -- traînée à REFERENCE_SPEED, en fraction du poids
-local REAR_BIAS = 0.6 -- plus d'appui à l'arrière = stabilité en appui et à haute vitesse
+-- Traînée (DragRatio) et répartition de l'appui (AeroBalance, part arrière :
+-- plus d'arrière = stabilité en appui et à haute vitesse) : propres à chaque
+-- catégorie (CarClasses.luau).
 
 --[[
 	Amortissement du lacet : décélération angulaire par (rad/s · stud/s), réglé
@@ -48,15 +51,17 @@ local REAR_BIAS = 0.6 -- plus d'appui à l'arrière = stabilité en appui et à 
 local YAW_DAMPING_RATE_AT_ROBLOX_GRAVITY = 0.015
 local ROBLOX_DEFAULT_GRAVITY = 196.2
 
-function Aerodynamics.new(chassis: BasePart): Aerodynamics
+function Aerodynamics.new(chassis: BasePart, dragRatio: number, rearBias: number): Aerodynamics
 	local self = (setmetatable({}, Aerodynamics) :: any) :: Aerodynamics
 
 	local mass = chassis.AssemblyMass
 	local weight = mass * workspace.Gravity
 	local referencePressure = REFERENCE_SPEED * REFERENCE_SPEED
 
-	self.DragCoefficient = (weight * DRAG_RATIO) / referencePressure
+	self.DragCoefficient = (weight * dragRatio) / referencePressure
+	self.DragScale = 1
 	self.Weight = weight
+	self.RearBias = rearBias
 	self:SetDownforceRatio(DOWNFORCE_RATIO)
 
 	local size = chassis.Size
@@ -78,8 +83,8 @@ end
 -- Appui total à REFERENCE_SPEED, en fraction du poids (réglable : CarSetup).
 function Aerodynamics:SetDownforceRatio(ratio: number)
 	local totalDownforce = (self.Weight * ratio) / (REFERENCE_SPEED * REFERENCE_SPEED)
-	self.DownforceFront = totalDownforce * (1 - REAR_BIAS)
-	self.DownforceRear = totalDownforce * REAR_BIAS
+	self.DownforceFront = totalDownforce * (1 - self.RearBias)
+	self.DownforceRear = totalDownforce * self.RearBias
 end
 
 function Aerodynamics:Apply(chassis: BasePart, dt: number)
@@ -92,7 +97,7 @@ function Aerodynamics:Apply(chassis: BasePart, dt: number)
 	local cframe = chassis.CFrame
 
 	-- 1. TRAÎNÉE : toujours opposée au vecteur vitesse réel, donc active aussi en travers.
-	local dragForce = self.DragCoefficient * speed * speed
+	local dragForce = self.DragCoefficient * self.DragScale * speed * speed
 	chassis:ApplyImpulse(-velocity.Unit * dragForce * dt)
 
 	-- 2. APPUI : basé sur la vitesse longitudinale seule (un aileron en crabe ne

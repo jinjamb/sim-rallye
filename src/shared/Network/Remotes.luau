@@ -59,8 +59,9 @@ export type Remotes = {
 	LessonResult: RemoteEvent,
 	-- Client -> Serveur : () retour à pied au paddock (essais libres ; sans effet en course)
 	ReturnToPaddock: RemoteEvent,
-	-- Client -> Serveur : (mode: "Stage" | "Practice" | "Rallycross", trackId?) choix du
-	-- menu principal : lancer une spéciale, des essais libres, une course de rallycross
+	-- Client -> Serveur : (mode: "Stage" | "EventCar" | "Practice" | "Rallycross" | ..., trackId?, weather?)
+	-- choix du menu principal : lancer une spéciale (EventCar : avec la voiture rare de
+	-- l'événement éclair), des essais libres, une course de rallycross
 	PlayMode: RemoteEvent,
 
 	-- RALLYCROSS (RaceService)
@@ -115,6 +116,37 @@ export type Remotes = {
 	-- Serveur -> Clients : (announce) annonce à tout le serveur { Kind, Name, Text } :
 	-- record battu, platine, roi du drift, grand trophée (AnnounceService)
 	Announce: RemoteEvent,
+
+	-- SESSIONS ENTRE AMIS (SessionService)
+	-- Client -> Serveur : (action: "Create" | "Join" | "Leave" | "State", code?)
+	SessionAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) { Private, Code, Players, MaxPlayers, Studio } ; news : message
+	SessionState: RemoteEvent,
+
+	-- MODE CHAMPIONNAT (ChampionshipService)
+	-- Client -> Serveur : (action: "Start" | "Continue" | "Abandon" | "State", payload { Id }?)
+	ChampionshipAction: RemoteEvent,
+	-- Serveur -> Client : (state, news?) rallye en cours, rallyes et classements ;
+	-- news : spéciale lancée, terminée, pénalité, rallye terminé, message
+	ChampionshipState: RemoteEvent,
+
+	-- TUTORIEL EXPRESS (TutorialService)
+	-- Serveur -> Client : (state, news?) { Active, StageId, Credits, Rolls } ; news : { Completed }
+	Tutorial: RemoteEvent,
+	-- Client -> Serveur : (action: "Skip") ne plus proposer le tutoriel
+	TutorialAction: RemoteEvent,
+
+	-- PARRAINAGE (ReferralService)
+	-- Serveur -> Client : (state, news?) { Referrals, Max, InviterCredits, InviterRolls,
+	-- NewcomerCredits } ; news : { Welcome } | { Bonus, Inviter } | { Rewarded, Credits, Rolls }
+	ReferralState: RemoteEvent,
+	-- Client -> Serveur : (zone, gravité) un choc avec une autre voiture sur
+	-- SA voiture (CarDamage.luau) ; le serveur note la bosse (Dent1..Dent8).
+	CarDamage: RemoteEvent,
+	-- Client -> Serveur : (options) les réglages du joueur (Options.luau), à sauvegarder.
+	SaveOptions: RemoteEvent,
+	-- Serveur -> Client : (texte) réponse à une commande de don, ou pass reçu (GiftService).
+	GiftMessage: RemoteEvent,
 }
 
 local RELIABLE = {
@@ -157,6 +189,16 @@ local RELIABLE = {
 	"TeamState",
 	"Achievements",
 	"Announce",
+	"SessionAction",
+	"SessionState",
+	"ChampionshipAction",
+	"ChampionshipState",
+	"Tutorial",
+	"TutorialAction",
+	"ReferralState",
+	"CarDamage",
+	"SaveOptions",
+	"GiftMessage",
 }
 local UNRELIABLE = { "CarTelemetry", "RaceLive" }
 

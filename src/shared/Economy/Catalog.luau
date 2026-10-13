@@ -2,7 +2,7 @@
 --[[
 	Catalog.luau
 	Tous les objets qu'on possède ou pas : voitures, fumées de pneus,
-	klaxons, célébrations de podium, sons moteur. (Les couleurs et décors de
+	klaxons, célébrations de podium, sons moteur, retours de flamme, phares. (Les couleurs et décors de
 	la livrée, eux, se débloquent avec la progression : Progression.luau.)
 
 	D'OÙ VIENT UN OBJET (un ou plusieurs à la fois) :
@@ -16,7 +16,7 @@
 
 	ÉQUIPÉ : un objet de chaque sorte (profil, Equipped) ; sans choix, le
 	premier objet gratuit de la sorte. Les objets « visibles par tous »
-	(fumée, klaxon, célébration, son moteur) sont portés par la voiture et
+	(fumée, klaxon, célébration, son moteur, retour de flamme, phares) sont portés par la voiture et
 	vus ou entendus par les autres joueurs.
 
 	Les objets de chaque sorte sont déclarés dans leur module (Items/), avec
@@ -30,7 +30,7 @@ local Catalog = {}
 export type Kind = ItemTypes.Kind
 export type Item = ItemTypes.Item
 
-local KINDS: { Kind } = { "Car", "Engine", "Smoke", "Horn", "Celebration", "Part" }
+local KINDS: { Kind } = { "Car", "Engine", "Backfire", "Headlight", "Smoke", "Horn", "Celebration", "Part" }
 Catalog.KINDS = KINDS
 
 Catalog.KIND_NAMES = {
@@ -39,6 +39,8 @@ Catalog.KIND_NAMES = {
 	Horn = "Klaxon",
 	Celebration = "Célébration",
 	Engine = "Son moteur",
+	Backfire = "Retour de flamme",
+	Headlight = "Phares",
 	Part = "Pièce",
 } :: { [Kind]: string }
 
@@ -46,6 +48,8 @@ Catalog.KIND_NAMES = {
 local LISTS: { { Item } } = {
 	require(script.Parent.Items.Cars),
 	require(script.Parent.Items.Engines),
+	require(script.Parent.Items.Backfires),
+	require(script.Parent.Items.Headlights),
 	require(script.Parent.Items.Smokes),
 	require(script.Parent.Items.Horns),
 	require(script.Parent.Items.Celebrations),
@@ -106,7 +110,12 @@ function Catalog.PartItem(slot: string, option: number): Item?
 	return nil
 end
 
--- La voiture du catalogue d'une catégorie (CarClasses.luau).
+-- Utilisable : possédé, et le niveau requis atteint (voitures gratuites d'une catégorie).
+function Catalog.Usable(item: Item, owned: { [string]: boolean }?, level: number): boolean
+	return Catalog.Owns(owned, item.Id) and (item.Level == nil or level >= item.Level)
+end
+
+-- La voiture de référence d'une catégorie (CarClasses.luau) : la première.
 function Catalog.CarItem(classId: string): Item?
 	for _, item in ipairs(Catalog.ITEMS) do
 		if item.Kind == "Car" and item.CarClass == classId then

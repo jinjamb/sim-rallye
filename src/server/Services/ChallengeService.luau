@@ -335,6 +335,26 @@ end
 -- Démarrage
 --------------------------------------------------------------------------------
 
+-- Modération (ModerationService) : retire un pilote des classements de la
+-- semaine (défi de la semaine, roi du drift) ; à lancer en tâche de fond.
+function ChallengeService.EraseFor(userId: number)
+	local key = Weekly.Current().Key
+	if sessionWeekly[key] then
+		sessionWeekly[key][userId] = nil
+	end
+	if sessionDrift[key] then
+		sessionDrift[key][userId] = nil
+	end
+	Boards.Remove(weeklyStore(key), userId, "modération")
+	Boards.Remove(driftStore(key), userId, "modération")
+	local player = game:GetService("Players"):GetPlayerByUserId(userId)
+	local profile = if player then ProfileStore.Get(player) else nil
+	if profile then
+		profile.Weekly = nil
+		profile.DriftKing = nil
+	end
+end
+
 function ChallengeService.Start()
 	ProfileStore.OnLoaded(function(player)
 		ChallengeService.SendWeekly(player)

@@ -216,7 +216,7 @@ function Wheel.new(attachment: Attachment, chassis: BasePart, isFront: boolean, 
 	end
 
 	--[[
-		CENTRE DE ROULIS — le réglage anti-tonneau.
+		CENTRE DE ROULIS : le réglage anti-tonneau.
 
 		Appliquer la force latérale à l'empreinte du pneu crée un couple de
 		renversement F * h, où h est la hauteur du centre de masse au-dessus du
@@ -387,7 +387,7 @@ function Wheel:ApplyForces(dt: number, brakeForce: number, steerAngle: number)
 	self.LongitudinalVelocity = longitudinalVelocity
 
 	local wheelMass = self.Chassis.AssemblyMass / 4
-	local mu = self.Surface.Grip * Surfaces.GripScale * self.TireGrip
+	local mu = Surfaces.EffectiveGrip(self.Surface) * self.TireGrip
 
 	-- 3. GLISSEMENT COMBINÉ : un seul budget d'adhérence pour les deux axes
 

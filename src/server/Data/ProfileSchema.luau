@@ -22,6 +22,7 @@ local CarSetup = require(ReplicatedStorage.Shared.Vehicle.CarSetup)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
 local Livery = require(ReplicatedStorage.Shared.Cosmetics.Livery)
 local Lessons = require(ReplicatedStorage.Shared.School.Lessons)
+local Options = require(ReplicatedStorage.Shared.Settings.Options)
 
 local ProfileSchema = {}
 
@@ -41,7 +42,10 @@ end
 
 ProfileSchema.GHOST_MAX_FRAMES = 3000 -- 5 min à 10 Hz
 ProfileSchema.GHOST_VALUES_PER_FRAME = 6 -- x, y, z, rx, ry, rz
-ProfileSchema.MAX_RECEIPTS = 50 -- achats Robux retenus (Roblox ne rejoue que les récents)
+ProfileSchema.MAX_RECEIPTS = 50
+-- Gamme de voitures : 1 = Rally2 de série (avant), 2 = Rally4 de série,
+-- 3 = huit voitures par catégorie, chacune sa carrosserie.
+ProfileSchema.GARAGE_VERSION = 3 -- achats Robux retenus (Roblox ne rejoue que les récents)
 
 export type Ghost = { Rate: number, Frames: { number } }
 export type StageRecord = { Ms: number, Ghost: Ghost? }
@@ -81,6 +85,29 @@ export type Profile = {
 	Achievements: { [string]: number }, -- trophées obtenus (Achievements.luau) : date (os.time)
 	Badges: { [string]: number }, -- badge Roblox déjà donné, par trophée (son BadgeId)
 	XpBoostUntil: number, -- boost d'XP ×2 acheté (Products.luau) : actif jusqu'à cette date (os.time)
+	PremiumPassSeason: string?, -- saison (Pass.luau) où le pass Premium a été vu la première fois : son Rallye Pass offert
+	Championship: ChampionshipRun?, -- rallye en cours (Championships.luau), à reprendre
+	ChampBests: { [string]: number }, -- meilleur temps total (ms) par rallye et catégorie (ChampionshipService)
+	ChampionshipXp: number, -- XP gagnée à l'arrivée des rallyes, cumulée
+	ChampionshipsDone: number, -- rallyes terminés
+	TutorialDone: boolean, -- tutoriel express terminé (ou passé) : plus proposé
+	Options: { [string]: number }, -- réglages du joueur : indice du choix par option (Options.luau)
+	ReferredBy: number?, -- parrain : l'ami qui a invité ce joueur à sa première venue (ReferralService)
+	ReferralQualified: boolean, -- ce filleul a pris le volant : récompenses du parrainage données
+	Referrals: number, -- amis parrainés récompensés
+	ReferralsPending: number, -- récompenses de parrainage pas encore remises (écrites par un autre serveur)
+	FlashRollSlot: number, -- dernier événement éclair « Tirage offert » déjà récompensé (FlashEvents : Slot)
+	GarageVersion: number, -- gamme de voitures connue du profil (EconomyService : la Rally2 gardée par les anciens)
+}
+
+export type ChampionshipRun = {
+	Id: string, -- rallye (Championships.luau)
+	Key: string, -- sa clé de classement (le rallye de la semaine change chaque semaine)
+	ClassId: string, -- catégorie de voiture, fixée au départ
+	Index: number, -- prochaine spéciale à courir (1 à n)
+	Times: { number }, -- temps de chaque spéciale courue (ms)
+	Penalty: number, -- pénalités cumulées (ms)
+	LegStarted: boolean, -- la spéciale en cours a été entamée (la reprendre coûte une pénalité)
 }
 
 export type PassState = {
@@ -93,7 +120,7 @@ export type PassState = {
 
 -- Compteurs ajoutés par lots (ProfileStore.AddCounter) : des sommes, qu'on
 -- peut ajouter à ce qu'un autre serveur a écrit sans rien écraser.
-export type Counter = "StageRuns" | "Style" | "DailyXp" | "BonusXp" | "Credits" | "Rolls"
+export type Counter = "StageRuns" | "Style" | "DailyXp" | "BonusXp" | "Credits" | "Rolls" | "ChampionshipXp" | "ChampionshipsDone"
 
 function ProfileSchema.EmptyStats(): Stats
 	return { Races = 0, Wins = 0, Podiums = 0, Points = 0 }
@@ -126,7 +153,20 @@ function ProfileSchema.Empty(userId: number): Profile
 		UseTeamColors = false,
 		Achievements = {},
 		Badges = {},
+		Championship = nil,
+		ChampBests = {},
+		ChampionshipXp = 0,
+		ChampionshipsDone = 0,
 		XpBoostUntil = 0,
+		PremiumPassSeason = nil,
+		TutorialDone = false,
+		Options = Options.Defaults(),
+		ReferredBy = nil,
+		ReferralQualified = false,
+		Referrals = 0,
+		ReferralsPending = 0,
+		FlashRollSlot = 0,
+		GarageVersion = ProfileSchema.GARAGE_VERSION, -- un nouveau profil connaît la gamme actuelle
 	}
 end
 
@@ -199,6 +239,41 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.WeeklyCompleted = count(data.WeeklyCompleted)
 	profile.DailyXp = count(data.DailyXp)
 	profile.BonusXp = count(data.BonusXp)
+	profile.ChampionshipXp = count(data.ChampionshipXp)
+	profile.ChampionshipsDone = count(data.ChampionshipsDone)
+	profile.TutorialDone = data.TutorialDone == true
+	profile.Options = Options.Sanitize(data.Options)
+	profile.ReferredBy = if type(data.ReferredBy) == "number" and data.ReferredBy > 0 then math.floor(data.ReferredBy) else nil
+	profile.ReferralQualified = data.ReferralQualified == true
+	profile.Referrals = count(data.Referrals)
+	profile.ReferralsPending = count(data.ReferralsPending)
+	profile.FlashRollSlot = count(data.FlashRollSlot)
+	profile.GarageVersion = math.max(1, count(data.GarageVersion)) -- profil d'avant la nouvelle gamme : 1
+	if type(data.ChampBests) == "table" then
+		for key, ms in pairs(data.ChampBests) do
+			if type(key) == "string" and type(ms) == "number" and ms > 0 then
+				profile.ChampBests[key] = math.floor(ms)
+			end
+		end
+	end
+	local run = data.Championship
+	if type(run) == "table" and type(run.Id) == "string" and type(run.Key) == "string" and type(run.ClassId) == "string" and type(run.Times) == "table" then
+		local times = {}
+		for _, ms in ipairs(run.Times) do
+			if type(ms) == "number" and ms > 0 then
+				table.insert(times, math.floor(ms))
+			end
+		end
+		profile.Championship = {
+			Id = run.Id,
+			Key = run.Key,
+			ClassId = run.ClassId,
+			Index = #times + 1, -- toujours la spéciale qui suit les temps gardés
+			Times = times,
+			Penalty = count(run.Penalty),
+			LegStarted = run.LegStarted == true,
+		}
+	end
 	if type(data.Lessons) == "table" then
 		for id, tier in pairs(data.Lessons) do
 			if type(id) == "string" and Lessons.Get(id) then
@@ -213,6 +288,7 @@ function ProfileSchema.Sanitize(data: any, userId: number): Profile
 	profile.TeamId = if type(data.TeamId) == "string" and #data.TeamId <= 64 then data.TeamId else nil
 	profile.UseTeamColors = data.UseTeamColors == true
 	profile.XpBoostUntil = count(data.XpBoostUntil)
+	profile.PremiumPassSeason = if type(data.PremiumPassSeason) == "string" and #data.PremiumPassSeason <= 16 then data.PremiumPassSeason else nil
 	-- Trophées : gardés même s'ils ont quitté la liste (un exploit ne se perd pas).
 	if type(data.Achievements) == "table" then
 		for id, at in pairs(data.Achievements) do

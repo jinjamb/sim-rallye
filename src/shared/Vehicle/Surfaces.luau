@@ -110,12 +110,33 @@ local BY_MATERIAL: { [Enum.Material]: SurfaceProperties } = {
 
 Surfaces.Default = DEFAULT
 
--- Adhérence de TOUTES les surfaces, multipliée (pluie du défi de la semaine :
--- StageModifier.luau). 1 = sec. Côté client seulement : la physique est là.
+-- Adhérence de TOUTES les surfaces, multipliée. 1 = normal. Côté client
+-- seulement : la physique est là.
 Surfaces.GripScale = 1
+
+--[[
+	ROUTE MOUILLÉE (Weather.luau) : Wetness, de 0 (sec) à 1 (trempé), réglée
+	par WeatherClient chez le pilote. Sur le mouillé, chaque famille de
+	surface garde une part de son adhérence : l'asphalte perd le plus (le
+	film d'eau), la terre devient grasse, la neige et la glace changent peu.
+]]
+Surfaces.Wetness = 0
+local WET_GRIP: { [SurfaceSound]: number } = {
+	Tarmac = 0.72,
+	Gravel = 0.84,
+	Ice = 0.92,
+}
+local SNOW_WET_GRIP = 0.95 -- la neige mouillée colle presque autant
 
 function Surfaces.Get(material: Enum.Material): SurfaceProperties
 	return BY_MATERIAL[material] or DEFAULT
+end
+
+-- Adhérence de la surface, mouillée ou non (mu au pic, avant les pneus).
+function Surfaces.EffectiveGrip(surface: SurfaceProperties): number
+	local wetGrip = if surface.Name == "Neige" then SNOW_WET_GRIP else WET_GRIP[surface.Sound]
+	local wet = 1 - Surfaces.Wetness * (1 - wetGrip)
+	return surface.Grip * Surfaces.GripScale * wet
 end
 
 return Surfaces
