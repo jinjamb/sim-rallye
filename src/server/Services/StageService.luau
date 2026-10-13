@@ -38,6 +38,7 @@ local Remotes = require(ReplicatedStorage.Shared.Network.Remotes)
 local Stages = require(ReplicatedStorage.Shared.Stage.Stages)
 local Medals = require(ReplicatedStorage.Shared.Progression.Medals)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Plausibility = require(script.Parent.Plausibility)
 local ProfileStore = require(script.Parent.Parent.Data.ProfileStore)
 local RecordService = require(script.Parent.RecordService)
 local GhostService = require(script.Parent.GhostService)
@@ -60,6 +61,7 @@ local START_LATERAL_MARGIN = 8 -- studs au-delà du bord de la route, au départ
 local STYLE_GRACE = 5 -- secondes
 
 type Run = {
+	Tracker: Plausibility.Tracker?, -- accélération du passage en cours (Plausibility.luau)
 	Running: boolean,
 	StartTime: number,
 	LastProgress: number?,
@@ -248,6 +250,10 @@ local function sample(now: number)
 			if delta > maxStep then
 				run.Running = false
 				onInvalid(player, "raccourci")
+			elseif run.Tracker and Plausibility.Accelerating(run.Tracker :: Plausibility.Tracker, now, progress) then
+				-- Une voiture qui gagne de la vitesse plus vite que l'adhérence et la puissance ne le permettent.
+				run.Running = false
+				onInvalid(player, "accélération impossible")
 			elseif delta < -RESTART_BACKWARD then
 				run.Running = false -- retour au départ : rien à signaler (sauf en rallye)
 				if inRally(player) then
@@ -256,8 +262,14 @@ local function sample(now: number)
 			elseif last < finishDistance and progress >= finishDistance then
 				run.Running = false
 				local ms = math.floor((crossingTime(finishDistance) - run.StartTime) * 1000 + 0.5)
-				-- Garde-fou ultime : impossible de couvrir la distance plus vite que ça.
-				local minimumMs = (finishDistance - startDistance) / MAX_PLAUSIBLE_SPEED * 1000
+				-- Garde-fous : impossible de couvrir la distance plus vite que ça,
+				-- ni d'aller bien plus vite que la médaille de platine (Plausibility).
+				local car = chassis.Parent
+				local classId = CarClasses.Get(if car then car:GetAttribute("CarClass") else nil).Id
+				local minimumMs = math.max(
+					(finishDistance - startDistance) / MAX_PLAUSIBLE_SPEED * 1000,
+					Plausibility.MinimumStageMs(classId, stageId)
+				)
 				if ms < minimumMs then
 					onInvalid(player, "temps impossible")
 				else
@@ -271,6 +283,7 @@ local function sample(now: number)
 			run.Running = true
 			run.Recovered = false
 			run.StartTime = crossingTime(startDistance)
+			run.Tracker = Plausibility.NewTracker()
 			if inRally(player) then
 				StageService.RallyLegStarted(player)
 			end
@@ -280,7 +293,7 @@ end
 
 function StageService.Start()
 	ProfileStore.OnLoaded(function(player)
-		runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0, Recovered = false }
+		runs[player] = { Running = false, StartTime = 0, LastProgress = nil, LastTime = 0, StyleUntil = 0, Recovered = false, Tracker = nil }
 	end)
 	Players.PlayerRemoving:Connect(function(player: Player)
 		runs[player] = nil

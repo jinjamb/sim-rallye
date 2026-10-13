@@ -82,6 +82,7 @@ local MedalCalibration = require(script.Parent.MedalCalibration)
 local FlashEventService = require(script.Parent.FlashEventService)
 local Credits = require(ReplicatedStorage.Shared.Economy.Credits)
 local CarClasses = require(ReplicatedStorage.Shared.Vehicle.CarClasses)
+local Plausibility = require(script.Parent.Plausibility)
 local Weather = require(ReplicatedStorage.Shared.Weather.Weather)
 
 local RaceService = {}
@@ -139,6 +140,10 @@ type Member = {
 }
 
 type Runner = {
+	-- Garde-fous (Plausibility.luau) : accélération suivie, et pilote suspect
+	-- dont les tours ne comptent plus pour les records ni les médailles.
+	Tracker: Plausibility.Tracker,
+	Suspect: boolean,
 	Player: Player,
 	UserId: number,
 	Name: string,
@@ -717,6 +722,8 @@ startRound = function(race: Race, round: number)
 			LapTimes = {},
 			BestLap = nil,
 			LastLap = nil,
+			Tracker = Plausibility.NewTracker(),
+			Suspect = false,
 			JokerCount = 0,
 			InJoker = false,
 			JumpStart = false,
@@ -1300,6 +1307,12 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 
 	local previousValid = runner.Valid
 	runner.Valid += gained
+	-- Accélération impossible (Plausibility) : la course continue, mais ses
+	-- tours ne compteront ni pour les records ni pour les médailles.
+	if not runner.Suspect and Plausibility.Accelerating(runner.Tracker, now, runner.Valid) then
+		runner.Suspect = true
+		warn(string.format("[Garde-fou] %s : accélération impossible, tours hors records", runner.Name))
+	end
 	runner.LastRaw = location.Progress
 	runner.LastPosition = position
 	runner.LastTime = now
@@ -1349,8 +1362,12 @@ local function trackRunner(race: Race, runner: Runner, now: number)
 		-- record ni pour les médailles (Medals.luau : seuils d'un tour lancé).
 		local record = false
 		local medal: number? = nil
-		if runner.Laps > 1 then
-			local lapMs = math.floor(lapTime * 1000 + 0.5)
+		local lapMs = math.floor(lapTime * 1000 + 0.5)
+		-- Un tour bien plus rapide que le platine : pas un vrai tour.
+		if lapMs < Plausibility.MinimumLapMs(race.TrackId, length, race.CarClass) then
+			runner.Suspect = true
+		end
+		if runner.Laps > 1 and not runner.Suspect then
 			local limits = Medals.ForCircuit(race.TrackId, length, race.CarClass)
 			local before = Medals.TierOf(RecordService.GetLapBest(player, circuit.Key, race.CarClass), limits)
 			record = RecordService.SubmitLap(player, circuit.Key, race.CarClass, lapMs)

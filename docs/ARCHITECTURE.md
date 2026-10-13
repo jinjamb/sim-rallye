@@ -62,7 +62,10 @@ Pour ajouter un champ au profil, on l'ajoute au type `Profile`, à `Empty` et à
 | `ProgressService`  | XP, niveau et déblocages, déduits du profil et envoyés au joueur.                     |
 | `EconomyService`   | Crédits, objets possédés et portés, achats en crédits et en Robux (ProcessReceipt).   |
 | `MonetizationService` | Achats en Robux au-delà des packs : paliers par prix, offres, pass, boost d'XP.   |
-| `GiftService` | Pass offerts sans achat : liste d'amis dans le code (`FRIENDS`) et commandes du chat des admins (`/vip`, `/premium`, `/credits2`, `/retirer`, `/dons`), gardées dans un DataStore lu par tous les serveurs. |
+| `GiftService` | Pass offerts sans achat : liste d'amis dans le code (`FRIENDS`) et commandes du chat des admins (AdminCommands) (`/vip`, `/premium`, `/credits2`, `/retirer`, `/dons`), gardées dans un DataStore lu par tous les serveurs. |
+| `AdminCommands` | Commandes du chat réservées aux admins (le créateur du jeu, la liste `ADMINS`, tout le monde dans Studio) : qui est admin, décidé par le serveur d'après le UserId ; recherche d'un joueur par nom ou identifiant. |
+| `ModerationService` | Modération des classements : `/effacer` (temps et records d'un pilote), `/bannir` et `/debannir` (exclusion de tous les classements, via `Boards.Excluded`), `/bannis`. Gardé dans un DataStore (Moderation) ; un pilote absent est remis à zéro à sa prochaine venue. |
+| `Plausibility` | Garde-fous contre la triche physique : temps minimal (platine / 1,6) et accélération maximale (70 studs/s², refus au 3e dépassement). Utilisé par StageService et RaceService. |
 | `Perks`            | Avantages d'un joueur (pass, Premium, boost d'XP, pays) : lu par l'économie et la progression, sans dépendance vers les services. |
 | `GarageService`    | Réglages et livrée.                                                                   |
 | `RecordService`    | Record de la spéciale et son classement, records du tour, statistiques de carrière.   |
