@@ -97,7 +97,7 @@ Options.LIST = {
 	-- Affichage
 	{ Id = "ControlsHint", Section = "Affichage", Name = "Aide des commandes", Hint = "F1 la replie aussi", Choices = OFF_ON, Default = 2 },
 	{ Id = "Minimap", Section = "Affichage", Name = "Mini-carte en course", Choices = OFF_ON, Default = 2 },
-	{ Id = "Dents", Section = "Affichage", Name = "Bosses et étincelles", Hint = "après un contact entre voitures", Choices = OFF_ON, Default = 2 },
+	{ Id = "Dents", Section = "Affichage", Name = "Bosses", Hint = "carrosserie cabossée après un contact ; les étincelles restent", Choices = OFF_ON, Default = 2 },
 } :: { Option }
 
 local byId: { [string]: Option } = {}

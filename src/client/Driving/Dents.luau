@@ -51,7 +51,7 @@ type CarState = {
 
 local cars: { [Model]: CarState } = {}
 local started = false
-local enabled = true -- onglet OPTIONS : « Bosses et étincelles »
+local enabled = true -- onglet OPTIONS : « Bosses » (les étincelles restent)
 local INTACT = table.create(CarDamage.ZONE_COUNT, 0)
 
 -- Prévenu à chaque nouvelle bosse de la voiture du joueur (secousse, son...).
@@ -165,32 +165,35 @@ local function burst(state: CarState, zone: number, amount: number)
 	sparks:Emit(math.floor(12 + amount * 50))
 	Debris:AddItem(attachment, 1.5)
 
-	-- Éclats : petits morceaux de la couleur de la carrosserie la plus proche.
-	local nearest: BasePart? = nil
-	local best = math.huge
-	for part, rest in pairs(state.Rest) do
-		local d = (rest.Position - localPoint).Magnitude
-		if d < best and part.Transparency < 1 then
-			best, nearest = d, part
+	-- Éclats de carrosserie : avec les bosses seulement (onglet OPTIONS).
+	if enabled then
+		-- Éclats : petits morceaux de la couleur de la carrosserie la plus proche.
+		local nearest: BasePart? = nil
+		local best = math.huge
+		for part, rest in pairs(state.Rest) do
+			local d = (rest.Position - localPoint).Magnitude
+			if d < best and part.Transparency < 1 then
+				best, nearest = d, part
+			end
 		end
-	end
-	local color = if nearest then nearest.Color else Color3.new(0.8, 0.8, 0.8)
-	local origin = chassis.CFrame:PointToWorldSpace(localPoint)
-	local outward = chassis.CFrame:VectorToWorldSpace(direction)
-	for i = 1, math.floor(2 + amount * 6) do
-		local shard = Instance.new("Part")
-		shard.Name = "Shard"
-		shard.Size = Vector3.new(0.4, 0.06, 0.3) * (0.6 + (i % 3) * 0.3)
-		shard.Color = if i % 3 == 0 then Color3.fromRGB(30, 30, 34) else color
-		shard.Material = Enum.Material.SmoothPlastic
-		shard.CanQuery = false
-		shard.CanTouch = false
-		shard.CastShadow = false
-		shard.CFrame = CFrame.new(origin) * CFrame.Angles(i, i * 1.7, i * 0.6)
-		shard.AssemblyLinearVelocity = chassis.AssemblyLinearVelocity * 0.6 + outward * (10 + i * 2) + Vector3.new(0, 12 + i, 0)
-		shard.AssemblyAngularVelocity = Vector3.new(i * 3, i * 5, i * 2)
-		shard.Parent = workspace
-		Debris:AddItem(shard, 3)
+		local color = if nearest then nearest.Color else Color3.new(0.8, 0.8, 0.8)
+		local origin = chassis.CFrame:PointToWorldSpace(localPoint)
+		local outward = chassis.CFrame:VectorToWorldSpace(direction)
+		for i = 1, math.floor(2 + amount * 6) do
+			local shard = Instance.new("Part")
+			shard.Name = "Shard"
+			shard.Size = Vector3.new(0.4, 0.06, 0.3) * (0.6 + (i % 3) * 0.3)
+			shard.Color = if i % 3 == 0 then Color3.fromRGB(30, 30, 34) else color
+			shard.Material = Enum.Material.SmoothPlastic
+			shard.CanQuery = false
+			shard.CanTouch = false
+			shard.CastShadow = false
+			shard.CFrame = CFrame.new(origin) * CFrame.Angles(i, i * 1.7, i * 0.6)
+			shard.AssemblyLinearVelocity = chassis.AssemblyLinearVelocity * 0.6 + outward * (10 + i * 2) + Vector3.new(0, 12 + i, 0)
+			shard.AssemblyAngularVelocity = Vector3.new(i * 3, i * 5, i * 2)
+			shard.Parent = workspace
+			Debris:AddItem(shard, 3)
+		end
 	end
 
 	-- Son de choc (une liste vide : pas de son).
@@ -212,7 +215,7 @@ local function refresh(state: CarState)
 	for zone = 1, CarDamage.ZONE_COUNT do
 		local gained = fresh[zone] - state.Dents[zone]
 		-- Une bosse franche (pas le simple report sur les zones voisines).
-		if enabled and gained > 0.05 and fresh[zone] >= math.max(fresh[(zone - 2) % 8 + 1], fresh[zone % 8 + 1]) then
+		if gained > 0.05 and fresh[zone] >= math.max(fresh[(zone - 2) % 8 + 1], fresh[zone % 8 + 1]) then
 			burst(state, zone, gained)
 			if state.Model == Dents.LocalModel and Dents.OnLocalHit then
 				(Dents.OnLocalHit :: any)(zone, gained)
@@ -258,7 +261,7 @@ local function track(chassis: Instance)
 	refresh(state)
 end
 
--- Bosses et étincelles affichées ou non (les bosses restent connues).
+-- Bosses (et éclats) affichées ou non ; les étincelles restent toujours.
 function Dents.SetEnabled(on: boolean)
 	if enabled == on then
 		return
