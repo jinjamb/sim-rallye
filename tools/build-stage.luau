@@ -81,7 +81,9 @@ local THEMES: { [string]: ThemeSettings } = {
 		Mushrooms = true,
 	},
 	Snow = {
-		Shoulder = Enum.Material.Snow, Subsoil = Enum.Material.Slate, Hill = Enum.Material.Snow,
+		-- Sous-sol en neige : en ardoise, les talus raides entre deux lacets
+		-- faisaient un mur gris au milieu de la neige.
+		Shoulder = Enum.Material.Snow, Subsoil = Enum.Material.Snow, Hill = Enum.Material.Snow,
 		HillAmplitude = 80, HillFade = 170,
 		Trees = { { Kind = "PineSnow", Share = 0.8 }, { Kind = "Pine", Share = 0.12 }, { Kind = "Bush", Share = 0.08 } },
 		Mushrooms = false,

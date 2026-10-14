@@ -78,14 +78,17 @@ function Ambiance.Set(ambiance: Ambiances.Ambiance)
 	grade.Contrast = ambiance.Grade.Contrast * engine.Effects
 	grade.Brightness = ambiance.Grade.Brightness
 	grade.TintColor = ambiance.Grade.Tint
+	grade.Enabled = engine.Effects > 0
 
 	local bloom = effect("BloomEffect", "AmbianceBloom") :: BloomEffect
 	bloom.Intensity = ambiance.Bloom.Intensity * engine.Effects
 	bloom.Size = ambiance.Bloom.Size
 	bloom.Threshold = ambiance.Bloom.Threshold + engine.BloomThreshold
+	bloom.Enabled = engine.Effects > 0
 
 	local rays = effect("SunRaysEffect", "AmbianceRays") :: SunRaysEffect
 	rays.Intensity = ambiance.SunRays.Intensity * engine.Effects
+	rays.Enabled = engine.Effects > 0
 	rays.Spread = ambiance.SunRays.Spread
 
 	-- Ciel dessiné (s'il est importé) ; sinon celui de Roblox.

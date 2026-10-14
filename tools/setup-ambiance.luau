@@ -54,29 +54,14 @@ atmosphere.Glare = 0.2
 atmosphere.Haze = 1.4
 atmosphere.Parent = Lighting
 
--- Étalonnage : un peu moins saturé, un peu plus de contraste, une pointe chaude.
-local function effect(className: string, name: string): Instance
-	local existing = Lighting:FindFirstChild(name)
-	if existing and existing.ClassName == className then
-		return existing
+-- Pas d'effets d'image fixes : ceux des ambiances (client, Ambiance.luau) suffisent,
+-- et s'y ajoutaient (bloom compté deux fois). On retire ceux d'avant.
+for _, name in ipairs({ "WorldGrade", "WorldBloom" }) do
+	local old = Lighting:FindFirstChild(name)
+	if old then
+		old:Destroy()
 	end
-	if existing then
-		existing:Destroy()
-	end
-	local created = Instance.new(className)
-	created.Name = name
-	created.Parent = Lighting
-	return created
 end
-local grade = effect("ColorCorrectionEffect", "WorldGrade") :: ColorCorrectionEffect
-grade.Saturation = -0.08
-grade.Contrast = 0.08
-grade.Brightness = 0.02
-grade.TintColor = Color3.fromRGB(255, 248, 238)
-local bloom = effect("BloomEffect", "WorldBloom") :: BloomEffect
-bloom.Intensity = 0.25
-bloom.Size = 24
-bloom.Threshold = 1.6
 
 -- Terrain : herbe d'alpage, terre brune, asphalte gris clair.
 local terrain = workspace.Terrain

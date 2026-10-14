@@ -73,7 +73,7 @@ local rgb = Color3.fromRGB
 
 	Effects dose d'un coup les effets d'image de toutes les ambiances
 	(saturation, contraste, bloom, rayons, brume, éblouissement) :
-	1 = valeurs écrites plus bas, 0 = image brute.
+	1 = valeurs écrites plus bas, 0 = image brute (effets coupés).
 	BloomThreshold s'ajoute au seuil de chaque ambiance : plus haut, seules
 	les sources très vives (néon, phares) bavent, et moins fort.
 ]]
@@ -81,7 +81,7 @@ Ambiances.ENGINE = {
 	ShadowSoftness = 0,
 	EnvironmentSpecularScale = 1,
 	EnvironmentDiffuseScale = 0.25,
-	Effects = 0.5,
+	Effects = 0,
 	BloomThreshold = 0.6,
 }
 
