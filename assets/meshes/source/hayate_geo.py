@@ -35,6 +35,7 @@ SHOULDER_SEGS = 1        # pans de l'épaule : 1 chanfrein, plus : épaule arron
 CROWN = 0.0              # bombé du dessus (capot, coffre) au milieu
 SIDE_TAPER = 0.0         # flancs : rentrée du haut du flanc au-dessus de la ligne de caisse (0 : flancs droits)
 CREASE = 0.45            # hauteur de la ligne de caisse (part de la hauteur du flanc)
+FLARE_HW_REAR = None     # ailes arrière plus larges que les ailes avant (None : pareilles)
 BODY_HW_REAR = None      # demi-largeur à l'arrière (None : comme à l'avant ; sinon, la caisse s'élargit)
 PILLAR_PAINT = 'Trim'    # montants et cadres de vitres : noirs ('Trim') ou couleur carrosserie ('Body')
 ROCKER_H = 0.45          # hauteur du bas de caisse noir (0 : aucun)
@@ -62,16 +63,21 @@ def body_w(z):
     return BODY_HW + (BODY_HW_REAR - BODY_HW) * t
 
 
+def flare_w(wz):
+    return FLARE_HW_REAR if (wz > 0 and FLARE_HW_REAR is not None) else FLARE_HW
+
+
 def half_width(z):
     """Demi-largeur (vue de dessus) : un seul pan coupé aux quatre coins, et
     des ailes en marche franche sur les roues (pas de courbe douce)."""
     hw = body_w(z)
     for wz in WHEEL_Z:
         d = abs(z - wz)
+        fw = flare_w(wz)
         if d <= FLARE_LEN:
-            hw = max(hw, FLARE_HW)
+            hw = max(hw, fw)
         elif FLARE_RAMP > 0 and d < FLARE_LEN + FLARE_RAMP:
-            hw = max(hw, FLARE_HW - (FLARE_HW - BODY_HW) * (d - FLARE_LEN) / FLARE_RAMP)
+            hw = max(hw, fw - (fw - BODY_HW) * (d - FLARE_LEN) / FLARE_RAMP)
     def corner(t, cut, segs):
         t = min(1.0, max(0.0, t))
         if segs <= 1:
@@ -455,7 +461,7 @@ def ink(b):
     # Lèvres noires autour des passages de roue
     for wz in WHEEL_Z:
         for sd in (1, -1):
-            x = sd * (FLARE_HW + T)
+            x = sd * (flare_w(wz) + T)
             inner, outer = [], []
             for k in range(-ARCH_SEG, ARCH_SEG + 1):
                 th = math.pi / 2 * k / ARCH_SEG

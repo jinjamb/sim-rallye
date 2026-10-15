@@ -8,6 +8,12 @@ passages de roue, traits des jointures, bas de caisse).
 |---|---|---|
 | Hayate | `hayate/` | berline façon Evo : nez plongeant, ailes en caissons à marche franche |
 | Hoshi | `hoshi/` | berline façon Impreza : gros phares ronds, ailes en bosses à pans coupés, lunette inclinée |
+| Kaze | `kaze/` | la voiture de départ : compacte « origami » aux arêtes tranchantes, phares en triangle, prises d'air en X |
+| Yama | `yama/` | berline des années 70 : caisse carrée, montants fins couleur carrosserie, gros phares ronds, pare-chocs chromés |
+| Raijin | `raijin/` | coupé en coin des années 80 : nez en lame, bandeau noir à phares fins, gros becquet, lunette à persiennes |
+| Tora | `tora/` | citadine haute et très courte : gros yeux ronds, calandre souriante, feux verticaux |
+| Kumo | `kumo/` | bombe à moteur central : avant étroit, hanches arrière énormes avec prises d'air noires |
+| Ryu | `ryu/` | long coupé bas : capot très long, lunette fastback, queue de canard, quatre phares ronds |
 | Tsubasa | `tsubasa/` | inspiration Yaris WRC : caisse étroite et haute, vitres basses, ailes en caissons énormes à ouïes, grand aileron multi-lames d'origine |
 | Requin | `requin/` | inspiration DS3 WRC : carrosserie gonflée aux flancs rentrants, toit noir flottant, montant en aileron de requin, sourire noir et bandeaux de lumière verticaux |
 | Lynx | `lynx/` | inspiration 206 WRC : petite, ronde et basse, montants couleur carrosserie, bouche ovale, phares en amande |
@@ -20,7 +26,8 @@ passages de roue, traits des jointures, bas de caisse).
 Les modèles inspirés de voitures réelles n'en reprennent que l'esprit (silhouette,
 signature lumineuse) : noms inventés, aucun logo ni marque.
 
-`legendes.png` montre les modèles inspirés, chacun légendé de son nom et de sa
+`toutes.png` montre toutes les carrosseries (en haut, celles des 32 voitures du
+jeu ; en bas, les modèles inspirés du garage). `legendes.png` montre les modèles inspirés, chacun légendé de son nom et de sa
 voiture d'inspiration. Les modèles dont les originales sont rondes (Lynx,
 Requin, Cuneo) ont des épaules, un toit et un nez arrondis et des flancs qui
 rentrent ; les carrés (Furia, Blitz, Fauve, Hayate, Hoshi) gardent des arêtes
