@@ -5,9 +5,10 @@ import sys, numpy as np
 import importlib
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "Hayate"
 g = importlib.import_module(MODEL.lower() + "_geo")
-B = getattr(g, "base", g)
 
 ZONES = [
+    (('RoofWing', 'DeckWing', 'RoofSpoiler'), 'Wing'), (('SharkFin',), 'Pillars'),
+    (('Canard_', 'FlareVent_'), 'Details'),
     (('Hood', 'Cowl', 'Trunk', 'HoodScoop'), 'Hood'),
     (('BumperFrontLip', 'BumperRearLip', 'GrilleBar', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod'), 'Bumpers'),
     (('BumperFront',), 'Front'), (('BumperRear',), 'Rear'),
@@ -20,7 +21,7 @@ EXACT = {'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake'
 OPTIONS = {'HoodScoop': ('Hood', '2, 3'), 'HoodScoopMouth': ('Hood', '2, 3'), 'HoodVents': ('Hood', '2, 3'),
            'Wing': ('Wing', '2, 3, 4, 5'), 'WingBlade': ('Wing', '2, 3, 4, 5'),
            'LampPod': ('Bumper', '2'), 'RallyLamp': ('Bumper', '2')}
-DETAIL = ('Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
+DETAIL = ('Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
 
 def zone_of(name, paint):
     if paint not in ('Body', 'Trim') or name.startswith('Ink_'):
@@ -48,6 +49,7 @@ for p in g.build('full'):
     if name.startswith(DETAIL): extra += ', Detail = true'
     lines.append(f'\t{{ Name = "{name}", Paint = "{paint}", Center = Vector3.new({f(c[0])}, {f(c[1])}, {f(c[2])}), Size = Vector3.new({f(s[0])}, {f(s[1])}, {f(s[2])}){extra} }},')
 
+B = sys.modules['hayate_geo']  # la construction, réglée par le modèle
 out = '''--!nocheck
 --[[
 	''' + MODEL + '''.luau (généré : assets/meshes/source/export_luau.py)
@@ -69,7 +71,7 @@ return {
 	Mounts = {
 		NoseZ = ''' + f(B.NOSE_Z) + ''', TailZ = ''' + f(B.TAIL_Z) + ''', BottomY = ''' + f(B.BOTTOM) + ''', BeltY = ''' + f(round(B.top_y(0), 2)) + ''', HalfWidth = ''' + f(B.BODY_HW) + ''',
 		HoodFrontZ = ''' + f(B.BUMPER_F) + ''', HoodRearZ = ''' + f(B.HOOD_REAR) + ''', HoodHalfWidth = 2.2,
-		Wing = { Mount = "Deck", Z = 5.7, Y = ''' + f(round(B.top_y(5.7), 2)) + ''', Width = 5.4 },
+		Wing = { Mount = "Deck", Z = ''' + f(min(5.7, B.TAIL_Z - 0.6)) + ''', Y = ''' + f(round(B.top_y(min(5.7, B.TAIL_Z - 0.6)), 2)) + ''', Width = 5.4 },
 	},
 	Cabin = { HalfWidth = ''' + f(B.CABIN['hwb']) + ''', BaseY = ''' + f(B.CABIN['yb']) + ''', TopY = ''' + f(B.CABIN['yr']) + ''', WindshieldFrontZ = ''' + f(B.HOOD_REAR - 0.02) + ''', RoofFrontZ = ''' + f(B.CABIN['zf_top']) + ''', RoofRearZ = ''' + f(B.CABIN['zr_top']) + ''' },
 	Parts = {
