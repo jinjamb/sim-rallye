@@ -585,6 +585,70 @@ def rally_lamps(b):
         b.disc('RallyLamp', 'Lamp', (x, y, nz - 0.36), r, 0.12, 'z', n=8)
 
 
+def accessories(b):
+    """Accessoires du garage faits pour CE modèle (ils remplacent les pièces
+    Roblox) : écope et aileron de requin de toit, jupes et lames de bas de
+    caisse, diffuseurs. Ils épousent la forme du modèle (toit, flancs, arrière)."""
+    c = CABIN
+    roof_y = c['yr'] + c.get('crown', 0.0)  # dessus du toit (au milieu)
+    zf, zr = c['zf_top'], c['zr_top']
+    # --- Toit, option 2 : écope (bouche noire vers l'avant, dos qui redescend)
+    z0 = zf + 0.25
+    z1 = min(zr - 0.2, z0 + 1.3)
+    w0, w1, h = 0.55, 0.48, 0.3
+    y0 = roof_y - 0.02
+    top_front = [(-w0, y0 + h, z0), (w0, y0 + h, z0)]
+    b.face('AccRoofScoop', 'Body', [(-w0, y0 + h, z0), (w0, y0 + h, z0), (w1, y0 + 0.02, z1), (-w1, y0 + 0.02, z1)])
+    for sx in (1, -1):
+        b.face('AccRoofScoop', 'Body', [(sx * w0, y0, z0), (sx * w0, y0 + h, z0), (sx * w1, y0 + 0.02, z1), (sx * w1, y0, z1)])
+    b.face('AccRoofScoopMouth', 'Trim', [(-w0 + 0.07, y0 + 0.04, z0 - 0.01), (w0 - 0.07, y0 + 0.04, z0 - 0.01), (w0 - 0.07, y0 + h - 0.05, z0 - 0.01), (-w0 + 0.07, y0 + h - 0.05, z0 - 0.01)])
+    # --- Toit, option 3 : aileron de requin (dérive fine, haute à l'arrière)
+    za, zb = (zf + zr) / 2, zr - 0.05
+    t = 0.05
+    fin = [(za, roof_y - 0.01), (zb, roof_y - 0.01), (zb, roof_y + 0.48), (zb - 0.35, roof_y + 0.48)]
+    for sx in (1, -1):
+        b.face('AccSharkFin', 'Body', [(sx * t, y, z) for z, y in fin], ref=(0.0, roof_y + 0.2, (za + zb) / 2))
+    b.face('AccSharkFin', 'Body', [(-t, roof_y + 0.48, zb - 0.35), (t, roof_y + 0.48, zb - 0.35), (t, roof_y + 0.48, zb), (-t, roof_y + 0.48, zb)], ref=(0.0, roof_y, (za + zb) / 2))
+    b.face('AccSharkFin', 'Body', [(-t, roof_y - 0.01, za), (t, roof_y - 0.01, za), (t, roof_y + 0.48, zb - 0.35), (-t, roof_y + 0.48, zb - 0.35)], ref=(0.0, roof_y, zb))
+    b.face('AccSharkFin', 'Body', [(-t, roof_y - 0.01, zb), (t, roof_y - 0.01, zb), (t, roof_y + 0.48, zb), (-t, roof_y + 0.48, zb)], ref=(0.0, roof_y, za))
+    # --- Bas de caisse : entre les passages de roue
+    rz = WHEEL_Z[1] - FLARE_LEN - FLARE_RAMP - 0.05
+    for sd in (1, -1):
+        s = 'R' if sd > 0 else 'L'
+        xf, xr = side_x(BOTTOM + 0.2, -rz), side_x(BOTTOM + 0.2, rz)
+        # option 2 : jupe couleur carrosserie, chanfrein en bas
+        prof = [(0.0, BOTTOM - 0.04), (0.16, BOTTOM - 0.04), (0.2, BOTTOM + 0.12), (0.2, BOTTOM + 0.36), (0.0, BOTTOM + 0.44)]
+        def ring(z, x):
+            return [(sd * (x + dx), y, z) for dx, y in prof]
+        A, Bq = ring(-rz, xf), ring(rz, xr)
+        ref = (sd * ((xf + xr) / 2 + 0.05), BOTTOM + 0.2, 0.0)
+        for k in range(len(prof) - 1):
+            b.face('AccSkirt_' + s, 'Body', [A[k], A[k + 1], Bq[k + 1], Bq[k]], ref=ref)
+        b.face('AccSkirt_' + s, 'Body', A, ref=ref)
+        b.face('AccSkirt_' + s, 'Body', Bq, ref=ref)
+        # option 3 : lame noire très basse qui dépasse, avec ses joues
+        bl = [(0.0, BOTTOM - 0.06), (0.5, BOTTOM - 0.06), (0.5, BOTTOM + 0.02), (0.0, BOTTOM + 0.02)]
+        A2 = [(sd * (xf + dx), y, -rz) for dx, y in bl]
+        B2 = [(sd * (xr + dx), y, rz) for dx, y in bl]
+        ref2 = (sd * ((xf + xr) / 2 + 0.25), BOTTOM - 0.02, 0.0)
+        for k in range(4):
+            j = (k + 1) % 4
+            b.face('AccSideBlade_' + s, 'Trim', [A2[k], A2[j], B2[j], B2[k]], ref=ref2)
+        b.face('AccSideBlade_' + s, 'Trim', A2, ref=ref2)
+        b.face('AccSideBlade_' + s, 'Trim', B2, ref=ref2)
+        for zz, xx in ((-rz + 0.05, xf), (rz - 0.05, xr)):
+            b.face('AccSideBlade_' + s, 'Trim', [(sd * xx, BOTTOM - 0.06, zz), (sd * (xx + 0.5), BOTTOM - 0.06, zz), (sd * (xx + 0.3), BOTTOM + 0.3, zz), (sd * xx, BOTTOM + 0.3, zz)], ref=(sd * xx, BOTTOM, 0.0))
+    # --- Diffuseurs (option 2 : route, option 3 : course, plus grand)
+    for name, depth, height, fins in (('AccDiffuser', 0.55, 0.32, 3), ('AccDiffuserRace', 0.9, 0.5, 5)):
+        zt = TAIL_Z + 0.04
+        wd = min(side_x(BOTTOM + 0.1, TAIL_Z - 0.3) - 0.25, 2.4)
+        yb0 = BOTTOM - 0.02
+        b.box(name, 'Trim', (0.0, yb0 + 0.05, zt - depth / 2 + 0.25), (wd * 2, 0.1, depth))
+        for k in range(fins):
+            x = -wd + 0.2 + k * (2 * wd - 0.4) / max(1, fins - 1)
+            b.prism(name, 'Trim', [(x - 0.05, yb0 + 0.1), (x + 0.05, yb0 + 0.1), (x + 0.05, yb0 + height), (x - 0.05, yb0 + 0.1 + height * 0.3)][::-1] if False else [(x - 0.05, yb0 + 0.1), (x + 0.05, yb0 + 0.1), (x + 0.05, yb0 + height), (x - 0.05, yb0 + height)], zt - depth + 0.25, zt + 0.25)
+
+
 def build(variant='full'):
     b = Builder()
     lower_body(b)
@@ -595,6 +659,7 @@ def build(variant='full'):
         hood_scoop(b)
         rally_wing(b)
         rally_lamps(b)
+        accessories(b)
     elif variant == 'hero':  # aperçu : la voiture de série et son aileron
         rally_wing(b)
     out = []

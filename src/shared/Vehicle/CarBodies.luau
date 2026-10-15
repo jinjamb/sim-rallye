@@ -1576,14 +1576,20 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 			if not meshData then
 				mirrorParts(specs, cab, option("Mirrors"))
 			end
-			roofParts(specs, cab, option("Roof"))
+			if not meshHas("Roof") then
+				roofParts(specs, cab, option("Roof"))
+			end
 			if not meshData then
 				detailParts(specs, mounts, cab)
 				panelLineParts(specs, mounts, cab)
 			end
 		end
-		skirtParts(specs, mounts, option("Skirts"))
-		diffuserParts(specs, mounts, option("Diffuser"))
+		if not meshHas("Skirts") then
+			skirtParts(specs, mounts, option("Skirts"))
+		end
+		if not meshHas("Diffuser") then
+			diffuserParts(specs, mounts, option("Diffuser"))
+		end
 		-- Échappement : sur un modèle Blender, celui de série est dans le
 		-- maillage (les flammes sortent de son embout) ; un autre le remplace.
 		local meshExhaust: CarMeshes.PartInfo? = nil
