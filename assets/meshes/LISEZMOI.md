@@ -16,7 +16,7 @@ passages de roue, traits des jointures, bas de caisse).
 | Ryu | `ryu/` | long coupé bas : capot très long, lunette fastback, queue de canard, quatre phares ronds |
 | Tsubasa | `tsubasa/` | inspiration Yaris WRC : caisse étroite et haute, vitres basses, ailes en caissons énormes à ouïes, grand aileron multi-lames d'origine |
 | Requin | `requin/` | inspiration DS3 WRC : carrosserie gonflée aux flancs rentrants, toit noir flottant, montant en aileron de requin, sourire noir et bandeaux de lumière verticaux |
-| Lynx | `lynx/` | inspiration 206 WRC : petite, ronde et basse, montants couleur carrosserie, bouche ovale, phares en amande |
+| Lynx | `lynx/` | inspiration 206 WRC : compacte lisse et ronde, capot court qui file dans un pare-brise très incliné, grands phares en amande qui enveloppent les coins, bouche ovale en sourire, jonc noir, écopes de toit, aileron en arceau |
 | Griffe | `griffe/` | inspiration 208 : large et basse, ligne de caisse haute, masque noir sur toute la face, trois griffes lumineuses par côté |
 | Furia | `furia/` | inspiration Delta Integrale : haute comme une boîte, flancs droits, grande verrière quasi verticale, quatre phares carrés |
 | Blitz | `blitz/` | inspiration Quattro S1 : coupé au très long capot, gros montant arrière couleur carrosserie, bouclier à lamelles, aileron géant |

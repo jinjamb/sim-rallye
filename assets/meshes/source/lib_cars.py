@@ -73,3 +73,23 @@ def build_with(configure, variant):
     B = fresh()
     configure(B)
     return B.build(variant)
+
+
+def wrap_patch(b, B, name, paint, s, z0, z1, y_lo, y_hi, steps=8, lift=0.035):
+    """Pièce posée SUR la carrosserie, qui épouse le coin du nez ou le flanc
+    (phare enveloppant, jonc) : de z0 à z1, entre les hauteurs y_lo(t) et
+    y_hi(t) (t de 0 à 1), décollée de `lift` vers l'extérieur."""
+    pts_lo, pts_hi = [], []
+    for k in range(steps + 1):
+        t = k / steps
+        z = z0 + (z1 - z0) * t
+        for y, out in ((y_lo(t), pts_lo), (y_hi(t), pts_hi)):
+            out.append((s * (B.side_x(y, z) + lift), y, z))
+    for k in range(steps):
+        b.face(name, paint, [pts_lo[k], pts_lo[k + 1], pts_hi[k + 1], pts_hi[k]])
+
+
+def side_line(b, B, name, y, z0, z1, h=0.08, steps=6):
+    """Trait noir horizontal le long du flanc (jonc de porte)."""
+    for s in (1, -1):
+        wrap_patch(b, B, name + '_' + side(s), 'Trim', s, z0, z1, lambda t: y, lambda t: y + h, steps=steps, lift=0.03)

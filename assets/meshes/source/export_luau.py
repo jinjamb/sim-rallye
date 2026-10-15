@@ -10,6 +10,7 @@ ZONES = [
     (('RoofWing', 'DeckWing', 'RoofSpoiler'), 'Wing'), (('SharkFin',), 'Pillars'),
     (('Canard_', 'FlareVent_', 'SideIntake_', 'PopUp_', 'Louver'), 'Details'),
     (('RearQuarter',), 'Fenders'), (('EngineCover',), 'Rear'),
+    (('RoofScoopMouth', 'DoorStrip_'), 'Details'), (('RoofScoop',), 'Roof'), (('GrilleSlot',), 'Bumpers'),
     (('Hood', 'Cowl', 'Trunk', 'HoodScoop'), 'Hood'),
     (('BumperFrontLip', 'BumperRearLip', 'GrilleBar', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod'), 'Bumpers'),
     (('BumperFront',), 'Front'), (('BumperRear',), 'Rear'),
@@ -22,7 +23,7 @@ EXACT = {'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake'
 OPTIONS = {'HoodScoop': ('Hood', '2, 3'), 'HoodScoopMouth': ('Hood', '2, 3'), 'HoodVents': ('Hood', '2, 3'),
            'Wing': ('Wing', '2, 3, 4, 5'), 'WingBlade': ('Wing', '2, 3, 4, 5'),
            'LampPod': ('Bumper', '2'), 'RallyLamp': ('Bumper', '2')}
-DETAIL = ('Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
+DETAIL = ('DoorStrip_', 'RoofScoopMouth', 'Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
 
 def zone_of(name, paint):
     if paint not in ('Body', 'Trim') or name.startswith('Ink_'):
