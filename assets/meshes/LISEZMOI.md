@@ -8,19 +8,25 @@ passages de roue, traits des jointures, bas de caisse).
 |---|---|---|
 | Hayate | `hayate/` | berline façon Evo : nez plongeant, ailes en caissons à marche franche |
 | Hoshi | `hoshi/` | berline façon Impreza : gros phares ronds, ailes en bosses à pans coupés, lunette inclinée |
-| Tsubasa | `tsubasa/` | compacte de WRC moderne (inspiration Yaris WRC) : ailes à ouïes, grand aileron multi-lames d'origine |
-| Requin | `requin/` | compacte (inspiration DS3 WRC) : toit noir flottant, montant en aileron de requin, bandeaux de lumière verticaux |
-| Lynx | `lynx/` | petite compacte (inspiration 206 WRC) : phares en amande, grande bouche, formes plus douces |
-| Griffe | `griffe/` | compacte moderne (inspiration 208) : feux de jour en trois griffes, bandeau noir arrière griffé de rouge |
-| Furia | `furia/` | cinq portes carrée (inspiration Delta Integrale) : quatre phares carrés, ailes boulonnées, becquet de toit |
-| Blitz | `blitz/` | coupé Groupe B (inspiration Quattro S1) : long nez, phares carrés doublés, aileron géant d'origine |
-| Fauve | `fauve/` | petite bombe Groupe B (inspiration 205 T16) : prises d'air noires derrière les portes, phares rectangulaires larges, bouclier noir |
-| Cuneo | `cuneo/` | coupé à moteur central (inspiration Stratos) : coin arrondi, pare-brise enveloppant, persiennes sur le capot moteur, phares escamotables, feux ronds |
+| Tsubasa | `tsubasa/` | inspiration Yaris WRC : caisse étroite et haute, vitres basses, ailes en caissons énormes à ouïes, grand aileron multi-lames d'origine |
+| Requin | `requin/` | inspiration DS3 WRC : carrosserie gonflée aux flancs rentrants, toit noir flottant, montant en aileron de requin, sourire noir et bandeaux de lumière verticaux |
+| Lynx | `lynx/` | inspiration 206 WRC : petite, ronde et basse, montants couleur carrosserie, bouche ovale, phares en amande |
+| Griffe | `griffe/` | inspiration 208 : large et basse, ligne de caisse haute, masque noir sur toute la face, trois griffes lumineuses par côté |
+| Furia | `furia/` | inspiration Delta Integrale : haute comme une boîte, flancs droits, grande verrière quasi verticale, quatre phares carrés |
+| Blitz | `blitz/` | inspiration Quattro S1 : coupé au très long capot, gros montant arrière couleur carrosserie, bouclier à lamelles, aileron géant |
+| Fauve | `fauve/` | inspiration 205 T16 : courte et haute, grande ceinture noire tout autour du bas, prises d'air derrière les portes |
+| Cuneo | `cuneo/` | inspiration Stratos : coin très bas, étroit devant et très large derrière, petites vitres, persiennes, phares escamotables, feux ronds |
+
+Les modèles inspirés de voitures réelles n'en reprennent que l'esprit (silhouette,
+signature lumineuse) : noms inventés, aucun logo ni marque.
 
 `legendes.png` montre les modèles inspirés, chacun légendé de son nom et de sa
 voiture d'inspiration. Les modèles dont les originales sont rondes (Lynx,
-Requin, Griffe, Tsubasa, Cuneo) ont des épaules, un toit et un nez arrondis ;
-les carrés (Furia, Blitz, Fauve, Hayate, Hoshi) gardent des arêtes franches.
+Requin, Cuneo) ont des épaules, un toit et un nez arrondis et des flancs qui
+rentrent ; les carrés (Furia, Blitz, Fauve, Hayate, Hoshi) gardent des arêtes
+franches. Chaque modèle a ses proportions (hauteur de toit, inclinaison du
+pare-brise, taille des vitres, largeur avant et arrière) et sa couleur
+d'aperçu, pour qu'on les distingue d'un coup d'oeil.
 
 Les modèles inspirés de voitures réelles n'en reprennent que l'esprit (silhouette,
 signature lumineuse) : noms inventés, aucun logo ni marque.

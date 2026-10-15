@@ -33,6 +33,11 @@ TAIL_CUT = (0.34, 0.4)   # pan coupé des coins arrière
 SHOULDER = 0.0           # chanfrein d'épaule de la caisse (0 : arête franche)
 SHOULDER_SEGS = 1        # pans de l'épaule : 1 chanfrein, plus : épaule arrondie
 CROWN = 0.0              # bombé du dessus (capot, coffre) au milieu
+SIDE_TAPER = 0.0         # flancs : rentrée du haut du flanc au-dessus de la ligne de caisse (0 : flancs droits)
+CREASE = 0.45            # hauteur de la ligne de caisse (part de la hauteur du flanc)
+BODY_HW_REAR = None      # demi-largeur à l'arrière (None : comme à l'avant ; sinon, la caisse s'élargit)
+PILLAR_PAINT = 'Trim'    # montants et cadres de vitres : noirs ('Trim') ou couleur carrosserie ('Body')
+ROCKER_H = 0.45          # hauteur du bas de caisse noir (0 : aucun)
 NOSE_SEGS = 1            # pans des coins avant vus de dessus : 1 pan coupé, plus : arrondis
 TAIL_SEGS = 1
 ROOF_PAINT = 'Body'      # 'Trim' : toit noir « flottant »
@@ -49,14 +54,22 @@ def smooth(t):
     return t * t * (3 - 2 * t)
 
 
+def body_w(z):
+    """Demi-largeur de la caisse hors ailes (elle peut s'élargir vers l'arrière)."""
+    if BODY_HW_REAR is None:
+        return BODY_HW
+    t = min(1.0, max(0.0, (z - NOSE_Z) / (TAIL_Z - NOSE_Z)))
+    return BODY_HW + (BODY_HW_REAR - BODY_HW) * t
+
+
 def half_width(z):
     """Demi-largeur (vue de dessus) : un seul pan coupé aux quatre coins, et
     des ailes en marche franche sur les roues (pas de courbe douce)."""
-    hw = BODY_HW
+    hw = body_w(z)
     for wz in WHEEL_Z:
         d = abs(z - wz)
         if d <= FLARE_LEN:
-            hw = FLARE_HW
+            hw = max(hw, FLARE_HW)
         elif FLARE_RAMP > 0 and d < FLARE_LEN + FLARE_RAMP:
             hw = max(hw, FLARE_HW - (FLARE_HW - BODY_HW) * (d - FLARE_LEN) / FLARE_RAMP)
     def corner(t, cut, segs):
@@ -122,12 +135,18 @@ def section(z):
     yb = bottom_y(z)
     yt = top_y(z)
     arch = yb > BOTTOM + 0.05
+    crease = []
+    if SIDE_TAPER > 0:
+        yc = max(yb, BOTTOM + (yt - SHOULDER - BOTTOM) * CREASE)
+        crease = [(hw, yc)]
+        hw = hw - SIDE_TAPER
     if SHOULDER > 0 and SHOULDER_SEGS > 1:
         arc = [(hw - SHOULDER + SHOULDER * math.cos(math.pi / 2 * i / SHOULDER_SEGS),
                 yt - SHOULDER + SHOULDER * math.sin(math.pi / 2 * i / SHOULDER_SEGS)) for i in range(SHOULDER_SEGS + 1)]
     else:
         arc = [(hw, yt - SHOULDER), (hw - SHOULDER, yt)]
-    pts = [(0.0, yb), (hw, yb), (hw, yb)] + arc + [(hw * 0.5, yt + CROWN * 0.75), (0.0, yt + CROWN)]
+    hw0 = hw + SIDE_TAPER
+    pts = [(0.0, yb), (hw0, yb), (hw0, yb)] + crease + arc + [(hw * 0.5, yt + CROWN * 0.75), (0.0, yt + CROWN)]
     return pts
 
 
@@ -146,7 +165,19 @@ def surf_y(x, z):
 
 def section_names():
     n = SHOULDER_SEGS if (SHOULDER > 0 and SHOULDER_SEGS > 1) else 1
-    return ['floor', 'sill', 'side'] + ['shoulder'] * n + ['top', 'topmid']
+    return ['floor', 'sill', 'side'] + (['side'] if SIDE_TAPER > 0 else []) + ['shoulder'] * n + ['top', 'topmid']
+
+
+def side_x(y, z):
+    """Le flanc à cette hauteur (il rentre au-dessus de la ligne de caisse)."""
+    hw = half_width(z)
+    if SIDE_TAPER == 0:
+        return hw
+    yt = top_y(z)
+    yc = BOTTOM + (yt - SHOULDER - BOTTOM) * CREASE
+    if y <= yc:
+        return hw
+    return hw - SIDE_TAPER * min(1.0, (y - yc) / max(0.01, yt - SHOULDER - yc))
 
 
 SEG_NAMES = ['floor', 'sill', 'side', 'shoulder', 'top', 'topmid']
@@ -357,7 +388,7 @@ def cabin(b):
                 if (g == 'pillar' or g is None) and i in body_columns:
                     b.face(CABIN.get('body_name', 'SharkFin'), 'Body', cell)
                 elif g == 'pillar' or g is None:
-                    b.face('Pillars', 'Trim', cell)
+                    b.face('Pillars', PILLAR_PAINT, cell)
                 else:
                     b.face(g + s, 'Glass', cell)
     # Pare-brise et lunette, avec cadre
@@ -376,7 +407,7 @@ def cabin(b):
                 elif i == 1 and j == 1:
                     b.face(name, 'Glass', cell)
                 else:
-                    b.face('Pillars', 'Trim', cell)
+                    b.face('Pillars', PILLAR_PAINT, cell)
         # bande du haut (bord de toit) jusqu'au milieu
         for side in (1, -1):
             m = (lambda p: p) if side > 0 else mir
@@ -431,18 +462,34 @@ def ink(b):
                 z = wz + ARCH_R * math.sin(th)
                 yi = max(BOTTOM, min(WHEEL_Y + ARCH_R * math.cos(th), top_y(z) - 0.6))
                 zo = wz + (ARCH_R + 0.2) * math.sin(th)
+                zo = min(TAIL_Z - TAIL_CUT[1] - 0.05, max(NOSE_Z + NOSE_CUT[1] + 0.05, zo))  # la lèvre reste sur la caisse
                 yo = max(BOTTOM, min(WHEEL_Y + (ARCH_R + 0.2) * math.cos(th), top_y(z) - 0.4))
-                inner.append((x, yi, z)); outer.append((x, yo, zo))
+                if SIDE_TAPER > 0:
+                    inner.append((sd * (side_x(yi, z) + T), yi, z)); outer.append((sd * (side_x(yo, zo) + T), yo, zo))
+                else:
+                    inner.append((x, yi, z)); outer.append((x, yo, zo))
             # les deux bouts descendent jusqu'au bas de caisse
-            inner = [(x, BOTTOM, inner[0][2])] + inner + [(x, BOTTOM, inner[-1][2])]
-            outer = [(x, BOTTOM, outer[0][2])] + outer + [(x, BOTTOM, outer[-1][2])]
+            if SIDE_TAPER > 0:
+                def bx(z):
+                    return sd * (side_x(BOTTOM, z) + T)
+                inner = [(bx(inner[0][2]), BOTTOM, inner[0][2])] + inner + [(bx(inner[-1][2]), BOTTOM, inner[-1][2])]
+                outer = [(bx(outer[0][2]), BOTTOM, outer[0][2])] + outer + [(bx(outer[-1][2]), BOTTOM, outer[-1][2])]
+            else:
+                inner = [(x, BOTTOM, inner[0][2])] + inner + [(x, BOTTOM, inner[-1][2])]
+                outer = [(x, BOTTOM, outer[0][2])] + outer + [(x, BOTTOM, outer[-1][2])]
             for k in range(len(inner) - 1):
                 b.face('ArchLip_' + ('F' if wz < 0 else 'R') + ('R' if sd > 0 else 'L'), 'Trim', [inner[k], inner[k + 1], outer[k + 1], outer[k]])
     # Traits verticaux des jointures (flancs)
     def vline(name, z, y0, y1, w=0.09):
         for sd in (1, -1):
-            x = sd * (half_width(z) + T)
-            b.face(name + ('R' if sd > 0 else 'L'), 'Trim', [(x, y0, z - w / 2), (x, y0, z + w / 2), (x, y1, z + w / 2), (x, y1, z - w / 2)])
+            if SIDE_TAPER == 0:
+                x = sd * (half_width(z) + T)
+                b.face(name + ('R' if sd > 0 else 'L'), 'Trim', [(x, y0, z - w / 2), (x, y0, z + w / 2), (x, y1, z + w / 2), (x, y1, z - w / 2)])
+                continue
+            ys = [y0 + (y1 - y0) * k / 4 for k in range(5)]
+            for k in range(4):
+                xa, xb = sd * (side_x(ys[k], z) + T), sd * (side_x(ys[k + 1], z) + T)
+                b.face(name + ('R' if sd > 0 else 'L'), 'Trim', [(xa, ys[k], z - w / 2), (xa, ys[k], z + w / 2), (xb, ys[k + 1], z + w / 2), (xb, ys[k + 1], z - w / 2)])
     if DOORS == 4:
         vline('Ink_DoorF_', DOOR_SPLIT, BOTTOM + 0.5, top_y(DOOR_SPLIT) - 0.02)
     vline('Ink_DoorR_', DOOR_REAR - 0.05, BOTTOM + 0.5, top_y(DOOR_REAR) - 0.02)
@@ -452,7 +499,7 @@ def ink(b):
     # Contour du capot et du coffre (dessus)
     def topline(name, za, zb, xa, xb, w=0.09):
         ya, yb2 = surf_y(xa, za) + T, surf_y(xb, zb) + T
-        if abs(xa - xb) < 1e-6:
+        if abs(za - zb) > 1e-6:
             pts = [(xa - w / 2, ya, za), (xa + w / 2, ya, za), (xb + w / 2, yb2, zb), (xb - w / 2, yb2, zb)]
             b.face(name, 'Trim', pts)
         elif CROWN == 0:
@@ -464,20 +511,26 @@ def ink(b):
             for k in range(6):
                 y0, y1 = surf_y(xs[k], za) + T, surf_y(xs[k + 1], za) + T
                 b.face(name, 'Trim', [(xs[k], y0, za - w / 2), (xs[k + 1], y1, za - w / 2), (xs[k + 1], y1, za + w / 2), (xs[k], y0, za + w / 2)])
+    def inner(z):
+        return min(2.25, half_width(z) - SIDE_TAPER - SHOULDER - 0.25)
     for sd in (1, -1):
-        topline('Ink_Hood', BUMPER_F + 0.1, HOOD_REAR - 0.05, sd * 2.25, sd * 2.25)
+        topline('Ink_Hood', BUMPER_F + 0.1, HOOD_REAR - 0.05, sd * inner(BUMPER_F + 0.1), sd * inner(HOOD_REAR - 0.05))
         if BUMPER_R - DECK_FRONT > 0.5:
-            topline('Ink_Trunk', DECK_FRONT + 0.1, BUMPER_R - 0.1, sd * 2.25, sd * 2.25)
-    topline('Ink_Hood', BUMPER_F + 0.1, BUMPER_F + 0.1, -2.25, 2.25)
+            topline('Ink_Trunk', DECK_FRONT + 0.1, BUMPER_R - 0.1, sd * inner(DECK_FRONT + 0.1), sd * inner(BUMPER_R - 0.1))
+    topline('Ink_Hood', BUMPER_F + 0.1, BUMPER_F + 0.1, -inner(BUMPER_F + 0.1), inner(BUMPER_F + 0.1))
     if BUMPER_R - DECK_FRONT > 0.5:
-        topline('Ink_Trunk', BUMPER_R - 0.1, BUMPER_R - 0.1, -2.25, 2.25)
+        topline('Ink_Trunk', BUMPER_R - 0.1, BUMPER_R - 0.1, -inner(BUMPER_R - 0.1), inner(BUMPER_R - 0.1))
     # Bas de caisse noir entre les roues, poignées
     for sd in (1, -1):
         x = sd * (BODY_HW + T)
         rz = WHEEL_Z[1] - FLARE_LEN - FLARE_RAMP
-        b.face('Rocker_' + ('R' if sd > 0 else 'L'), 'Trim', [(x, BOTTOM, -rz), (x, BOTTOM, rz), (x, BOTTOM + 0.45, rz), (x, BOTTOM + 0.45, -rz)])
+        if ROCKER_H > 0:
+            xf, xr = sd * (body_w(-rz) + T), sd * (body_w(rz) + T)
+            b.face('Rocker_' + ('R' if sd > 0 else 'L'), 'Trim', [(xf, BOTTOM, -rz), (xr, BOTTOM, rz), (xr, BOTTOM + ROCKER_H, rz), (xf, BOTTOM + ROCKER_H, -rz)])
         for zc in HANDLES:
             yh = top_y(zc) - 0.32
+            if SIDE_TAPER > 0 or BODY_HW_REAR is not None:
+                x = sd * (side_x(yh + 0.05, zc) + T)
             b.face('Handle_' + ('F' if zc < 0 else 'R') + ('R' if sd > 0 else 'L'), 'Trim', [(x, yh, zc - 0.28), (x, yh, zc + 0.28), (x, yh + 0.1, zc + 0.28), (x, yh + 0.1, zc - 0.28)])
     # Bandeau arrière noir entre les feux
     tz = TAIL_Z + 0.02
@@ -519,9 +572,11 @@ def rally_lamps(b):
     """Variante de bouclier : rampe de quatre phares longue portée."""
     nz = NOSE_Z
     y = LAMP_Y
-    b.prism('LampPod', 'Trim', [(-2.0, y - 0.3), (2.0, y - 0.3), (2.0, y + 0.3), (-2.0, y + 0.3)][::-1], nz - 0.32, nz - 0.08)
-    for k, x in enumerate((-1.5, -0.5, 0.5, 1.5)):
-        b.disc('RallyLamp', 'Lamp', (x, y, nz - 0.36), 0.42, 0.12, 'z', n=8)
+    w = min(2.0, side_x(y, nz) - 0.1)  # la rampe tient dans la largeur du nez
+    r = min(0.42, w / 4.5)
+    b.prism('LampPod', 'Trim', [(-w, y - 0.3), (w, y - 0.3), (w, y + 0.3), (-w, y + 0.3)][::-1], nz - 0.32, nz - 0.08)
+    for k, x in enumerate((-0.75 * w, -0.25 * w, 0.25 * w, 0.75 * w)):
+        b.disc('RallyLamp', 'Lamp', (x, y, nz - 0.36), r, 0.12, 'z', n=8)
 
 
 def build(variant='full'):

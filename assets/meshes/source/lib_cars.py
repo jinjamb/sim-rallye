@@ -38,8 +38,10 @@ def front_rect(b, name, paint, x0, x1, y0, y1, z):
 
 def mirrors(b, B, y=None):
     y = B.top_y(B.HOOD_REAR + 0.6) if y is None else y
+    z = B.HOOD_REAR + 0.65
+    w = B.side_x(y + 0.1, z) if hasattr(B, 'side_x') else B.BODY_HW
     for s in (1, -1):
-        b.prism('Mirror_' + side(s), 'Body', [(s * (B.BODY_HW - 0.45), y), (s * B.BODY_HW, y + 0.04), (s * B.BODY_HW, y + 0.3), (s * (B.BODY_HW - 0.43), y + 0.28)][:: (1 if s > 0 else -1)],
+        b.prism('Mirror_' + side(s), 'Body', [(s * (w - 0.45), y), (s * (w + 0.12), y + 0.04), (s * (w + 0.12), y + 0.3), (s * (w - 0.43), y + 0.28)][:: (1 if s > 0 else -1)],
                 B.HOOD_REAR + 0.5, B.HOOD_REAR + 0.8)
 
 

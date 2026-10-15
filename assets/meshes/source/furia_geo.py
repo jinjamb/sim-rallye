@@ -1,45 +1,46 @@
 """
-Furia (« furie ») : cinq portes très carrée, inspirée de la Lancia Delta
-Integrale. Pare-brise et hayon presque droits, capot plat, quatre phares
-carrés dans un bandeau noir, ailes en bosses boulonnées, becquet de toit.
+Furia : inspirée de la Lancia Delta Integrale. Haute comme une boîte :
+flancs droits, arêtes vives, capot plat, pare-brise et hayon presque
+verticaux, grande verrière aux montants fins, ailes en bosses boulonnées,
+quatre phares carrés dans un bandeau noir, becquet de toit.
 """
 import lib_cars as L
 
 
 def configure(B):
-    B.NOSE_Z, B.TAIL_Z = -6.3, 5.7
+    B.NOSE_Z, B.TAIL_Z = -6.3, 5.65
     B.BUMPER_F, B.BUMPER_R = -5.6, 5.25
-    B.HOOD_REAR, B.DECK_FRONT = -2.5, 5.15
+    B.HOOD_REAR, B.DECK_FRONT = -2.55, 5.2
     B.DOORS, B.DOOR_SPLIT, B.DOOR_REAR = 4, 0.3, 2.5
     B.HANDLES = (-0.95, 1.45)
-    B.BODY_HW, B.FLARE_HW, B.FLARE_LEN, B.FLARE_RAMP = 2.8, 3.3, 1.5, 0.25
-    B.NOSE_CUT, B.TAIL_CUT = (0.15, 0.2), (0.15, 0.2)
-    B.EXTRA_Z = (5.3,)
-    B.top_y = L.make_top_y(B, nose=0.36, bumper=0.62, hood_rear=0.72, deck=0.98, tail=0.92, brk=5.3)
-    B.CABIN = dict(yb=0.72, yr=2.46, hwb=2.48, hwr=2.18, zf_top=-1.05, zr_top=4.75, zr_base=B.DECK_FRONT + 0.02)
-    B.TAIL_GARNISH = (-2.45, 2.45, -0.3, 0.05)
-    B.LAMP_Y = -0.82
+    B.BODY_HW, B.FLARE_HW, B.FLARE_LEN, B.FLARE_RAMP = 2.72, 3.32, 1.45, 0.3
+    B.NOSE_CUT, B.TAIL_CUT = (0.1, 0.12), (0.1, 0.12)
+    B.ROCKER_H = 0.3
+    B.EXTRA_Z = (5.35,)
+    B.top_y = L.make_top_y(B, nose=0.42, bumper=0.68, hood_rear=0.8, deck=1.02, tail=1.0, brk=5.35)
+    B.CABIN = dict(yb=0.8, yr=2.72, hwb=2.5, hwr=2.4, zf_top=-1.4, zr_top=4.98, zr_base=B.DECK_FRONT + 0.02,
+                   us=[0.0, 0.05, 0.45, 0.48, 0.88, 0.9, 1.0], vs=[0.0, 0.06, 0.93, 1.0])
+    B.TAIL_GARNISH = (-2.5, 2.5, -0.3, 0.05)
+    B.LAMP_Y = -0.85
 
     def details(b):
         nz, fz = B.NOSE_Z, B.NOSE_Z - 0.04
-        # Bandeau noir, quatre phares carrés, fine calandre
-        L.front_rect(b, 'Grille', 'Trim', -2.4, 2.4, -0.38, 0.3, fz)
+        L.front_rect(b, 'Grille', 'Trim', -2.45, 2.45, -0.4, 0.34, fz)
         for s in (1, -1):
             for x in (1.25, 1.95):
-                L.front_rect(b, 'Headlight_' + L.side(s), 'Head', s * x - 0.28, s * x + 0.28, -0.3, 0.22, fz - 0.02)
-            b.disc('FogLight_' + L.side(s), 'Lamp', (s * 1.5, -0.85, fz - 0.05), 0.2, 0.06, 'z', n=8)
-            # feux arrière carrés sur les coins
+                L.front_rect(b, 'Headlight_' + L.side(s), 'Head', s * x - 0.28, s * x + 0.28, -0.3, 0.24, fz - 0.02)
+            b.disc('FogLight_' + L.side(s), 'Lamp', (s * 1.55, -0.9, fz - 0.05), 0.2, 0.06, 'z', n=8)
             tz = B.TAIL_Z + 0.03
-            L.front_rect(b, 'TailLight_' + L.side(s), 'Tail', s * 1.85 - 0.45, s * 1.85 + 0.45, 0.12, 0.62, tz)
-        L.front_rect(b, 'Intake', 'Trim', -1.1, 1.1, -0.6, -1.1, fz)
+            L.front_rect(b, 'TailLight_' + L.side(s), 'Tail', s * 1.45, s * 2.45, 0.14, 0.66, tz)
+        for k in range(4):
+            L.front_rect(b, 'GrilleBar', 'Body', -0.55, 0.55, 0.22 - k * 0.17, 0.26 - k * 0.17, fz - 0.02)
+        L.front_rect(b, 'Intake', 'Trim', -1.1, 1.1, -0.65, -1.15, fz)
         L.mirrors(b, B)
-        L.splitter(b, B, half=2.45)
         L.rear_common(b, B, exhaust_x=-1.45, plate_y=0.55)
-        # Becquet de toit d'origine (au-dessus du hayon)
-        L.roof_wing(b, B, 'RoofSpoiler', 'Body', 4.35, 5.05, 2.48, 2.1, blades=1, plates=False)
+        L.roof_wing(b, B, 'RoofSpoiler', 'Body', 4.45, 5.15, 2.74, 2.3, blades=1, plates=False)
 
     def rally_wing(b):
-        L.roof_wing(b, B, 'Wing', 'Body', 4.4, 5.55, 2.72, 2.3, blades=1, plates=True, post=0.2)
+        L.roof_wing(b, B, 'Wing', 'Body', 4.45, 5.6, 2.95, 2.4, blades=1, plates=True, post=0.18)
 
     B.details = details
     B.rally_wing = rally_wing
