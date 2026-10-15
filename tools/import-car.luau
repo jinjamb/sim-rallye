@@ -26,7 +26,7 @@
 	Le compte rendu (pièces trouvées, manquantes, en trop) s'affiche dans la Sortie.
 ]]
 
-local BODY = "Hayate" -- Hayate, Hoshi, Tsubasa, Requin, Lynx, Griffe, Furia ou Blitz
+local BODY = "Hayate" -- Hayate, Hoshi, Tsubasa, Requin, Lynx, Griffe, Furia, Blitz, Fauve ou Cuneo
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Selection = game:GetService("Selection")

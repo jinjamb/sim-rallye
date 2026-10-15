@@ -16,8 +16,10 @@ def configure(B):
     B.BODY_HW, B.FLARE_HW, B.FLARE_LEN, B.FLARE_RAMP = 2.72, 3.42, 1.55, 0.0
     B.NOSE_CUT, B.TAIL_CUT = (0.45, 0.5), (0.3, 0.35)
     B.EXTRA_Z = (5.2,)
+    B.SHOULDER, B.SHOULDER_SEGS, B.CROWN = 0.2, 2, 0.04
+    B.NOSE_SEGS, B.ARCH_SEG = 2, 4
     B.top_y = L.make_top_y(B, nose=0.08, bumper=0.42, hood_rear=0.56, deck=0.92, tail=0.7, brk=5.2)
-    B.CABIN = dict(yb=0.56, yr=2.36, hwb=2.4, hwr=2.0, zf_top=-0.55, zr_top=4.35, zr_base=B.DECK_FRONT + 0.02,
+    B.CABIN = dict(yb=0.56, yr=2.36, hwb=2.4, hwr=2.0, zf_top=-0.55, zr_top=4.35, zr_base=B.DECK_FRONT + 0.02, ch=0.25, round=2,
                    us=[0.0, 0.1, 0.5, 0.56, 0.8, 0.86, 1.0])
     B.TAIL_GARNISH = (-2.0, 2.0, -0.45, -0.05)
     B.LAMP_Y = -0.62

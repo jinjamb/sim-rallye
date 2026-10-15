@@ -255,6 +255,8 @@ Progression.ITEMS = {
 	{ Kind = "Body", Index = 13, Requirement = { Level = 6 } }, -- Griffe
 	{ Kind = "Body", Index = 14, Requirement = { Level = 11 } }, -- Furia
 	{ Kind = "Body", Index = 15, Requirement = { Level = 16 } }, -- Blitz
+	{ Kind = "Body", Index = 16, Requirement = { Level = 14 } }, -- Fauve
+	{ Kind = "Body", Index = 17, Requirement = { Level = 18 } }, -- Cuneo
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye

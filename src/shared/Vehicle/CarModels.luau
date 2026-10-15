@@ -75,7 +75,7 @@ local function design(body: number, wing: number, bumper: number, hood: number, 
 end
 
 -- Carrosseries (CarBodies.LIST) : 2 Kaze, 3 Yama, 4 Raijin, 5 Hayate, 6 Hoshi, 7 Tora, 8 Kumo, 9 Ryu,
--- 10 Tsubasa, 11 Requin, 12 Lynx, 13 Griffe, 14 Furia, 15 Blitz.
+-- 10 Tsubasa, 11 Requin, 12 Lynx, 13 Griffe, 14 Furia, 15 Blitz, 16 Fauve, 17 Cuneo.
 -- Ailerons : 1 aucun, 2 becquet, 3 rallye, 4 grand, 5 double étage. Boucliers : 1 route, 2 rallye, 3 course.
 -- Capots : 1 lisse, 2 prises d'air, 3 écope, 4 rampe de phares. Ailes : 1 d'origine, 2 élargies.
 
