@@ -19,4 +19,4 @@ Dans Studio, les sauvegardes demandent d'activer l'accès aux services d'API : *
 
 ## Outils
 
-Le dossier `tools/` contient des scripts à lancer dans la barre de commande de Studio, avec `rojo serve` actif. Ils construisent les spéciales (`build-stage.luau`), les circuits (`build-circuit.luau`), l'ambiance (`setup-ambiance.luau`), la piste d'essai et le gabarit de la voiture. Rojo les range dans `ServerStorage.Tools` : ils ne tournent jamais en jeu.
+Le dossier `tools/` contient des scripts à lancer dans la barre de commande de Studio, avec `rojo serve` actif. Ils construisent les spéciales (`build-stage.luau`), les circuits (`build-circuit.luau`), l'ambiance (`setup-ambiance.luau`), la piste d'essai et le gabarit de la voiture ; `import-car.luau` range une carrosserie faite dans Blender (`assets/meshes`) après son import. Rojo les range dans `ServerStorage.Tools` : ils ne tournent jamais en jeu.
