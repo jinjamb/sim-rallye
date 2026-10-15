@@ -12,16 +12,18 @@
 		               l'emplacement (Hood, Wing, Bumper) ;
 		Detail       : petite pièce (hors des rayons, sans ombre).
 	Mounts et Cabin : les repères du modèle, à la place de ceux de la
-	carrosserie en pièces (numéros, feux, accessoires).
+	carrosserie en pièces (numéros, feux, accessoires). Cabin.TopY est,
+	comme pour les carrosseries en pièces, le dessous du toit (0.24 sous le
+	dessus) : les accessoires de toit se posent dessus.
 ]]
 
 return {
 	Mounts = {
-		NoseZ = -6.4, TailZ = 5.5, BottomY = -1.42, BeltY = 0.77, HalfWidth = 2.75,
+		NoseZ = -6.4, TailZ = 5.5, BottomY = -1.42, BeltY = 0.77, HalfWidth = 2.75, NoseHalfWidth = 1.89,
 		HoodFrontZ = -5.5, HoodRearZ = -2.4, HoodHalfWidth = 2.2,
 		Wing = { Mount = "Deck", Z = 4.9, Y = 0.98, Width = 5.4 },
 	},
-	Cabin = { HalfWidth = 2.2, BaseY = 0.66, TopY = 2.34, WindshieldFrontZ = -2.42, RoofFrontZ = -0.55, RoofRearZ = 4.15 },
+	Cabin = { HalfWidth = 2.2, BaseY = 0.66, TopY = 2.1, WindshieldFrontZ = -2.42, RoofFrontZ = -0.55, RoofRearZ = 4.15 },
 	Parts = {
 	{ Name = "Underbody", Paint = "Trim", Center = Vector3.new(0, -0.5386, -0.45), Size = Vector3.new(6.6, 1.7627, 11.9), Detail = true },
 	{ Name = "BumperFrontLip", Paint = "Trim", Center = Vector3.new(0, -1.42, -5.95), Size = Vector3.new(6.43, 0, 0.9), Zone = "Bumpers" },

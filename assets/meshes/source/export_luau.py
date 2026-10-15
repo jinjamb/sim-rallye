@@ -66,16 +66,18 @@ out = '''--!nocheck
 		               l'emplacement (Hood, Wing, Bumper) ;
 		Detail       : petite pièce (hors des rayons, sans ombre).
 	Mounts et Cabin : les repères du modèle, à la place de ceux de la
-	carrosserie en pièces (numéros, feux, accessoires).
+	carrosserie en pièces (numéros, feux, accessoires). Cabin.TopY est,
+	comme pour les carrosseries en pièces, le dessous du toit (0.24 sous le
+	dessus) : les accessoires de toit se posent dessus.
 ]]
 
 return {
 	Mounts = {
-		NoseZ = ''' + f(B.NOSE_Z) + ''', TailZ = ''' + f(B.TAIL_Z) + ''', BottomY = ''' + f(B.BOTTOM) + ''', BeltY = ''' + f(round(B.top_y(0), 2)) + ''', HalfWidth = ''' + f(B.BODY_HW) + ''',
+		NoseZ = ''' + f(B.NOSE_Z) + ''', TailZ = ''' + f(B.TAIL_Z) + ''', BottomY = ''' + f(B.BOTTOM) + ''', BeltY = ''' + f(round(B.top_y(0), 2)) + ''', HalfWidth = ''' + f(B.BODY_HW) + ''', NoseHalfWidth = ''' + f(round(min(B.side_x(B.BOTTOM + 0.7, B.NOSE_Z), B.BODY_HW), 2)) + ''',
 		HoodFrontZ = ''' + f(B.BUMPER_F) + ''', HoodRearZ = ''' + f(B.HOOD_REAR) + ''', HoodHalfWidth = 2.2,
 		Wing = { Mount = "Deck", Z = ''' + f(min(5.7, B.TAIL_Z - 0.6)) + ''', Y = ''' + f(round(B.top_y(min(5.7, B.TAIL_Z - 0.6)), 2)) + ''', Width = 5.4 },
 	},
-	Cabin = { HalfWidth = ''' + f(B.CABIN['hwb']) + ''', BaseY = ''' + f(B.CABIN['yb']) + ''', TopY = ''' + f(B.CABIN['yr']) + ''', WindshieldFrontZ = ''' + f(B.HOOD_REAR - 0.02) + ''', RoofFrontZ = ''' + f(B.CABIN['zf_top']) + ''', RoofRearZ = ''' + f(B.CABIN['zr_top']) + ''' },
+	Cabin = { HalfWidth = ''' + f(B.CABIN['hwb']) + ''', BaseY = ''' + f(B.CABIN['yb']) + ''', TopY = ''' + f(round(B.CABIN['yr'] + B.CABIN.get('crown', 0.0) - 0.24, 3)) + ''', WindshieldFrontZ = ''' + f(B.HOOD_REAR - 0.02) + ''', RoofFrontZ = ''' + f(B.CABIN['zf_top']) + ''', RoofRearZ = ''' + f(B.CABIN['zr_top']) + ''' },
 	Parts = {
 ''' + '\n'.join(lines) + '''
 	},
