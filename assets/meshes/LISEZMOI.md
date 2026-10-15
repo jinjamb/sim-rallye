@@ -26,6 +26,8 @@ passages de roue, traits des jointures, bas de caisse).
 Les modèles inspirés de voitures réelles n'en reprennent que l'esprit (silhouette,
 signature lumineuse) : noms inventés, aucun logo ni marque.
 
+`pieces_1.png` et `pieces_2.png` montrent chaque carrosserie du jeu de série puis
+avec toutes les pièces débloquées (rendu fait avec le vrai code de `CarBodies`).
 `comparatif.png` compare, pour les huit carrosseries du jeu, l'ancienne version
 en pièces Roblox et la version Blender. `toutes.png` montre toutes les carrosseries (en haut, celles des 32 voitures du
 jeu ; en bas, les modèles inspirés du garage). `legendes.png` montre les modèles inspirés, chacun légendé de son nom et de sa

@@ -128,6 +128,7 @@ export type Mounts = {
 	BottomY: number, -- bas de caisse
 	BeltY: number, -- dessus de la caisse (capot, coffre)
 	HalfWidth: number, -- demi-largeur aux flancs
+	NoseHalfWidth: number?, -- demi-largeur de la face avant (modèles Blender : coins coupés ou arrondis)
 	HoodFrontZ: number,
 	HoodRearZ: number, -- pied du pare-brise
 	HoodHalfWidth: number,
@@ -799,11 +800,16 @@ local function wingParts(list: { Spec }, m: Mounts, option: number)
 	end
 end
 
+-- Demi-largeur de la face avant : les pièces qui s'y posent n'en dépassent pas.
+local function noseHalf(m: Mounts): number
+	return m.NoseHalfWidth or m.HalfWidth
+end
+
 local function bumperParts(list: { Spec }, m: Mounts, option: number)
 	if option == 2 then
 		-- Rallye : sabot, lèvre, deux phares longue portée.
-		add(list, block("SkidPlate", Vector3.new(m.HalfWidth * 2 - 1.0, 0.12, 1.6), at(0, m.BottomY + 0.02, m.NoseZ + 0.6), "Trim"))
-		add(list, block("Lip", Vector3.new(m.HalfWidth * 2, 0.32, 0.26), at(0, m.BottomY + 0.18, m.NoseZ - 0.12), "Trim"))
+		add(list, block("SkidPlate", Vector3.new(noseHalf(m) * 2 - 1.0, 0.12, 1.6), at(0, m.BottomY + 0.02, m.NoseZ + 0.6), "Trim"))
+		add(list, block("Lip", Vector3.new(noseHalf(m) * 2, 0.32, 0.26), at(0, m.BottomY + 0.18, m.NoseZ - 0.12), "Trim"))
 		pair(list, function(s)
 			return disc("SpotLamp", 0.62, 0.16, at(s * 1.25, m.BottomY + 0.62, m.NoseZ - 0.16), "Lamp")
 		end)
@@ -812,9 +818,9 @@ local function bumperParts(list: { Spec }, m: Mounts, option: number)
 		end)
 	elseif option == 3 then
 		-- Course : grande lame avant et ailettes.
-		add(list, block("Splitter", Vector3.new(m.HalfWidth * 2 + 0.1, 0.1, 0.6), at(0, m.BottomY + 0.1, m.NoseZ - 0.1), "Trim"))
+		add(list, block("Splitter", Vector3.new(noseHalf(m) * 2 + 0.1, 0.1, 0.6), at(0, m.BottomY + 0.1, m.NoseZ - 0.1), "Trim"))
 		pair(list, function(s)
-			return block("Canard", Vector3.new(0.55, 0.06, 0.45), at(s * (m.HalfWidth - 0.05), m.BottomY + 0.7, m.NoseZ - 0.15) * CFrame.Angles(0, 0, s * math.rad(-12)), "Trim")
+			return block("Canard", Vector3.new(0.55, 0.06, 0.45), at(s * (noseHalf(m) - 0.05), m.BottomY + 0.7, m.NoseZ - 0.15) * CFrame.Angles(0, 0, s * math.rad(-12)), "Trim")
 		end)
 	end
 end
@@ -1041,7 +1047,7 @@ local function canardParts(list: { Spec }, m: Mounts, option: number)
 	local rows = if option == 3 then { 0.55, 0.85 } else { 0.7 }
 	for _, height in ipairs(rows) do
 		pair(list, function(s)
-			return block("Canard", Vector3.new(0.6, 0.06, 0.5), at(s * (m.HalfWidth - 0.1), m.BottomY + height, m.NoseZ - 0.12) * CFrame.Angles(0, 0, s * math.rad(-14)), "Trim")
+			return block("Canard", Vector3.new(0.6, 0.06, 0.5), at(s * (noseHalf(m) - 0.1), m.BottomY + height, m.NoseZ - 0.12) * CFrame.Angles(0, 0, s * math.rad(-14)), "Trim")
 		end)
 	end
 end
@@ -1578,10 +1584,26 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 		end
 		skirtParts(specs, mounts, option("Skirts"))
 		diffuserParts(specs, mounts, option("Diffuser"))
-		local exhaustX, exhaustY, exhaustZ = exhaustParts(specs, mounts, option("Exhaust"))
-		car:SetAttribute("ExhaustX", exhaustX)
-		car:SetAttribute("ExhaustY", exhaustY)
-		car:SetAttribute("ExhaustZ", exhaustZ)
+		-- Échappement : sur un modèle Blender, celui de série est dans le
+		-- maillage (les flammes sortent de son embout) ; un autre le remplace.
+		local meshExhaust: CarMeshes.PartInfo? = nil
+		if meshData and option("Exhaust") == 1 then
+			for _, info in ipairs(meshData.Parts) do
+				if info.Name == "Exhaust" then
+					meshExhaust = info
+				end
+			end
+		end
+		if meshExhaust then
+			car:SetAttribute("ExhaustX", meshExhaust.Center.X)
+			car:SetAttribute("ExhaustY", meshExhaust.Center.Y)
+			car:SetAttribute("ExhaustZ", meshExhaust.Center.Z + meshExhaust.Size.Z / 2)
+		else
+			local exhaustX, exhaustY, exhaustZ = exhaustParts(specs, mounts, option("Exhaust"))
+			car:SetAttribute("ExhaustX", exhaustX)
+			car:SetAttribute("ExhaustY", exhaustY)
+			car:SetAttribute("ExhaustZ", exhaustZ)
+		end
 		mudflapParts(specs, option("Mudflaps"))
 		-- Habillages ajustés aux pièces déjà posées (calandre, phares), puis le reste.
 		lightCoverParts(specs, option("LightCovers"))
@@ -1605,7 +1627,8 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	if meshData and meshTemplate then
 		for _, info in ipairs(meshData.Parts) do
 			local source = meshTemplate:FindFirstChild(info.Name)
-			if source and source:IsA("BasePart") and CarMeshes.Wanted(info, option) then
+			local replaced = info.Name == "Exhaust" and option("Exhaust") > 1 -- remplacé par l'échappement choisi
+			if source and source:IsA("BasePart") and CarMeshes.Wanted(info, option) and not replaced then
 				newMeshPart(source, info, chassis, livery).Parent = folder
 			end
 		end
