@@ -20,7 +20,8 @@ OPTIONS = {'HoodScoop': 'Hood_Scoop', 'HoodScoopMouth': 'Hood_Scoop', 'HoodVents
            'Wing': 'Wing_Rally', 'WingBlade': 'Wing_Rally', 'LampPod': 'Bumper_Lamps', 'RallyLamp': 'Bumper_Lamps',
            'AccRoofScoop': 'Roof_Scoop', 'AccRoofScoopMouth': 'Roof_Scoop', 'AccSharkFin': 'Roof_Fin',
            'AccSkirt_R': 'Skirts_Side', 'AccSkirt_L': 'Skirts_Side', 'AccSideBlade_R': 'Skirts_Blade', 'AccSideBlade_L': 'Skirts_Blade',
-           'AccDiffuser': 'Diffuser_Road', 'AccDiffuserRace': 'Diffuser_Race'}
+           'AccDiffuser': 'Diffuser_Road', 'AccDiffuserRace': 'Diffuser_Race', 'AccAntenna': 'Roof_Antenna',
+           'AccMudflaps': 'Mudflaps_Rally', 'AccMudflapsBand': 'Mudflaps_Rally', 'AccMudflapsLong': 'Mudflaps_Long', 'AccMudflapsLongBand': 'Mudflaps_Long'}
 root = bpy.data.collections.new(MODEL); bpy.context.scene.collection.children.link(root)
 cols = {}
 def col(name):

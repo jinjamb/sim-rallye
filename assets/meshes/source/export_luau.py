@@ -7,6 +7,7 @@ MODEL = sys.argv[2] if len(sys.argv) > 2 else "Hayate"
 g = importlib.import_module(MODEL.lower() + "_geo")
 
 ZONES = [
+    (('AccAntenna',), 'Details'), (('AccMudflaps', 'AccMudflapsLong'), 'Details'),
     (('AccRoofScoopMouth',), 'Details'), (('AccRoofScoop', 'AccSharkFin'), 'Roof'),
     (('AccSkirt_', 'AccSideBlade_'), 'Skirts'), (('AccDiffuser',), 'Bumpers'),
     (('RoofWing', 'DeckWing', 'RoofSpoiler'), 'Wing'), (('SharkFin',), 'Pillars'),
@@ -20,15 +21,16 @@ ZONES = [
     (('WingBlade', 'Wing'), 'Wing'), (('ArchLip_', 'Rocker_'), 'Skirts'), (('Mirror_',), 'Mirrors'),
     (('Handle_', 'HoodVents', 'HoodScoopMouth'), 'Details'),
 ]
-EXACT = {'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod', 'Hood', 'Cowl', 'Trunk',
+EXACT = {'AccMudflaps', 'AccMudflapsLong', 'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod', 'Hood', 'Cowl', 'Trunk',
          'BumperFront', 'BumperRear', 'BumperFrontLip', 'BumperRearLip', 'WingBlade', 'HoodVents', 'HoodScoopMouth'}
 OPTIONS = {'HoodScoop': ('Hood', '2, 3'), 'HoodScoopMouth': ('Hood', '2, 3'), 'HoodVents': ('Hood', '2, 3'),
            'Wing': ('Wing', '2, 3, 4, 5'), 'WingBlade': ('Wing', '2, 3, 4, 5'),
            'LampPod': ('Bumper', '2'), 'RallyLamp': ('Bumper', '2'),
            'AccRoofScoop': ('Roof', '2'), 'AccRoofScoopMouth': ('Roof', '2'), 'AccSharkFin': ('Roof', '3'),
            'AccSkirt_R': ('Skirts', '2'), 'AccSkirt_L': ('Skirts', '2'), 'AccSideBlade_R': ('Skirts', '3'), 'AccSideBlade_L': ('Skirts', '3'),
-           'AccDiffuser': ('Diffuser', '2'), 'AccDiffuserRace': ('Diffuser', '3')}
-DETAIL = ('AccRoofScoopMouth', 'DoorStrip_', 'RoofScoopMouth', 'Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
+           'AccDiffuser': ('Diffuser', '2'), 'AccDiffuserRace': ('Diffuser', '3'), 'AccAntenna': ('Roof', '4'),
+           'AccMudflaps': ('Mudflaps', '2'), 'AccMudflapsBand': ('Mudflaps', '2'), 'AccMudflapsLong': ('Mudflaps', '3'), 'AccMudflapsLongBand': ('Mudflaps', '3')}
+DETAIL = ('AccRoofScoopMouth', 'AccAntenna', 'AccMudflaps', 'DoorStrip_', 'RoofScoopMouth', 'Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
 
 def zone_of(name, paint):
     if paint not in ('Body', 'Trim') or name.startswith('Ink_'):

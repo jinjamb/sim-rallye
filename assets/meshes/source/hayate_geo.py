@@ -650,6 +650,33 @@ def accessories(b):
             x = -wd + 0.2 + k * (2 * wd - 0.4) / max(1, fins - 1)
             b.prism(name, 'Trim', [(x - 0.05, yb0 + 0.1), (x + 0.05, yb0 + 0.1), (x + 0.05, yb0 + height), (x - 0.05, yb0 + 0.1 + height * 0.3)][::-1] if False else [(x - 0.05, yb0 + 0.1), (x + 0.05, yb0 + 0.1), (x + 0.05, yb0 + height), (x - 0.05, yb0 + height)], zt - depth + 0.25, zt + 0.25)
 
+    # --- Toit, option 4 : antenne fouet (socle noir, brin incliné vers l'arrière)
+    hwr, ch = c['hwr'], c.get('ch', 0.001)
+    xa, za = min(0.8, (hwr - ch) * 0.6), zr - 0.5
+    ya = c['yr'] + c.get('crown', 0.0) * (1 - xa / (hwr - ch))  # dessus du toit à cet endroit
+    b.box('AccAntenna', 'Trim', (xa, ya + 0.03, za), (0.2, 0.08, 0.34))
+    tilt = math.radians(14)
+    rot = [[1, 0, 0], [0, math.cos(tilt), -math.sin(tilt)], [0, math.sin(tilt), math.cos(tilt)]]
+    whip = 1.45
+    b.box('AccAntenna', 'Trim', (xa, ya + 0.06 + whip / 2 * math.cos(tilt), za + whip / 2 * math.sin(tilt)), (0.05, whip, 0.05), rot)
+    # --- Bavettes derrière chaque roue (option 2 : rallye, option 3 : longues),
+    # caoutchouc noir avec un bandeau couleur carrosserie en bas
+    for name, hw, top in (('AccMudflaps', 0.48, -1.0), ('AccMudflapsLong', 0.58, -0.7)):
+        bot = GROUND + 0.15
+        for wz in WHEEL_Z:
+            zf = wz + 1.3
+            for sd in (1, -1):
+                x0, x1 = sd * (2.58 - hw), sd * (2.58 + hw)
+                xi, xo = min(x0, x1), max(x0, x1)
+                cut = 0.16
+                if sd > 0:
+                    out = [(xi, bot), (xo - cut, bot), (xo, bot + cut), (xo, top), (xi, top)]
+                else:
+                    out = [(xi + cut, bot), (xo, bot), (xo, top), (xi, top), (xi, bot + cut)]
+                b.prism(name, 'Trim', out, zf - 0.03, zf + 0.03)
+                band = [(xi + 0.04, bot + 0.2), (xo - 0.04, bot + 0.2), (xo - 0.04, bot + 0.36), (xi + 0.04, bot + 0.36)]
+                b.prism(name + 'Band', 'Body', band, zf - 0.045, zf + 0.045)
+
 
 def build(variant='full'):
     b = Builder()

@@ -1610,7 +1610,9 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 			car:SetAttribute("ExhaustY", exhaustY)
 			car:SetAttribute("ExhaustZ", exhaustZ)
 		end
-		mudflapParts(specs, option("Mudflaps"))
+		if not meshHas("Mudflaps") then
+			mudflapParts(specs, option("Mudflaps"))
+		end
 		-- Habillages ajustés aux pièces déjà posées (calandre, phares), puis le reste.
 		lightCoverParts(specs, option("LightCovers"))
 		grilleParts(specs, option("Grille"))
