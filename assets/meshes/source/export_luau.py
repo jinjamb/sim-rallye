@@ -7,6 +7,8 @@ MODEL = sys.argv[2] if len(sys.argv) > 2 else "Hayate"
 g = importlib.import_module(MODEL.lower() + "_geo")
 
 ZONES = [
+    (('AccRoofScoopMouth',), 'Details'), (('AccRoofScoop', 'AccSharkFin'), 'Roof'),
+    (('AccSkirt_', 'AccSideBlade_'), 'Skirts'), (('AccDiffuser',), 'Bumpers'),
     (('RoofWing', 'DeckWing', 'RoofSpoiler'), 'Wing'), (('SharkFin',), 'Pillars'),
     (('Canard_', 'FlareVent_', 'SideIntake_', 'PopUp_', 'Louver'), 'Details'),
     (('RearQuarter',), 'Fenders'), (('EngineCover',), 'Rear'),
@@ -22,8 +24,11 @@ EXACT = {'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake'
          'BumperFront', 'BumperRear', 'BumperFrontLip', 'BumperRearLip', 'WingBlade', 'HoodVents', 'HoodScoopMouth'}
 OPTIONS = {'HoodScoop': ('Hood', '2, 3'), 'HoodScoopMouth': ('Hood', '2, 3'), 'HoodVents': ('Hood', '2, 3'),
            'Wing': ('Wing', '2, 3, 4, 5'), 'WingBlade': ('Wing', '2, 3, 4, 5'),
-           'LampPod': ('Bumper', '2'), 'RallyLamp': ('Bumper', '2')}
-DETAIL = ('DoorStrip_', 'RoofScoopMouth', 'Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
+           'LampPod': ('Bumper', '2'), 'RallyLamp': ('Bumper', '2'),
+           'AccRoofScoop': ('Roof', '2'), 'AccRoofScoopMouth': ('Roof', '2'), 'AccSharkFin': ('Roof', '3'),
+           'AccSkirt_R': ('Skirts', '2'), 'AccSkirt_L': ('Skirts', '2'), 'AccSideBlade_R': ('Skirts', '3'), 'AccSideBlade_L': ('Skirts', '3'),
+           'AccDiffuser': ('Diffuser', '2'), 'AccDiffuserRace': ('Diffuser', '3')}
+DETAIL = ('AccRoofScoopMouth', 'DoorStrip_', 'RoofScoopMouth', 'Louver', 'Claw_', 'LedStrip_', 'Canard_', 'FlareVent_', 'Ink_', 'Handle_', 'HoodVents', 'TailGarnish', 'RearPanel', 'FogLight', 'Exhaust', 'WheelWell', 'Underbody')
 
 def zone_of(name, paint):
     if paint not in ('Body', 'Trim') or name.startswith('Ink_'):

@@ -50,7 +50,15 @@ Dans chaque dossier :
 
 Repère : celui du châssis du jeu (X à droite, Y en haut, l'avant en -Z, en
 studs). Chaque objet est une pièce séparée (les bosses déplacent chaque pièce) ;
-les objets `Opt_...` sont les options (écope, aileron, rampe de phares).
+les objets `Opt_...` sont les options du garage, posées par le jeu selon le
+choix du joueur :
+- capot : écope (`Opt_Hood_Scoop_`) ;
+- aileron (`Opt_Wing_Rally_`) ; pare-chocs : rampe de phares (`Opt_Bumper_Lamps_`) ;
+- toit : écope (`Opt_Roof_Scoop_`) ou aileron de requin (`Opt_Roof_Fin_`) ;
+- bas de caisse : jupes (`Opt_Skirts_Side_`) ou lames (`Opt_Skirts_Blade_`) ;
+- diffuseur route (`Opt_Diffuser_Road_`) ou course (`Opt_Diffuser_Race_`).
+Les autres accessoires (antenne, bavettes, filet...) restent en pièces Roblox,
+posées sur le maillage. `accessoires_1.png` et `accessoires_2.png` : le rendu.
 
 ## Régénérer
 
