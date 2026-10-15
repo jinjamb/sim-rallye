@@ -14,6 +14,13 @@ passages de roue, traits des jointures, bas de caisse).
 | Griffe | `griffe/` | compacte moderne (inspiration 208) : feux de jour en trois griffes, bandeau noir arrière griffé de rouge |
 | Furia | `furia/` | cinq portes carrée (inspiration Delta Integrale) : quatre phares carrés, ailes boulonnées, becquet de toit |
 | Blitz | `blitz/` | coupé Groupe B (inspiration Quattro S1) : long nez, phares carrés doublés, aileron géant d'origine |
+| Fauve | `fauve/` | petite bombe Groupe B (inspiration 205 T16) : prises d'air noires derrière les portes, phares rectangulaires larges, bouclier noir |
+| Cuneo | `cuneo/` | coupé à moteur central (inspiration Stratos) : coin arrondi, pare-brise enveloppant, persiennes sur le capot moteur, phares escamotables, feux ronds |
+
+`legendes.png` montre les modèles inspirés, chacun légendé de son nom et de sa
+voiture d'inspiration. Les modèles dont les originales sont rondes (Lynx,
+Requin, Griffe, Tsubasa, Cuneo) ont des épaules, un toit et un nez arrondis ;
+les carrés (Furia, Blitz, Fauve, Hayate, Hoshi) gardent des arêtes franches.
 
 Les modèles inspirés de voitures réelles n'en reprennent que l'esprit (silhouette,
 signature lumineuse) : noms inventés, aucun logo ni marque.
@@ -35,7 +42,8 @@ Les modèles sont construits par script (`source/`), avec Blender en module
 Python (`pip install bpy numpy pillow`). `hayate_geo.py` porte la construction
 commune (berlines et compactes à hayon) ; chaque autre modèle (`hoshi_geo.py`,
 `tsubasa_geo.py`...) en change les mesures et les détails, avec les outils de
-`lib_cars.py`. `shots.py` fait les rendus d'aperçu (`render_mesh.py`).
+`lib_cars.py`. `shots.py` fait les rendus d'aperçu (`render_mesh.py`),
+`labels.py` les planches légendées.
 
 ```bash
 cd source

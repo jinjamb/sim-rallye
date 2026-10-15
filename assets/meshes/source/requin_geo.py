@@ -14,11 +14,13 @@ def configure(B):
     B.DOORS, B.DOOR_SPLIT, B.DOOR_REAR = 2, 1.5, 1.5
     B.HANDLES = (0.85,)
     B.BODY_HW, B.FLARE_HW, B.FLARE_LEN, B.FLARE_RAMP = 2.75, 3.3, 1.5, 0.35
-    B.NOSE_CUT, B.TAIL_CUT = (0.5, 0.55), (0.3, 0.35)
+    B.NOSE_CUT, B.TAIL_CUT = (0.75, 0.9), (0.45, 0.55)
     B.EXTRA_Z = (5.25,)
+    B.SHOULDER, B.SHOULDER_SEGS, B.CROWN = 0.42, 4, 0.12
+    B.NOSE_SEGS, B.TAIL_SEGS, B.ARCH_SEG = 4, 3, 5
     B.top_y = L.make_top_y(B, nose=0.18, bumper=0.5, hood_rear=0.62, deck=0.96, tail=0.74, brk=5.25)
     B.ROOF_PAINT = 'Trim'
-    B.CABIN = dict(yb=0.62, yr=2.34, hwb=2.4, hwr=2.02, zf_top=-0.45, zr_top=4.3, zr_base=B.DECK_FRONT + 0.02,
+    B.CABIN = dict(yb=0.62, yr=2.34, hwb=2.4, hwr=2.02, zf_top=-0.45, zr_top=4.3, zr_base=B.DECK_FRONT + 0.02, ch=0.48, round=4, crown=0.06,
                    us=[0.0, 0.1, 0.5, 0.64, 0.85, 0.9, 1.0],
                    glass={(1, 1): 'Window_F', (3, 1): 'Window_R', (5, 1): None},
                    body_columns=(2,))

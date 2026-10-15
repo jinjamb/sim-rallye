@@ -25,7 +25,9 @@
 		12 Lynx     petite compacte aux yeux de félin (206 WRC) ;
 		13 Griffe   compacte moderne aux feux en griffes (208) ;
 		14 Furia    cinq portes très carrée, quatre phares carrés (Delta Integrale) ;
-		15 Blitz    coupé Groupe B au long nez, aileron géant (Quattro S1).
+		15 Blitz    coupé Groupe B au long nez, aileron géant (Quattro S1) ;
+		16 Fauve    petite bombe Groupe B, prises d'air derrière les portes (205 T16) ;
+		17 Cuneo    coupé à moteur central en coin arrondi (Stratos).
 	Les voitures (CarModels.luau) ont chacune leur modèle et leurs pièces ;
 	le joueur peut garder ceux de sa voiture (Livery : Body = 0) ou choisir
 	les siens.
@@ -686,6 +688,22 @@ local function blitz(): Body
 	return legend("blitz", "Blitz", "coupé Groupe B au long nez et aileron géant (façon Quattro S1)", m, c, 4.0, true)
 end
 
+local function fauve(): Body
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.66, TopY = 2.38, WindshieldFrontZ = -2.35, RoofFrontZ = -0.55, RoofRearZ = 4.25 }
+	return legend("fauve", "Fauve", "petite bombe Groupe B à moteur central, prises d'air derrière les portes (façon 205 T16)", hatch(-6.15, 5.45, 0.66, -5.45, -2.35, 4.25, 2.38), c, 4.95, false)
+end
+
+local function cuneo(): Body
+	local m: Mounts = {
+		NoseZ = -6.1, TailZ = 5.5, BottomY = -1.45, BeltY = 0.62, HalfWidth = 3.0,
+		HoodFrontZ = -5.3, HoodRearZ = -2.2, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Deck", Z = 5.2, Y = 0.96, Width = 5.4 },
+		NoseSlope = { Length = 1.2, Drop = 0.5 },
+	}
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.62, TopY = 2.06, WindshieldFrontZ = -2.2, RoofFrontZ = -0.1, RoofRearZ = 1.35 }
+	return legend("cuneo", "Cuneo", "coupé à moteur central en coin arrondi, persiennes et feux ronds (façon Stratos)", m, c, 4.75, false)
+end
+
 CarBodies.LIST = {
 	{
 		Id = "origine",
@@ -710,6 +728,8 @@ CarBodies.LIST = {
 	griffe(),
 	furia(),
 	blitz(),
+	fauve(),
+	cuneo(),
 } :: { Body }
 
 --------------------------------------------------------------------------------

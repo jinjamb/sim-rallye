@@ -31,6 +31,10 @@ FLARE_RAMP = 0.0    # longueur du pan qui raccorde l'aile à la caisse (0 : marc
 NOSE_CUT = (0.42, 0.45)  # pan coupé des coins avant (vue de dessus) : retrait, longueur
 TAIL_CUT = (0.34, 0.4)   # pan coupé des coins arrière
 SHOULDER = 0.0           # chanfrein d'épaule de la caisse (0 : arête franche)
+SHOULDER_SEGS = 1        # pans de l'épaule : 1 chanfrein, plus : épaule arrondie
+CROWN = 0.0              # bombé du dessus (capot, coffre) au milieu
+NOSE_SEGS = 1            # pans des coins avant vus de dessus : 1 pan coupé, plus : arrondis
+TAIL_SEGS = 1
 ROOF_PAINT = 'Body'      # 'Trim' : toit noir « flottant »
 DOORS = 4                # 2 : coupé ou trois portes (une seule porte par côté)
 HANDLES = (-0.6, 1.9)    # poignées (Z)
@@ -55,10 +59,15 @@ def half_width(z):
             hw = FLARE_HW
         elif FLARE_RAMP > 0 and d < FLARE_LEN + FLARE_RAMP:
             hw = max(hw, FLARE_HW - (FLARE_HW - BODY_HW) * (d - FLARE_LEN) / FLARE_RAMP)
+    def corner(t, cut, segs):
+        t = min(1.0, max(0.0, t))
+        if segs <= 1:
+            return cut * (1 - t)
+        return cut * (1 - math.sqrt(max(0.0, 1 - (1 - t) ** 2)))
     if z < NOSE_Z + NOSE_CUT[1]:
-        hw -= NOSE_CUT[0] * (1 - (z - NOSE_Z) / NOSE_CUT[1])
+        hw -= corner((z - NOSE_Z) / NOSE_CUT[1], NOSE_CUT[0], NOSE_SEGS)
     if z > TAIL_Z - TAIL_CUT[1]:
-        hw -= TAIL_CUT[0] * (1 - (TAIL_Z - z) / TAIL_CUT[1])
+        hw -= corner((TAIL_Z - z) / TAIL_CUT[1], TAIL_CUT[0], TAIL_SEGS)
     return hw
 
 
@@ -92,6 +101,10 @@ def bottom_y(z):
 def stations():
     zs = [NOSE_Z, NOSE_Z + NOSE_CUT[1], BUMPER_F, HOOD_REAR, DOOR_SPLIT, DOOR_REAR, DECK_FRONT, BUMPER_R, 6.0, TAIL_Z - TAIL_CUT[1], TAIL_Z]
     zs += list(EXTRA_Z)
+    for k in range(1, NOSE_SEGS):
+        zs.append(NOSE_Z + NOSE_CUT[1] * (1 - math.cos(math.pi / 2 * k / NOSE_SEGS)))
+    for k in range(1, TAIL_SEGS):
+        zs.append(TAIL_Z - TAIL_CUT[1] * (1 - math.cos(math.pi / 2 * k / TAIL_SEGS)))
     for wz in WHEEL_Z:
         for k in range(-ARCH_SEG, ARCH_SEG + 1):
             zs.append(wz + ARCH_R * math.sin(math.pi / 2 * k / ARCH_SEG) * 0.999)
@@ -109,16 +122,31 @@ def section(z):
     yb = bottom_y(z)
     yt = top_y(z)
     arch = yb > BOTTOM + 0.05
-    pts = [
-        (0.0, yb),
-        (hw, yb),
-        (hw, yb),
-        (hw, yt - SHOULDER),
-        (hw - SHOULDER, yt),
-        (hw * 0.5, yt),
-        (0.0, yt),
-    ]
+    if SHOULDER > 0 and SHOULDER_SEGS > 1:
+        arc = [(hw - SHOULDER + SHOULDER * math.cos(math.pi / 2 * i / SHOULDER_SEGS),
+                yt - SHOULDER + SHOULDER * math.sin(math.pi / 2 * i / SHOULDER_SEGS)) for i in range(SHOULDER_SEGS + 1)]
+    else:
+        arc = [(hw, yt - SHOULDER), (hw - SHOULDER, yt)]
+    pts = [(0.0, yb), (hw, yb), (hw, yb)] + arc + [(hw * 0.5, yt + CROWN * 0.75), (0.0, yt + CROWN)]
     return pts
+
+
+def surf_y(x, z):
+    """Hauteur du dessus de la caisse à cet endroit (bombé compris)."""
+    if CROWN == 0:
+        return top_y(z)
+    hw = half_width(z)
+    x = abs(x)
+    if x <= hw * 0.5:
+        c = CROWN * (1 - 0.25 * x / (hw * 0.5))
+    else:
+        c = CROWN * 0.75 * max(0.0, 1 - (x - hw * 0.5) / max(0.01, hw * 0.5 - SHOULDER))
+    return top_y(z) + c
+
+
+def section_names():
+    n = SHOULDER_SEGS if (SHOULDER > 0 and SHOULDER_SEGS > 1) else 1
+    return ['floor', 'sill', 'side'] + ['shoulder'] * n + ['top', 'topmid']
 
 
 SEG_NAMES = ['floor', 'sill', 'side', 'shoulder', 'top', 'topmid']
@@ -239,9 +267,10 @@ def lower_body(b):
         z0, z1 = zs[i], zs[i + 1]
         zc = (z0 + z1) / 2
         A, B = secs[i], secs[i + 1]
+        names = section_names()
         for side in (1, -1):
-            for k in range(6):
-                seg = SEG_NAMES[k]
+            for k in range(len(names)):
+                seg = names[k]
                 name, paint = panel_for(seg, zc, side)
                 p0 = (side * A[k][0], A[k][1], z0)
                 p1 = (side * A[k + 1][0], A[k + 1][1], z0)
@@ -279,10 +308,15 @@ def cabin(b):
     def ring(zbase, ztop):
         # côté droit : base, haut du flanc, bord du toit, milieu du toit
         ch = CABIN.get('ch', 0.001)
-        prof = [(hwb, yb), (hwr, yr - ch), (hwr - ch, yr), (0.0, yr)]
+        n = CABIN.get('round', 1)
+        if n > 1:
+            edge = [(hwr - ch + ch * math.cos(math.pi / 2 * i / n), yr - ch + ch * math.sin(math.pi / 2 * i / n)) for i in range(n + 1)]
+        else:
+            edge = [(hwr, yr - ch), (hwr - ch, yr)]
+        prof = [(hwb, yb)] + edge + [(0.0, yr + CABIN.get('crown', 0.0))]
         out = []
         for x, y in prof:
-            t = (y - yb) / (yr - yb)
+            t = min(1.0, (y - yb) / (yr - yb))
             out.append((x, y, zbase + (ztop - zbase) * t))
         return out
     F = ring(zf_base, zf_top)
@@ -300,7 +334,7 @@ def cabin(b):
     # Toit (bord et dessus)
     for side in (1, -1):
         m = (lambda p: p) if side > 0 else mir
-        for k in (1, 2):
+        for k in range(1, len(F) - 1):
             a, c = m(F[k]), m(F[k + 1])
             d, e = m(R[k]), m(R[k + 1])
             quad = [a, d, e, c] if side > 0 else [a, c, e, d]
@@ -321,7 +355,7 @@ def cabin(b):
                     cell = cell[::-1]
                 g = glass_cells.get((i, j), 'pillar')
                 if (g == 'pillar' or g is None) and i in body_columns:
-                    b.face('SharkFin', 'Body', cell)
+                    b.face(CABIN.get('body_name', 'SharkFin'), 'Body', cell)
                 elif g == 'pillar' or g is None:
                     b.face('Pillars', 'Trim', cell)
                 else:
@@ -337,17 +371,21 @@ def cabin(b):
                 cell = [bil(q, us2[i], vs2[j]), bil(q, us2[i + 1], vs2[j]), bil(q, us2[i + 1], vs2[j + 1]), bil(q, us2[i], vs2[j + 1])]
                 if not front:
                     cell = cell[::-1]
-                if i == 1 and j == 1:
+                if not front and CABIN.get('rear') == 'Body':
+                    b.face('EngineCover', 'Body', cell)  # moteur central : capot moteur, pas de lunette
+                elif i == 1 and j == 1:
                     b.face(name, 'Glass', cell)
                 else:
                     b.face('Pillars', 'Trim', cell)
         # bande du haut (bord de toit) jusqu'au milieu
         for side in (1, -1):
             m = (lambda p: p) if side > 0 else mir
-            pts = [m(ringpts[1]), m(ringpts[2]), (0.0, ringpts[3][1], ringpts[3][2])]
-            tri = pts if (side > 0) == front else pts[::-1]
-            b.face('Roof', ROOF_PAINT, tri[::-1])
-        b.face('Roof', ROOF_PAINT, [tl, tr, (0.0, ringpts[3][1], ringpts[3][2])])
+            C = (0.0, ringpts[-1][1], ringpts[-1][2])
+            for k in range(1, len(ringpts) - 1):
+                pts = [m(ringpts[k]), m(ringpts[k + 1]), C]
+                tri = pts if (side > 0) == front else pts[::-1]
+                b.face('Roof', ROOF_PAINT, tri[::-1])
+        b.face('Roof', ROOF_PAINT, [tl, tr, (0.0, ringpts[-1][1], ringpts[-1][2])])
     # Fond de l'habitacle (fermé, sous le capot : invisible)
 
 
@@ -413,12 +451,19 @@ def ink(b):
     vline('Ink_BumpR_', BUMPER_R - 0.05, BOTTOM + 0.05, top_y(BUMPER_R) - 0.02)
     # Contour du capot et du coffre (dessus)
     def topline(name, za, zb, xa, xb, w=0.09):
-        ya, yb2 = top_y(za) + T, top_y(zb) + T
+        ya, yb2 = surf_y(xa, za) + T, surf_y(xb, zb) + T
         if abs(xa - xb) < 1e-6:
             pts = [(xa - w / 2, ya, za), (xa + w / 2, ya, za), (xb + w / 2, yb2, zb), (xb - w / 2, yb2, zb)]
-        else:
+            b.face(name, 'Trim', pts)
+        elif CROWN == 0:
             pts = [(xa, ya - 0.0, za - w / 2), (xb, ya, za - w / 2), (xb, ya, za + w / 2), (xa, ya, za + w / 2)]
-        b.face(name, 'Trim', pts)
+            b.face(name, 'Trim', pts)
+        else:
+            # en travers d'un dessus bombé : le trait suit le bombé
+            xs = [xa + (xb - xa) * k / 6 for k in range(7)]
+            for k in range(6):
+                y0, y1 = surf_y(xs[k], za) + T, surf_y(xs[k + 1], za) + T
+                b.face(name, 'Trim', [(xs[k], y0, za - w / 2), (xs[k + 1], y1, za - w / 2), (xs[k + 1], y1, za + w / 2), (xs[k], y0, za + w / 2)])
     for sd in (1, -1):
         topline('Ink_Hood', BUMPER_F + 0.1, HOOD_REAR - 0.05, sd * 2.25, sd * 2.25)
         if BUMPER_R - DECK_FRONT > 0.5:
@@ -443,7 +488,7 @@ def ink(b):
 def hood_scoop(b):
     """Variante de capot : écope centrale et ouïes (façon Evo)."""
     z0, z1 = -5.5, -3.0
-    def y(z): return top_y(z) + 0.02
+    def y(z): return top_y(z) + CROWN + 0.02
     w = 1.0
     b.face('HoodScoop', 'Body', [(-w, y(z0), z0), (w, y(z0), z0), (w - 0.05, y(z1) + 0.4, z1), (-w + 0.05, y(z1) + 0.4, z1)][::-1])
     b.face('HoodScoopMouth', 'Trim', [(-w + 0.08, y(z0) + 0.01, z0 - 0.01), (w - 0.08, y(z0) + 0.01, z0 - 0.01), (w - 0.1, y(z0) + 0.2, z0 + 0.1), (-w + 0.1, y(z0) + 0.2, z0 + 0.1)][::-1])
@@ -454,8 +499,9 @@ def hood_scoop(b):
     for s in (1, -1):
         for k in range(4):
             zc = -4.9 + k * 0.42
-            yv = top_y(zc) + 0.02
-            b.face('HoodVents', 'Trim', [(s * 1.05, yv, zc), (s * 1.75, yv - 0.03, zc), (s * 1.75, yv - 0.03, zc + 0.2), (s * 1.05, yv, zc + 0.2)][:: (1 if s < 0 else -1)])
+            yv = surf_y(1.05, zc) + 0.02
+            yo = surf_y(1.75, zc) - 0.01
+            b.face('HoodVents', 'Trim', [(s * 1.05, yv, zc), (s * 1.75, yo, zc), (s * 1.75, yo, zc + 0.2), (s * 1.05, yv, zc + 0.2)][:: (1 if s < 0 else -1)])
 
 
 def rally_wing(b):
@@ -484,11 +530,12 @@ def build(variant='full'):
     cabin(b)
     details(b)
     ink(b)
-    if variant in ('full', 'parts', 'hero'):
+    if variant in ('full', 'parts'):
         hood_scoop(b)
         rally_wing(b)
-        if variant != 'hero':
-            rally_lamps(b)
+        rally_lamps(b)
+    elif variant == 'hero':  # aperçu : la voiture de série et son aileron
+        rally_wing(b)
     out = []
     for p in b.panels.values():
         out.append({'name': p['name'], 'paint': p['paint'], 'verts': p['verts'], 'faces': p['faces']})
