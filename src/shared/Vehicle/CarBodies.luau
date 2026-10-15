@@ -85,6 +85,7 @@ local PhysicsService = game:GetService("PhysicsService")
 local RunService = game:GetService("RunService")
 
 local BodyKits = require(script.Parent.BodyKits)
+local CarMeshes = require(script.Parent.CarMeshes)
 
 local CarBodies = {}
 
@@ -1245,30 +1246,17 @@ local DETAIL_NAMES: { [string]: boolean } = {
 	PanelLine = true,
 }
 
-local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
-	local part: BasePart
-	if spec.Shape == "Wedge" then
-		part = Instance.new("WedgePart")
-	else
-		local basic = Instance.new("Part")
-		if spec.Shape == "Cylinder" then
-			basic.Shape = Enum.PartType.Cylinder
-		end
-		part = basic
-	end
-	part.Name = spec.Name
-	part.Size = spec.Size
-	part.CFrame = chassis.CFrame * spec.At
+--[[
+	Habille une pièce de carrosserie (en pièces Roblox ou en maillage) : sans
+	masse ni collision, sa peinture et sa zone, soudée au châssis.
+]]
+local function dress(part: BasePart, paint: Paint, zone: string?, own: Color3?, detail: boolean, chassis: BasePart, livery: Color3)
 	part.Anchored = chassis.Anchored
 	part.CanCollide = false
 	part.CanTouch = false
 	part.Massless = true
-	part.CastShadow = spec.Paint ~= "Glass"
-	part.TopSurface = Enum.SurfaceType.Smooth
-	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.CastShadow = paint ~= "Glass"
 	part.Material = Enum.Material.SmoothPlastic
-	local paint = spec.Paint
-	local zone = zoneOf(spec)
 	if zone then
 		part:SetAttribute(ZONE_ATTRIBUTE, zone)
 	end
@@ -1298,14 +1286,13 @@ local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 		part.Color = ACCENT
 		part:SetAttribute(BASE_COLOR_ATTRIBUTE, ACCENT)
 	end
-	local own = spec.Color
 	if own then
 		part.Color = own
 		part:SetAttribute(BASE_COLOR_ATTRIBUTE, own)
 	end
 	-- Game ready : les petits détails ne gênent ni les rayons (numéros,
 	-- bandes, sponsors) ni l'éclairage (pas d'ombre).
-	if DETAIL_NAMES[spec.Name] then
+	if detail then
 		part.CanQuery = false
 		part.CastShadow = false
 	end
@@ -1316,6 +1303,37 @@ local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
 	weld.Part0 = chassis
 	weld.Part1 = part
 	weld.Parent = part
+end
+
+local function newPart(spec: Spec, chassis: BasePart, livery: Color3): BasePart
+	local part: BasePart
+	if spec.Shape == "Wedge" then
+		part = Instance.new("WedgePart")
+	else
+		local basic = Instance.new("Part")
+		if spec.Shape == "Cylinder" then
+			basic.Shape = Enum.PartType.Cylinder
+		end
+		part = basic
+	end
+	part.Name = spec.Name
+	part.Size = spec.Size
+	part.CFrame = chassis.CFrame * spec.At
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	dress(part, spec.Paint, zoneOf(spec), spec.Color, DETAIL_NAMES[spec.Name] == true, chassis, livery)
+	return part
+end
+
+-- Une pièce de carrosserie faite dans Blender (CarMeshes.luau), copiée du modèle importé.
+local function newMeshPart(source: BasePart, info: CarMeshes.PartInfo, chassis: BasePart, livery: Color3): BasePart
+	local part = source:Clone()
+	for _, child in ipairs(part:GetChildren()) do
+		child:Destroy()
+	end
+	local place = part:GetAttribute(CarMeshes.PLACE_ATTRIBUTE)
+	part.CFrame = chassis.CFrame * (if typeof(place) == "CFrame" then place else CFrame.new(info.Center))
+	dress(part, info.Paint :: Paint, info.Zone, nil, info.Detail == true, chassis, livery)
 	return part
 end
 
@@ -1382,8 +1400,10 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	end
 	car:SetAttribute(DESIGN_ATTRIBUTE, key)
 	car:SetAttribute("CustomBody", body.Custom)
+	-- Version faite dans Blender (CarMeshes.luau) : ses maillages et ses repères.
+	local meshData, meshTemplate = CarMeshes.Find(body.Name)
 	-- Numéros de flanc (LiveryPainter) : sur la porte, à sa taille.
-	local m = body.Mounts
+	local m: Mounts? = if meshData then meshData.Mounts else body.Mounts
 	car:SetAttribute("FlankY", if m then (m.BeltY + m.BottomY) / 2 + 0.1 else nil)
 	car:SetAttribute("FlankPanel", if m then math.min(3.2, m.BeltY - m.BottomY - 0.15) else nil)
 	-- Sortie d'échappement (Exhaust.luau) : sous le pare-chocs arrière du modèle.
@@ -1410,25 +1430,41 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 		return
 	end
 
-	local specs = table.clone(body.Parts)
-	local mounts = body.Mounts
+	local function option(slotKey: string): number
+		return if CarBodies.HasSlot(body, slotKey) then (design :: any)[slotKey] or 1 else 1
+	end
+	-- Version Blender : la caisse est le maillage (ailes élargies, rétroviseurs,
+	-- poignées et traits d'encre compris) ; les options qu'il a en maillage
+	-- remplacent celles en pièces.
+	local function meshHas(slotKey: string): boolean
+		return meshData ~= nil and CarMeshes.HasOption(meshData, slotKey, option(slotKey))
+	end
+	local specs = if meshData then {} else table.clone(body.Parts)
+	local mounts: Mounts? = m
 	if mounts then
-		local function option(slotKey: string): number
-			return if CarBodies.HasSlot(body, slotKey) then (design :: any)[slotKey] or 1 else 1
-		end
-		if option("Wing") > 1 then
+		if option("Wing") > 1 and not meshHas("Wing") then
 			wingParts(specs, mounts, option("Wing"))
 		end
-		bumperParts(specs, mounts, option("Bumper"))
-		hoodParts(specs, mounts, option("Hood"))
-		flareParts(specs, mounts, option("Flares"))
+		if not meshHas("Bumper") then
+			bumperParts(specs, mounts, option("Bumper"))
+		end
+		if not meshHas("Hood") then
+			hoodParts(specs, mounts, option("Hood"))
+		end
+		if not meshData then
+			flareParts(specs, mounts, option("Flares"))
+		end
 		-- Accessoires.
-		local cab = body.Cabin
+		local cab: Cabin? = if meshData then meshData.Cabin else body.Cabin
 		if cab then
-			mirrorParts(specs, cab, option("Mirrors"))
+			if not meshData then
+				mirrorParts(specs, cab, option("Mirrors"))
+			end
 			roofParts(specs, cab, option("Roof"))
-			detailParts(specs, mounts, cab)
-			panelLineParts(specs, mounts, cab)
+			if not meshData then
+				detailParts(specs, mounts, cab)
+				panelLineParts(specs, mounts, cab)
+			end
 		end
 		skirtParts(specs, mounts, option("Skirts"))
 		diffuserParts(specs, mounts, option("Diffuser"))
@@ -1456,6 +1492,14 @@ function CarBodies.Apply(car: Model, design: Design, livery: Color3)
 	end
 	local folder = Instance.new("Model")
 	folder.Name = FOLDER
+	if meshData and meshTemplate then
+		for _, info in ipairs(meshData.Parts) do
+			local source = meshTemplate:FindFirstChild(info.Name)
+			if source and source:IsA("BasePart") and CarMeshes.Wanted(info, option) then
+				newMeshPart(source, info, chassis, livery).Parent = folder
+			end
+		end
+	end
 	for _, spec in ipairs(specs) do
 		newPart(spec, chassis, livery).Parent = folder
 	end
