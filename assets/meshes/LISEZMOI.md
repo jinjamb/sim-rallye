@@ -59,7 +59,7 @@ choix du joueur :
 - diffuseur route (`Opt_Diffuser_Road_`) ou course (`Opt_Diffuser_Race_`) ;
 - bavettes rallye (`Opt_Mudflaps_Rally_`) ou longues (`Opt_Mudflaps_Long_`).
 Les autres accessoires (filet, sangles, ailettes...) restent en pièces Roblox,
-posées sur le maillage. `accessoires_1.png` à `accessoires_4.png` : le rendu sur les 16 modèles.
+posées sur le maillage. `accessoires_1.png` à `accessoires_4.png` et `antenne_bavettes.png` : le rendu sur les 16 modèles.
 
 ## Régénérer
 
