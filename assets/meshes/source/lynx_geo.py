@@ -22,6 +22,7 @@ def configure(B):
     B.NOSE_SEGS, B.TAIL_SEGS, B.ARCH_SEG = 6, 4, 7
     B.ROCKER_H = 0.0
     B.EXTRA_Z = (-4.6, 5.25)
+    B.SCOOP = (0.64, 0.5, 0.3)  # toit très bombé : écope plus haute pour qu'elle se voie
     B.top_y = L.make_top_y(B, nose=0.12, bumper=0.48, hood_rear=0.92, deck=0.96, tail=0.66, brk=5.25)
     B.CABIN = dict(yb=0.92, yr=2.3, hwb=2.15, hwr=1.62, zf_top=-0.45, zr_top=3.45, zr_base=B.DECK_FRONT + 0.02,
                    ch=0.6, round=6, crown=0.14,
