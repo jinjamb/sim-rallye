@@ -1,17 +1,21 @@
-"""Écrit src/shared/Vehicle/MeshBodies/Hayate.luau : ce que l'outil d'import
-attend de chaque pièce (centre, taille, peinture, zone, option)."""
+"""Écrit src/shared/Vehicle/MeshBodies/<Modèle>.luau : ce que l'outil d'import
+attend de chaque pièce (centre, taille, peinture, zone, option).
+Usage : python export_luau.py <fichier.luau> <Modèle>"""
 import sys, numpy as np
-import hayate_geo as g
+import importlib
+MODEL = sys.argv[2] if len(sys.argv) > 2 else "Hayate"
+g = importlib.import_module(MODEL.lower() + "_geo")
+B = getattr(g, "base", g)
 
 ZONES = [
     (('Hood', 'Cowl', 'Trunk', 'HoodScoop'), 'Hood'),
-    (('BumperFrontLip', 'BumperRearLip', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod'), 'Bumpers'),
+    (('BumperFrontLip', 'BumperRearLip', 'GrilleBar', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod'), 'Bumpers'),
     (('BumperFront',), 'Front'), (('BumperRear',), 'Rear'),
     (('Door_',), 'Doors'), (('Fender_',), 'Fenders'), (('Roof',), 'Roof'), (('Pillars',), 'Pillars'),
     (('WingBlade', 'Wing'), 'Wing'), (('ArchLip_', 'Rocker_'), 'Skirts'), (('Mirror_',), 'Mirrors'),
     (('Handle_', 'HoodVents', 'HoodScoopMouth'), 'Details'),
 ]
-EXACT = {'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod', 'Hood', 'Cowl', 'Trunk',
+EXACT = {'GrilleBar', 'HoodScoop', 'Wing', 'Roof', 'Pillars', 'Grille', 'Intake', 'Splitter', 'RearPanel', 'TailGarnish', 'LampPod', 'Hood', 'Cowl', 'Trunk',
          'BumperFront', 'BumperRear', 'BumperFrontLip', 'BumperRearLip', 'WingBlade', 'HoodVents', 'HoodScoopMouth'}
 OPTIONS = {'HoodScoop': ('Hood', '2, 3'), 'HoodScoopMouth': ('Hood', '2, 3'), 'HoodVents': ('Hood', '2, 3'),
            'Wing': ('Wing', '2, 3, 4, 5'), 'WingBlade': ('Wing', '2, 3, 4, 5'),
@@ -46,8 +50,8 @@ for p in g.build('full'):
 
 out = '''--!nocheck
 --[[
-	Hayate.luau (généré : assets/meshes/hayate/source/export_luau.py)
-	La Hayate faite dans Blender (assets/meshes/hayate) : chaque pièce du
+	''' + MODEL + '''.luau (généré : assets/meshes/source/export_luau.py)
+	La ''' + MODEL + ''' faite dans Blender (assets/meshes/''' + MODEL.lower() + ''') : chaque pièce du
 	modèle, telle que l'outil d'import (tools/import-car.luau) doit la
 	trouver et la ranger. Repère du châssis (X à droite, Y en haut, l'avant
 	en -Z), en studs.
@@ -63,11 +67,11 @@ out = '''--!nocheck
 
 return {
 	Mounts = {
-		NoseZ = -6.75, TailZ = 6.55, BottomY = -1.42, BeltY = 0.66, HalfWidth = 2.78,
-		HoodFrontZ = -5.85, HoodRearZ = -2.45, HoodHalfWidth = 2.2,
-		Wing = { Mount = "Deck", Z = 5.7, Y = 0.72, Width = 5.4 },
+		NoseZ = ''' + f(B.NOSE_Z) + ''', TailZ = ''' + f(B.TAIL_Z) + ''', BottomY = ''' + f(B.BOTTOM) + ''', BeltY = ''' + f(round(B.top_y(0), 2)) + ''', HalfWidth = ''' + f(B.BODY_HW) + ''',
+		HoodFrontZ = ''' + f(B.BUMPER_F) + ''', HoodRearZ = ''' + f(B.HOOD_REAR) + ''', HoodHalfWidth = 2.2,
+		Wing = { Mount = "Deck", Z = 5.7, Y = ''' + f(round(B.top_y(5.7), 2)) + ''', Width = 5.4 },
 	},
-	Cabin = { HalfWidth = 2.45, BaseY = 0.56, TopY = 2.28, WindshieldFrontZ = -2.47, RoofFrontZ = -0.75, RoofRearZ = 2.6 },
+	Cabin = { HalfWidth = ''' + f(B.CABIN['hwb']) + ''', BaseY = ''' + f(B.CABIN['yb']) + ''', TopY = ''' + f(B.CABIN['yr']) + ''', WindshieldFrontZ = ''' + f(B.HOOD_REAR - 0.02) + ''', RoofFrontZ = ''' + f(B.CABIN['zf_top']) + ''', RoofRearZ = ''' + f(B.CABIN['zr_top']) + ''' },
 	Parts = {
 ''' + '\n'.join(lines) + '''
 	},
