@@ -103,5 +103,10 @@ return {
 	{ Name = "AccSideBlade_L", Paint = "Trim", Center = Vector3.new(-3.07, -1.3, 0), Size = Vector3.new(0.5, 0.36, 4.1), Zone = "Skirts", Slot = "Skirts", Options = { 3 } },
 	{ Name = "AccDiffuser", Paint = "Trim", Center = Vector3.new(0, -1.28, 6.365), Size = Vector3.new(4.8, 0.32, 0.55), Zone = "Bumpers", Slot = "Diffuser", Options = { 2 } },
 	{ Name = "AccDiffuserRace", Paint = "Trim", Center = Vector3.new(0, -1.19, 6.19), Size = Vector3.new(4.8, 0.5, 0.9), Zone = "Bumpers", Slot = "Diffuser", Options = { 3 } },
+	{ Name = "AccAntenna", Paint = "Trim", Center = Vector3.new(0.8, 3.1515, 1.5525), Size = Vector3.new(0.2, 1.483, 0.545), Zone = "Details", Slot = "Roof", Options = { 4 }, Detail = true },
+	{ Name = "AccMudflaps", Paint = "Trim", Center = Vector3.new(0, -1.475, 1.3), Size = Vector3.new(6.12, 0.95, 8.16), Zone = "Details", Slot = "Mudflaps", Options = { 2 }, Detail = true },
+	{ Name = "AccMudflapsBand", Paint = "Body", Center = Vector3.new(0, -1.67, 1.3), Size = Vector3.new(6.04, 0.16, 8.19), Slot = "Mudflaps", Options = { 2 }, Detail = true },
+	{ Name = "AccMudflapsLong", Paint = "Trim", Center = Vector3.new(0, -1.325, 1.3), Size = Vector3.new(6.32, 1.25, 8.16), Zone = "Details", Slot = "Mudflaps", Options = { 3 }, Detail = true },
+	{ Name = "AccMudflapsLongBand", Paint = "Body", Center = Vector3.new(0, -1.67, 1.3), Size = Vector3.new(6.24, 0.16, 8.19), Slot = "Mudflaps", Options = { 3 }, Detail = true },
 	},
 }

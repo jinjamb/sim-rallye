@@ -54,10 +54,11 @@ les objets `Opt_...` sont les options du garage, posées par le jeu selon le
 choix du joueur :
 - capot : écope (`Opt_Hood_Scoop_`) ;
 - aileron (`Opt_Wing_Rally_`) ; pare-chocs : rampe de phares (`Opt_Bumper_Lamps_`) ;
-- toit : écope (`Opt_Roof_Scoop_`) ou aileron de requin (`Opt_Roof_Fin_`) ;
+- toit : écope (`Opt_Roof_Scoop_`), aileron de requin (`Opt_Roof_Fin_`) ou antenne (`Opt_Roof_Antenna_`) ;
 - bas de caisse : jupes (`Opt_Skirts_Side_`) ou lames (`Opt_Skirts_Blade_`) ;
-- diffuseur route (`Opt_Diffuser_Road_`) ou course (`Opt_Diffuser_Race_`).
-Les autres accessoires (antenne, bavettes, filet...) restent en pièces Roblox,
+- diffuseur route (`Opt_Diffuser_Road_`) ou course (`Opt_Diffuser_Race_`) ;
+- bavettes rallye (`Opt_Mudflaps_Rally_`) ou longues (`Opt_Mudflaps_Long_`).
+Les autres accessoires (filet, sangles, ailettes...) restent en pièces Roblox,
 posées sur le maillage. `accessoires_1.png` à `accessoires_4.png` : le rendu sur les 16 modèles.
 
 ## Régénérer
