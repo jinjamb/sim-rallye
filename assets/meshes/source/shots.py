@@ -1,0 +1,20 @@
+"""Rendus d'un modèle : python shots.py <dossier> <modèle> [début fin]."""
+import importlib, json, subprocess, sys
+S, MODEL = sys.argv[1], sys.argv[2]
+sys.path.insert(0, S)
+geo = importlib.import_module(MODEL.lower() + '_geo')
+for variant in ('full', 'base'):
+    json.dump(geo.build(variant), open(f'{S}/{MODEL.lower()}_{variant}.json', 'w'))
+LIVERIES = {'Hayate': ([244, 240, 230], [214, 40, 52], [110, 200, 245]),
+            'Hoshi': ([40, 70, 200], [250, 200, 40], [235, 235, 240])}
+liv = LIVERIES.get(MODEL, LIVERIES['Hayate'])
+shots = [
+    ('avant34', 'full', liv[0], [-11.5, 2.4, -19], 'sable'),
+    ('profil', 'base', liv[1], [-26, 1.2, 0.5], 'terre'),
+    ('arriere34', 'full', liv[2], [13, 4.5, 19], 'asphalte'),
+]
+a, b = (int(sys.argv[3]), int(sys.argv[4])) if len(sys.argv) > 4 else (0, 3)
+for name, variant, color, eye, ground in shots[a:b]:
+    cfg = dict(mesh=f'{S}/{MODEL.lower()}_{variant}.json', out=f'{S}/out/{MODEL.lower()}_{name}.png', mode='anime', livery=color, eye=eye,
+               ground=S + '/tex/' + ground + '.png', rim=[238, 238, 242])
+    subprocess.run(['python3', '-I', S + '/render_mesh.py', json.dumps(cfg)], check=True)

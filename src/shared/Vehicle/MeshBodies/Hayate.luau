@@ -1,6 +1,6 @@
 --!nocheck
 --[[
-	Hayate.luau (généré : assets/meshes/hayate/source/export_luau.py)
+	Hayate.luau (généré : assets/meshes/source/export_luau.py)
 	La Hayate faite dans Blender (assets/meshes/hayate) : chaque pièce du
 	modèle, telle que l'outil d'import (tools/import-car.luau) doit la
 	trouver et la ranger. Repère du châssis (X à droite, Y en haut, l'avant

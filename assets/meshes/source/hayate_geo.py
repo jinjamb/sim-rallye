@@ -23,6 +23,14 @@ BUMPER_F = -5.85    # jointure bouclier / ailes / capot
 BUMPER_R = 5.85
 DOOR_SPLIT = 0.05   # porte avant / porte arrière
 DOOR_REAR = 2.55    # fin de la porte arrière
+BODY_HW = 2.78      # demi-largeur de la caisse entre les roues
+FLARE_HW = 3.32     # demi-largeur aux ailes (caissons)
+FLARE_LEN = 1.62    # demi-longueur des ailes autour de chaque roue
+FLARE_RAMP = 0.0    # longueur du pan qui raccorde l'aile à la caisse (0 : marche franche)
+# Habitacle : pied et dessus, demi-largeurs, pare-brise et lunette.
+LAMP_Y = -0.52  # hauteur de la rampe de phares (option de bouclier)
+TAIL_GARNISH = (-1.0, 1.0, -0.05, 0.38)  # bandeau noir arrière : x0, x1, y0, y1
+CABIN = dict(yb=0.56, yr=2.28, hwb=2.45, hwr=2.1, zf_top=-0.75, zr_top=2.6, zr_base=DECK_FRONT + 0.02)
 
 
 def smooth(t):
@@ -33,10 +41,13 @@ def smooth(t):
 def half_width(z):
     """Demi-largeur (vue de dessus) : un seul pan coupé aux quatre coins, et
     des ailes en marche franche sur les roues (pas de courbe douce)."""
-    hw = 2.78
+    hw = BODY_HW
     for wz in WHEEL_Z:
-        if abs(z - wz) <= 1.62:
-            hw = 3.32
+        d = abs(z - wz)
+        if d <= FLARE_LEN:
+            hw = FLARE_HW
+        elif FLARE_RAMP > 0 and d < FLARE_LEN + FLARE_RAMP:
+            hw = max(hw, FLARE_HW - (FLARE_HW - BODY_HW) * (d - FLARE_LEN) / FLARE_RAMP)
     if z < NOSE_Z + 0.45:
         hw -= 0.42 * (1 - (z - NOSE_Z) / 0.45)
     if z > TAIL_Z - 0.4:
@@ -76,7 +87,8 @@ def stations():
     for wz in WHEEL_Z:
         for k in range(-ARCH_SEG, ARCH_SEG + 1):
             zs.append(wz + ARCH_R * math.sin(math.pi / 2 * k / ARCH_SEG) * 0.999)
-        zs += [wz - 1.62, wz + 1.62, wz - 1.6201, wz + 1.6201]
+        L, R2 = FLARE_LEN, FLARE_LEN + FLARE_RAMP
+        zs += [wz - L, wz + L, wz - R2, wz + R2] if FLARE_RAMP > 0 else [wz - L, wz + L, wz - L - 0.0001, wz + L + 0.0001]
     zs = sorted(set(round(z, 4) for z in zs if NOSE_Z <= z <= TAIL_Z))
     return zs
 
@@ -251,10 +263,10 @@ def lower_body(b):
 
 def cabin(b):
     """Habitacle : pare-brise, toit, montants, vitres, lunette."""
-    yb, yr = 0.56, 2.28
-    hwb, hwr = 2.45, 2.1
-    zf_base, zf_top = HOOD_REAR - 0.02, -0.75
-    zr_top, zr_base = 2.6, DECK_FRONT + 0.02
+    yb, yr = CABIN['yb'], CABIN['yr']
+    hwb, hwr = CABIN['hwb'], CABIN['hwr']
+    zf_base, zf_top = HOOD_REAR - 0.02, CABIN['zf_top']
+    zr_top, zr_base = CABIN['zr_top'], CABIN['zr_base']
 
     def ring(zbase, ztop):
         # côté droit : base, haut du flanc, bord du toit, milieu du toit
@@ -344,7 +356,7 @@ def details(b):
         b.face('TailLight_' + ('R' if s > 0 else 'L'), 'Tail', tl if s > 0 else tl[::-1])
         # rétroviseurs
         b.prism('Mirror_' + ('R' if s > 0 else 'L'), 'Body',
-                [(s * 2.3, 0.62), (s * 2.78, 0.66), (s * 2.78, 0.92), (s * 2.32, 0.9)][:: (1 if s > 0 else -1)], -1.95, -1.65)
+                [(s * 2.3, 0.62), (s * BODY_HW, 0.66), (s * BODY_HW, 0.92), (s * 2.32, 0.9)][:: (1 if s > 0 else -1)], -1.95, -1.65)
         # bas de caisse noirs (jupes)
         if False: b.prism('Skirt_' + ('R' if s > 0 else 'L'), 'Trim',
                 [(s * 2.78, -1.46), (s * 2.98, -1.46), (s * 2.98, -1.1), (s * 2.9, -1.1)][:: (1 if s > 0 else -1)], -2.62, 2.62)
@@ -362,7 +374,7 @@ def ink(b):
     # Lèvres noires autour des passages de roue
     for wz in WHEEL_Z:
         for sd in (1, -1):
-            x = sd * (3.32 + T)
+            x = sd * (FLARE_HW + T)
             inner, outer = [], []
             for k in range(-ARCH_SEG, ARCH_SEG + 1):
                 th = math.pi / 2 * k / ARCH_SEG
@@ -401,14 +413,16 @@ def ink(b):
     topline('Ink_Trunk', BUMPER_R - 0.1, BUMPER_R - 0.1, -2.25, 2.25)
     # Bas de caisse noir entre les roues, poignées
     for sd in (1, -1):
-        x = sd * (2.78 + T)
-        b.face('Rocker_' + ('R' if sd > 0 else 'L'), 'Trim', [(x, BOTTOM, -2.43), (x, BOTTOM, 2.43), (x, BOTTOM + 0.45, 2.43), (x, BOTTOM + 0.45, -2.43)])
+        x = sd * (BODY_HW + T)
+        rz = WHEEL_Z[1] - FLARE_LEN - FLARE_RAMP
+        b.face('Rocker_' + ('R' if sd > 0 else 'L'), 'Trim', [(x, BOTTOM, -rz), (x, BOTTOM, rz), (x, BOTTOM + 0.45, rz), (x, BOTTOM + 0.45, -rz)])
         for zc in (-0.6, 1.9):
             yh = top_y(zc) - 0.32
             b.face('Handle_' + ('F' if zc < 0 else 'R') + ('R' if sd > 0 else 'L'), 'Trim', [(x, yh, zc - 0.28), (x, yh, zc + 0.28), (x, yh + 0.1, zc + 0.28), (x, yh + 0.1, zc - 0.28)])
     # Bandeau arrière noir entre les feux
     tz = TAIL_Z + 0.02
-    b.face('TailGarnish', 'Trim', [(-1.0, -0.05, tz), (1.0, -0.05, tz), (1.0, 0.38, tz), (-1.0, 0.38, tz)])
+    x0, x1, y0, y1 = TAIL_GARNISH
+    b.face('TailGarnish', 'Trim', [(x0, y0, tz), (x1, y0, tz), (x1, y1, tz), (x0, y1, tz)])
 
 
 def hood_scoop(b):
@@ -443,9 +457,10 @@ def rally_wing(b):
 def rally_lamps(b):
     """Variante de bouclier : rampe de quatre phares longue portée."""
     nz = NOSE_Z
-    b.prism('LampPod', 'Trim', [(-2.0, -0.82), (2.0, -0.82), (2.0, -0.22), (-2.0, -0.22)][::-1], nz - 0.32, nz - 0.08)
+    y = LAMP_Y
+    b.prism('LampPod', 'Trim', [(-2.0, y - 0.3), (2.0, y - 0.3), (2.0, y + 0.3), (-2.0, y + 0.3)][::-1], nz - 0.32, nz - 0.08)
     for k, x in enumerate((-1.5, -0.5, 0.5, 1.5)):
-        b.disc('RallyLamp', 'Lamp', (x, -0.52, nz - 0.36), 0.42, 0.12, 'z', n=8)
+        b.disc('RallyLamp', 'Lamp', (x, y, nz - 0.36), 0.42, 0.12, 'z', n=8)
 
 
 def build(variant='full'):

@@ -1,7 +1,8 @@
 import json, sys, bpy
-S = sys.argv[-1]
-import importlib.util
-spec = importlib.util.spec_from_file_location('g', S + '/hayate_geo.py'); g = importlib.util.module_from_spec(spec); spec.loader.exec_module(g)
+S, MODEL = sys.argv[-2], sys.argv[-1]
+import importlib
+sys.path.insert(0, S)
+g = importlib.import_module(MODEL.lower() + '_geo')
 
 bpy.ops.wm.read_factory_settings(use_empty=True)
 COLORS = {'Body': (0.93, 0.92, 0.88), 'Trim': (0.028, 0.03, 0.035), 'Glass': (0.02, 0.03, 0.07),
@@ -15,9 +16,9 @@ for k, c in COLORS.items():
         bsdf.inputs['Emission Color'].default_value = (*c, 1); bsdf.inputs['Emission Strength'].default_value = 1.5
     mats[k] = m
 
-OPTIONS = {'HoodScoop': 'Hood_Scoop', 'HoodScoopMouth': 'Hood_Scoop', 'HoodVents': 'Hood_Scoop',
+OPTIONS = {'HoodScoop': 'Hood_Scoop', 'HoodScoopMouth': 'Hood_Scoop', 'HoodVents': 'Hood_Scoop', 'GrilleBar': None,
            'Wing': 'Wing_Rally', 'WingBlade': 'Wing_Rally', 'LampPod': 'Bumper_Lamps', 'RallyLamp': 'Bumper_Lamps'}
-root = bpy.data.collections.new('Hayate'); bpy.context.scene.collection.children.link(root)
+root = bpy.data.collections.new(MODEL); bpy.context.scene.collection.children.link(root)
 cols = {}
 def col(name):
     if name not in cols:
@@ -39,8 +40,7 @@ for p in g.build('full'):
     ob['Paint'] = p['paint']
     col('Option_' + opt if opt else ('Glass' if p['paint'] == 'Glass' else 'Body')).objects.link(ob)
 
-import os; os.makedirs(S + '/export', exist_ok=True)
-bpy.ops.wm.save_as_mainfile(filepath=S + '/export/Hayate.blend')
-bpy.ops.export_scene.gltf(filepath=S + '/export/Hayate.glb', export_format='GLB', export_yup=True, export_apply=True)
-bpy.ops.export_scene.fbx(filepath=S + '/export/Hayate.fbx', axis_forward='Z', axis_up='Y', apply_unit_scale=True, global_scale=1.0, mesh_smooth_type='FACE')
+bpy.ops.wm.save_as_mainfile(filepath=S + '/export/' + MODEL + '.blend')
+bpy.ops.export_scene.gltf(filepath=S + '/export/' + MODEL + '.glb', export_format='GLB', export_yup=True, export_apply=True)
+bpy.ops.export_scene.fbx(filepath=S + '/export/' + MODEL + '.fbx', axis_forward='Z', axis_up='Y', apply_unit_scale=True, global_scale=1.0, mesh_smooth_type='FACE')
 print('objets', len(bpy.data.objects), 'triangles', sum(sum(len(pl.vertices) - 2 for pl in o.data.polygons) for o in bpy.data.objects))

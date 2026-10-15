@@ -26,7 +26,7 @@
 	Le compte rendu (pièces trouvées, manquantes, en trop) s'affiche dans la Sortie.
 ]]
 
-local BODY = "Hayate"
+local BODY = "Hayate" -- ou "Hoshi"
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Selection = game:GetService("Selection")
@@ -45,14 +45,32 @@ if not selected then
 	error("[import-car] Sélectionne d'abord le modèle importé dans l'Explorateur.")
 end
 
--- Les pièces importées, par nom (sans les suffixes ajoutés à l'import : « .001 »).
+local known: { [string]: boolean } = {}
+for _, info in ipairs(data.Parts) do
+	known[info.Name] = true
+end
+
+-- Le nom d'une pièce importée : sans les suffixes ajoutés à l'import
+-- (« .001 ») ni le préfixe des options dans Blender (« Opt_Hood_Scoop_ »).
+local function canonical(name: string): string
+	name = string.gsub(name, "%.%d+$", "")
+	if known[name] then
+		return name
+	end
+	local stripped = string.match(name, "^Opt_[^_]+_[^_]+_(.+)$")
+	if stripped and known[stripped] then
+		return stripped
+	end
+	return name
+end
+
 local byName: { [string]: MeshPart } = {}
 local extras = {}
 local candidates = selected:GetDescendants()
 table.insert(candidates, selected)
 for _, item in ipairs(candidates) do
 	if item:IsA("MeshPart") then
-		local name = string.gsub(item.Name, "%.%d+$", "")
+		local name = canonical(item.Name)
 		if byName[name] then
 			table.insert(extras, item.Name .. " (en double)")
 		else
@@ -63,9 +81,7 @@ end
 
 local pairsFound = {}
 local missing = {}
-local known: { [string]: boolean } = {}
 for _, info in ipairs(data.Parts) do
-	known[info.Name] = true
 	local part = byName[info.Name]
 	if part then
 		table.insert(pairsFound, { Part = part, Info = info })
