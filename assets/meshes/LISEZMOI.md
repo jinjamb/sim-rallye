@@ -58,7 +58,7 @@ choix du joueur :
 - bas de caisse : jupes (`Opt_Skirts_Side_`) ou lames (`Opt_Skirts_Blade_`) ;
 - diffuseur route (`Opt_Diffuser_Road_`) ou course (`Opt_Diffuser_Race_`).
 Les autres accessoires (antenne, bavettes, filet...) restent en pièces Roblox,
-posées sur le maillage. `accessoires_1.png` et `accessoires_2.png` : le rendu.
+posées sur le maillage. `accessoires_1.png` à `accessoires_4.png` : le rendu sur les 16 modèles.
 
 ## Régénérer
 
