@@ -104,6 +104,7 @@ export type Record = {
 	DailyXp: number, -- XP gagnée aux défis du jour (Daily.luau)
 	BonusXp: number, -- XP en plus des événements double XP (XpEvents.luau)
 	ChampionshipXp: number, -- XP des rallyes terminés (mode championnat)
+	Rallies: number, -- rallyes terminés (mode championnat)
 	Medals: { [string]: number },
 	Lessons: { [string]: number }, -- médaille (0 à 4) par leçon de l'école (Lessons.luau)
 }
@@ -141,6 +142,7 @@ export type Snapshot = {
 	Style: number,
 	StageRuns: number,
 	Wins: number,
+	Rallies: number,
 	Medals: { [string]: number },
 	Lessons: { [string]: number },
 }
@@ -158,9 +160,21 @@ function Progression.Snapshot(record: Record): Snapshot
 		Style = record.Style,
 		StageRuns = record.StageRuns,
 		Wins = record.Wins,
+		Rallies = record.Rallies,
 		Medals = record.Medals,
 		Lessons = record.Lessons,
 	}
+end
+
+-- Tracés où le joueur a l'or ou mieux ("stage", la meilleure des spéciales, n'est pas un tracé).
+function Progression.GoldMedals(snapshot: Snapshot): number
+	local count = 0
+	for track, tier in pairs(snapshot.Medals) do
+		if track ~= Stages.BEST_MEDAL_KEY and tier >= 3 then
+			count += 1
+		end
+	end
+	return count
 end
 
 -- Cosmétiques à débloquer ---------------------------------------------------------
@@ -176,6 +190,8 @@ export type Requirement = {
 	AnyMedal: number?,
 	Wins: number?,
 	Style: number?,
+	GoldMedals: number?, -- médailles d'or (ou mieux) sur autant de tracés différents
+	Rallies: number?, -- rallyes terminés en mode championnat
 	-- Posséder cet objet du catalogue (pièce gagnée à un tirage : Items/Parts.luau).
 	Item: string?,
 }
@@ -242,21 +258,23 @@ Progression.ITEMS = {
 	{ Kind = "Sponsor", Index = 11, Requirement = { Item = "part_sponsor_neon" } }, -- Neon Rally
 	{ Kind = "Sponsor", Index = 12, Requirement = { Item = "part_sponsor_dragon" } }, -- Dragon Brakes
 	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
-	{ Kind = "Body", Index = 3, Requirement = { Level = 6 } }, -- Yama
-	{ Kind = "Body", Index = 4, Requirement = { Level = 10 } }, -- Raijin
-	{ Kind = "Body", Index = 5, Requirement = { Level = 4 } }, -- Hayate
-	{ Kind = "Body", Index = 6, Requirement = { Level = 8 } }, -- Hoshi
-	{ Kind = "Body", Index = 7, Requirement = { Level = 5 } }, -- Tora
-	{ Kind = "Body", Index = 8, Requirement = { Level = 14 } }, -- Kumo
-	{ Kind = "Body", Index = 9, Requirement = { Level = 18 } }, -- Ryu
-	{ Kind = "Body", Index = 10, Requirement = { Level = 12 } }, -- Tsubasa
-	{ Kind = "Body", Index = 11, Requirement = { Level = 9 } }, -- Requin
+	-- Environ un modèle tous les deux niveaux ; les deux légendes du Groupe B
+	-- se gagnent par un exploit : Blitz (or sur 3 tracés), Cuneo (3 rallyes).
+	{ Kind = "Body", Index = 3, Requirement = { Level = 9 } }, -- Yama
+	{ Kind = "Body", Index = 4, Requirement = { Level = 13 } }, -- Raijin
+	{ Kind = "Body", Index = 5, Requirement = { Level = 3 } }, -- Hayate
+	{ Kind = "Body", Index = 6, Requirement = { Level = 10 } }, -- Hoshi
+	{ Kind = "Body", Index = 7, Requirement = { Level = 4 } }, -- Tora
+	{ Kind = "Body", Index = 8, Requirement = { Level = 19 } }, -- Kumo
+	{ Kind = "Body", Index = 9, Requirement = { Level = 27 } }, -- Ryu
+	{ Kind = "Body", Index = 10, Requirement = { Level = 17 } }, -- Tsubasa
+	{ Kind = "Body", Index = 11, Requirement = { Level = 12 } }, -- Requin
 	{ Kind = "Body", Index = 12, Requirement = { Level = 7 } }, -- Lynx
 	{ Kind = "Body", Index = 13, Requirement = { Level = 6 } }, -- Griffe
-	{ Kind = "Body", Index = 14, Requirement = { Level = 11 } }, -- Furia
-	{ Kind = "Body", Index = 15, Requirement = { Level = 16 } }, -- Blitz
-	{ Kind = "Body", Index = 16, Requirement = { Level = 14 } }, -- Fauve
-	{ Kind = "Body", Index = 17, Requirement = { Level = 18 } }, -- Cuneo
+	{ Kind = "Body", Index = 14, Requirement = { Level = 15 } }, -- Furia
+	{ Kind = "Body", Index = 15, Requirement = { GoldMedals = 3 } }, -- Blitz
+	{ Kind = "Body", Index = 16, Requirement = { Level = 21 } }, -- Fauve
+	{ Kind = "Body", Index = 17, Requirement = { Rallies = 3 } }, -- Cuneo
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye
@@ -347,6 +365,12 @@ function Progression.Meets(requirement: Requirement, snapshot: Snapshot?, owned:
 	if requirement.Style and snapshot.Style < requirement.Style then
 		return false
 	end
+	if requirement.GoldMedals and Progression.GoldMedals(snapshot) < requirement.GoldMedals then
+		return false
+	end
+	if requirement.Rallies and (snapshot.Rallies or 0) < requirement.Rallies then
+		return false
+	end
 	return true
 end
 
@@ -409,6 +433,14 @@ function Progression.Describe(requirement: Requirement): string
 	end
 	if requirement.Style then
 		table.insert(parts, Format.Thousands(requirement.Style) .. " points de style")
+	end
+	if requirement.GoldMedals then
+		local n = requirement.GoldMedals
+		table.insert(parts, string.format("Or sur %d tracé%s différent%s", n, if n > 1 then "s" else "", if n > 1 then "s" else ""))
+	end
+	if requirement.Rallies then
+		local n = requirement.Rallies
+		table.insert(parts, string.format("%d rallye%s terminé%s en championnat", n, if n > 1 then "s" else "", if n > 1 then "s" else ""))
 	end
 	return table.concat(parts, " et ")
 end
