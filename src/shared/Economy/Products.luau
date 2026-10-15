@@ -237,7 +237,8 @@ function Products.ForUnlock(requirement: any): Product?
 		return nil -- une pièce de tirage s'achète comme objet (ForItem)
 	end
 	local level = requirement.Level
-	if level and not requirement.Medal and not requirement.AnyMedal and not requirement.Wins and not requirement.Style then
+	if level and not requirement.Medal and not requirement.AnyMedal and not requirement.Wins and not requirement.Style
+		and not requirement.GoldMedals and not requirement.Rallies then
 		return Products.TierFor(if level <= 4 then 49 elseif level <= 10 then 99 else 199)
 	end
 	return Products.TierFor(199)
