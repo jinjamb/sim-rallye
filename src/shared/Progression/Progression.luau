@@ -259,7 +259,8 @@ Progression.ITEMS = {
 	{ Kind = "Sponsor", Index = 12, Requirement = { Item = "part_sponsor_dragon" } }, -- Dragon Brakes
 	-- Modèles (CarBodies.LIST) ; Kaze (2) est libre : c'est la voiture de départ.
 	-- Environ un modèle tous les deux niveaux ; les deux légendes du Groupe B
-	-- se gagnent par un exploit : Blitz (or sur 3 tracés), Cuneo (3 rallyes).
+	-- se gagnent en plus par un exploit : Blitz (niveau 24 et or sur 3 tracés),
+	-- Cuneo (niveau 30 et 3 rallyes).
 	{ Kind = "Body", Index = 3, Requirement = { Level = 9 } }, -- Yama
 	{ Kind = "Body", Index = 4, Requirement = { Level = 13 } }, -- Raijin
 	{ Kind = "Body", Index = 5, Requirement = { Level = 3 } }, -- Hayate
@@ -272,9 +273,9 @@ Progression.ITEMS = {
 	{ Kind = "Body", Index = 12, Requirement = { Level = 7 } }, -- Lynx
 	{ Kind = "Body", Index = 13, Requirement = { Level = 6 } }, -- Griffe
 	{ Kind = "Body", Index = 14, Requirement = { Level = 15 } }, -- Furia
-	{ Kind = "Body", Index = 15, Requirement = { GoldMedals = 3 } }, -- Blitz
+	{ Kind = "Body", Index = 15, Requirement = { Level = 24, GoldMedals = 3 } }, -- Blitz
 	{ Kind = "Body", Index = 16, Requirement = { Level = 21 } }, -- Fauve
-	{ Kind = "Body", Index = 17, Requirement = { Rallies = 3 } }, -- Cuneo
+	{ Kind = "Body", Index = 17, Requirement = { Level = 30, Rallies = 3 } }, -- Cuneo
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye
