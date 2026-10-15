@@ -3,6 +3,14 @@ import sys
 from PIL import Image, ImageDraw, ImageFont
 B = sys.argv[1]
 INFO = {
+    'kaze': ('Kaze', 'voiture de départ · Rally4, Rally2, WRC'),
+    'yama': ('Yama', 'berline des années 70 · Rally2, Groupe B'),
+    'raijin': ('Raijin', 'coupé en coin des années 80 · Groupe B'),
+    'hayate': ('Hayate', 'berline façon Evo · Rally2, WRC, Groupe B'),
+    'hoshi': ('Hoshi', 'berline façon Impreza · Rally2, WRC'),
+    'tora': ('Tora', 'citadine compacte · Rally4, Rally2, WRC, Groupe B'),
+    'kumo': ('Kumo', 'bombe à moteur central · Groupe B'),
+    'ryu': ('Ryu', 'long coupé des années 80 · Groupe B'),
     'tsubasa': ('Tsubasa', 'inspiration : Toyota Yaris WRC'),
     'requin': ('Requin', 'inspiration : Citroën DS3 WRC'),
     'lynx': ('Lynx', 'inspiration : Peugeot 206 WRC'),
@@ -40,7 +48,31 @@ def sheet(m):
     return s.resize((w * 3 * 2 // 3, h * 2 // 3))
 
 
-if __name__ == '__main__':
+def grid(models, out, cols, title=None):
+    heros = [label(Image.open(f'{B}/out/{m}_avant34.png'), *INFO[m]) for m in models]
+    w, h = heros[0].size
+    rows = (len(heros) + cols - 1) // cols
+    top = 110 if title else 0
+    g = Image.new('RGB', (w * cols, h * rows + top), (24, 16, 40))
+    for i, im in enumerate(heros):
+        g.paste(im, ((i % cols) * w, top + (i // cols) * h))
+    if title:
+        d = ImageDraw.Draw(g)
+        d.text((30, 22), title, font=ImageFont.truetype(BOLD, 64), fill=(255, 255, 255))
+    g.resize((w * cols // 2, (h * rows + top) // 2)).save(out)
+
+
+if __name__ == '__main__' and sys.argv[2] == 'toutes':
+    jeu = ['kaze', 'yama', 'raijin', 'hayate', 'hoshi', 'tora', 'kumo', 'ryu']
+    legendes = ['tsubasa', 'requin', 'lynx', 'griffe', 'furia', 'blitz', 'fauve', 'cuneo']
+    for m in jeu:
+        sheet(m).save(f'{B}/out/{m}_planche.png')
+    grid(jeu, f'{B}/out/toutes_jeu.png', 4, 'Les carrosseries des 32 voitures du jeu')
+    grid(legendes, f'{B}/out/toutes_legendes.png', 4, 'Les modèles inspirés des légendes (garage)')
+    a, c = Image.open(f'{B}/out/toutes_jeu.png'), Image.open(f'{B}/out/toutes_legendes.png')
+    t = Image.new('RGB', (a.width, a.height + c.height), (24, 16, 40))
+    t.paste(a, (0, 0)); t.paste(c, (0, a.height)); t.save(f'{B}/out/toutes.png')
+elif __name__ == '__main__':
     models = sys.argv[2].split(',')
     for m in models:
         sheet(m).save(f'{B}/out/{m}_planche.png')
