@@ -249,6 +249,12 @@ Progression.ITEMS = {
 	{ Kind = "Body", Index = 7, Requirement = { Level = 5 } }, -- Tora
 	{ Kind = "Body", Index = 8, Requirement = { Level = 14 } }, -- Kumo
 	{ Kind = "Body", Index = 9, Requirement = { Level = 18 } }, -- Ryu
+	{ Kind = "Body", Index = 10, Requirement = { Level = 12 } }, -- Tsubasa
+	{ Kind = "Body", Index = 11, Requirement = { Level = 9 } }, -- Requin
+	{ Kind = "Body", Index = 12, Requirement = { Level = 7 } }, -- Lynx
+	{ Kind = "Body", Index = 13, Requirement = { Level = 6 } }, -- Griffe
+	{ Kind = "Body", Index = 14, Requirement = { Level = 11 } }, -- Furia
+	{ Kind = "Body", Index = 15, Requirement = { Level = 16 } }, -- Blitz
 	-- Pièces (CarBodies.SLOTS). « Item » : seulement aux tirages (Items/Parts.luau).
 	{ Kind = "Wing", Index = 2, Requirement = { Level = 2 } }, -- Becquet
 	{ Kind = "Wing", Index = 3, Requirement = { Level = 5 } }, -- Aileron rallye

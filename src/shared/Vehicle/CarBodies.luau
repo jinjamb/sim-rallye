@@ -18,7 +18,14 @@
 		            antibrouillards (façon Impreza) ;
 		7 Tora      (« tigre ») citadine compacte moderne ;
 		8 Kumo      (« nuage ») petite bombe à moteur central des années 80 ;
-		9 Ryu       (« dragon ») coupé long et bas, quatre phares ronds.
+		9 Ryu       (« dragon ») coupé long et bas, quatre phares ronds ;
+	et, inspirés des légendes du rallye, faits dans Blender (CarMeshes) :
+		10 Tsubasa  (« aile ») compacte de WRC moderne, aéro démesurée (Yaris WRC) ;
+		11 Requin   compacte au toit flottant, montant en aileron de requin (DS3 WRC) ;
+		12 Lynx     petite compacte aux yeux de félin (206 WRC) ;
+		13 Griffe   compacte moderne aux feux en griffes (208) ;
+		14 Furia    cinq portes très carrée, quatre phares carrés (Delta Integrale) ;
+		15 Blitz    coupé Groupe B au long nez, aileron géant (Quattro S1).
 	Les voitures (CarModels.luau) ont chacune leur modèle et leurs pièces ;
 	le joueur peut garder ceux de sa voiture (Livery : Body = 0) ou choisir
 	les siens.
@@ -602,6 +609,83 @@ local function ryu(): Body
 	}
 end
 
+--[[
+	MODÈLES INSPIRÉS DES LÉGENDES DU RALLYE, faits dans Blender (CarMeshes.luau,
+	assets/meshes) : leur vrai look vient du maillage importé. Ici, une version
+	en pièces toute simple, aux mêmes mesures, le temps de l'import.
+]]
+local SLOTS_ALL = { "Wing", "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" }
+local SLOTS_FIXED_WING = { "Bumper", "Hood", "Flares", "Rims", "Mirrors", "Roof", "Skirts", "Diffuser", "Exhaust", "Mudflaps", "Moustache", "Grille", "Canards", "SunStrip", "HoodPins", "Tow", "LightCovers", "SideVents", "WindowNet" }
+
+local function legend(id: string, name: string, description: string, m: Mounts, c: Cabin, rearZ: number, fixedWing: boolean): Body
+	local list: { Spec } = {}
+	lowerBody(list, m)
+	cabin(list, c)
+	slopedRear(list, c, rearZ, "Glass")
+	pair(list, function(s)
+		return block("HeadLight", Vector3.new(1.0, 0.3, 0.12), at(s * 1.75, m.BeltY - 0.45, m.NoseZ - 0.04), "Head")
+	end)
+	add(list, block("Grille", Vector3.new(2.4, 0.55, 0.12), at(0, m.BeltY - 1.15, m.NoseZ - 0.04), "Trim"))
+	pair(list, function(s)
+		return block("TailLight", Vector3.new(0.9, 0.36, 0.12), at(s * 2.0, m.BeltY - 0.45, m.TailZ + 0.04), "Tail")
+	end)
+	return {
+		Id = id,
+		Name = name,
+		Description = description,
+		Custom = true,
+		Slots = if fixedWing then SLOTS_FIXED_WING else SLOTS_ALL,
+		Mounts = m,
+		Cabin = c,
+		Parts = list,
+	}
+end
+
+local function hatch(noseZ: number, tailZ: number, beltY: number, hoodFrontZ: number, hoodRearZ: number, roofRearZ: number, topY: number): Mounts
+	return {
+		NoseZ = noseZ, TailZ = tailZ, BottomY = -1.45, BeltY = beltY, HalfWidth = 3.0,
+		HoodFrontZ = hoodFrontZ, HoodRearZ = hoodRearZ, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Roof", Z = roofRearZ, Y = topY, Width = 4.6 },
+		NoseSlope = { Length = 0.8, Drop = 0.3 },
+	}
+end
+
+local function tsubasa(): Body
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.6, TopY = 2.36, WindshieldFrontZ = -2.3, RoofFrontZ = -0.55, RoofRearZ = 4.35 }
+	return legend("tsubasa", "Tsubasa", "compacte de WRC moderne, aéro démesurée (façon Yaris WRC)", hatch(-6.35, 5.55, 0.6, -5.5, -2.3, 4.35, 2.36), c, 5.0, true)
+end
+
+local function requin(): Body
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.62, TopY = 2.34, WindshieldFrontZ = -2.35, RoofFrontZ = -0.45, RoofRearZ = 4.3 }
+	return legend("requin", "Requin", "compacte au toit flottant et montant en aileron de requin (façon DS3 WRC)", hatch(-6.3, 5.6, 0.62, -5.45, -2.35, 4.3, 2.34), c, 4.95, false)
+end
+
+local function lynx(): Body
+	local c: Cabin = { HalfWidth = 2.33, BaseY = 0.6, TopY = 2.3, WindshieldFrontZ = -2.3, RoofFrontZ = -0.6, RoofRearZ = 4.1 }
+	return legend("lynx", "Lynx", "petite compacte aux yeux de félin (façon 206 WRC)", hatch(-6.2, 5.45, 0.6, -5.4, -2.3, 4.1, 2.3), c, 4.85, false)
+end
+
+local function griffe(): Body
+	local c: Cabin = { HalfWidth = 2.37, BaseY = 0.66, TopY = 2.34, WindshieldFrontZ = -2.3, RoofFrontZ = -0.5, RoofRearZ = 4.2 }
+	return legend("griffe", "Griffe", "compacte moderne aux feux en griffes (façon 208)", hatch(-6.25, 5.5, 0.66, -5.45, -2.3, 4.2, 2.34), c, 4.9, false)
+end
+
+local function furia(): Body
+	local c: Cabin = { HalfWidth = 2.43, BaseY = 0.72, TopY = 2.46, WindshieldFrontZ = -2.5, RoofFrontZ = -1.05, RoofRearZ = 4.75 }
+	return legend("furia", "Furia", "cinq portes très carrée, quatre phares carrés (façon Delta Integrale)", hatch(-6.3, 5.7, 0.72, -5.6, -2.5, 4.75, 2.46), c, 5.15, false)
+end
+
+local function blitz(): Body
+	local m: Mounts = {
+		NoseZ = -7.0, TailZ = 6.1, BottomY = -1.45, BeltY = 0.62, HalfWidth = 3.0,
+		HoodFrontZ = -5.9, HoodRearZ = -2.0, HoodHalfWidth = 2.0,
+		Wing = { Mount = "Deck", Z = 5.4, Y = 0.78, Width = 5.6 },
+		NoseSlope = { Length = 1.1, Drop = 0.4 },
+	}
+	local c: Cabin = { HalfWidth = 2.35, BaseY = 0.62, TopY = 2.22, WindshieldFrontZ = -2.0, RoofFrontZ = -0.3, RoofRearZ = 2.45 }
+	return legend("blitz", "Blitz", "coupé Groupe B au long nez et aileron géant (façon Quattro S1)", m, c, 4.0, true)
+end
+
 CarBodies.LIST = {
 	{
 		Id = "origine",
@@ -620,6 +704,12 @@ CarBodies.LIST = {
 	tora(),
 	kumo(),
 	ryu(),
+	tsubasa(),
+	requin(),
+	lynx(),
+	griffe(),
+	furia(),
+	blitz(),
 } :: { Body }
 
 --------------------------------------------------------------------------------
