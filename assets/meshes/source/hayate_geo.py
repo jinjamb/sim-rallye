@@ -47,6 +47,7 @@ HANDLES = (-0.6, 1.9)    # poignées (Z)
 EXTRA_Z = ()             # sections en plus (cassures du dessus)
 LAMP_Y = -0.52  # hauteur de la rampe de phares (option de bouclier)
 TAIL_GARNISH = (-1.0, 1.0, -0.05, 0.38)  # bandeau noir arrière : x0, x1, y0, y1
+SCOOP = (0.55, 0.3, 0.0)  # écope de toit : demi-largeur, hauteur, recul vers l'arrière
 CABIN = dict(yb=0.56, yr=2.28, hwb=2.45, hwr=2.1, zf_top=-0.75, zr_top=2.6, zr_base=DECK_FRONT + 0.02)
 
 
@@ -593,9 +594,10 @@ def accessories(b):
     roof_y = c['yr'] + c.get('crown', 0.0)  # dessus du toit (au milieu)
     zf, zr = c['zf_top'], c['zr_top']
     # --- Toit, option 2 : écope (bouche noire vers l'avant, dos qui redescend)
-    z0 = zf + 0.25
+    w0, h, back = SCOOP
+    w1 = w0 - 0.07
+    z0 = zf + 0.25 + back
     z1 = min(zr - 0.2, z0 + 1.3)
-    w0, w1, h = 0.55, 0.48, 0.3
     y0 = roof_y - 0.02
     top_front = [(-w0, y0 + h, z0), (w0, y0 + h, z0)]
     b.face('AccRoofScoop', 'Body', [(-w0, y0 + h, z0), (w0, y0 + h, z0), (w1, y0 + 0.02, z1), (-w1, y0 + 0.02, z1)])
