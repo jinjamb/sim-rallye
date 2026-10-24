@@ -1,0 +1,312 @@
+<title>Palette Sim Rallye</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bangers&family=Montserrat:ital,wght@1,700;1,900&family=Nunito:wght@600;700;800&family=Roboto+Mono:ital,wght@1,700&family=Noto+Sans+JP:wght@900&display=swap">
+<style>
+/* Mise en page : une planche de charte façon retransmission WRC dessinée en anime,
+   sur la nuit indigo du jeu ; étiquettes penchées, ombres portées roses, pas de dégradé. */
+:root {
+  color-scheme: dark;
+  --ink: #0C0A1C;
+  --panel: #181434;
+  --panel-2: #2E285E;
+  --text: #FFFBF6;
+  --dim: #AAA4D4;
+  --sakura: #FF2E7E;
+  --yellow: #FFDE28;
+  --cyan: #00D6FF;
+  --green: #3CE882;
+  --red: #FF4050;
+  --purple: #B86EFF;
+  --line: rgba(255, 255, 255, 0.16);
+  --f-display: "Montserrat", "Arial Black", system-ui, sans-serif;
+  --f-body: "Nunito", "Segoe UI", system-ui, sans-serif;
+  --f-digits: "Roboto Mono", ui-monospace, "Courier New", monospace;
+  --f-sfx: "Bangers", "Impact", "Arial Black", sans-serif;
+  --f-kana: "Noto Sans JP", "Hiragino Sans", "Yu Gothic", sans-serif;
+  --shadow: 5px;
+  --slant: -16deg;
+}
+body {
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--f-body);
+  font-weight: 600;
+  font-size: 16px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-block: 40px 72px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 56px;
+}
+h1, h2, h3 { font-family: var(--f-display); font-style: italic; font-weight: 900; text-wrap: balance; margin: 0; text-transform: uppercase; }
+p { margin: 0; max-width: 65ch; }
+.dim { color: var(--dim); }
+
+/* En-tête */
+.hero { position: relative; display: grid; gap: 14px; padding-block: 12px; overflow: hidden; }
+.hero .kana {
+  position: absolute; right: -10px; top: -26px; font-family: var(--f-kana); font-weight: 900;
+  font-size: clamp(90px, 18vw, 200px); color: var(--panel-2); opacity: 0.55; line-height: 1; pointer-events: none; user-select: none;
+}
+.hero h1 { position: relative; font-size: clamp(48px, 9vw, 104px); line-height: 0.92; letter-spacing: -0.01em; }
+.hero h1 span { color: var(--sakura); }
+.stripes { position: relative; display: flex; gap: 8px; }
+.stripes i { display: block; height: 10px; transform: skewX(var(--slant)); }
+.stripes i:nth-child(1) { width: 140px; background: var(--sakura); }
+.stripes i:nth-child(2) { width: 70px; background: var(--yellow); }
+.stripes i:nth-child(3) { width: 34px; background: var(--cyan); }
+.hero p { position: relative; font-size: 18px; }
+
+/* Titres de section : étiquette penchée */
+.section { display: grid; gap: 20px; }
+.tag {
+  justify-self: start; display: inline-block; background: var(--sakura); color: #fff;
+  padding: 6px 22px; transform: skewX(var(--slant)); box-shadow: var(--shadow) var(--shadow) 0 var(--ink);
+}
+.tag h2 { transform: skewX(16deg); font-size: clamp(20px, 3vw, 26px); letter-spacing: 0.02em; }
+.section > p { color: var(--dim); }
+
+/* Nuanciers */
+.grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.grid.small { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); }
+.swatch {
+  display: grid; grid-template-rows: auto 1fr; background: var(--ink); border: 2px solid var(--line);
+  border-radius: 2px; text-align: left; color: var(--text); font: inherit; padding: 0; cursor: pointer;
+  box-shadow: var(--shadow) var(--shadow) 0 rgba(255, 46, 126, 0.55);
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.swatch:hover { transform: translate(-2px, -2px); box-shadow: calc(var(--shadow) + 2px) calc(var(--shadow) + 2px) 0 var(--sakura); }
+.swatch:focus-visible { outline: 3px solid var(--yellow); outline-offset: 3px; }
+.chip { height: 96px; border-bottom: 2px solid var(--ink); }
+.small .chip { height: 64px; }
+.meta { display: grid; gap: 2px; padding: 10px 12px 12px; }
+.name { font-family: var(--f-display); font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 15px; letter-spacing: 0.02em; }
+.hex { font-family: var(--f-digits); font-style: italic; font-weight: 700; font-size: 13px; color: var(--dim); }
+.role { font-size: 13px; color: var(--dim); }
+.copied .hex { color: var(--green); }
+.lock { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--yellow); }
+
+/* Polices */
+.type { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.type article { background: var(--ink); border: 2px solid var(--line); padding: 18px 20px 20px; display: grid; gap: 8px; min-width: 0; }
+.type .sample { font-size: 34px; line-height: 1.1; overflow-wrap: anywhere; }
+.type .use { font-size: 13px; color: var(--dim); }
+.type .label { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--yellow); }
+.s-display { font-family: var(--f-display); font-style: italic; font-weight: 900; text-transform: uppercase; }
+.s-body { font-family: var(--f-body); font-weight: 800; font-size: 26px !important; }
+.s-digits { font-family: var(--f-digits); font-style: italic; font-weight: 700; font-variant-numeric: tabular-nums; }
+.s-sfx { font-family: var(--f-sfx); font-size: 46px !important; letter-spacing: 0.03em; color: var(--yellow); -webkit-text-stroke: 1.5px var(--ink); text-shadow: 4px 4px 0 var(--sakura); }
+.s-kana { font-family: var(--f-kana); font-weight: 900; color: var(--panel-2); -webkit-text-stroke: 1px var(--dim); }
+
+/* Éléments d'interface en vrai */
+.demo { display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.board { background: var(--ink); border: 2px solid var(--line); padding: 18px; display: grid; gap: 10px; min-width: 0; }
+.row { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; }
+.pos { background: var(--yellow); color: var(--ink); font-family: var(--f-display); font-style: italic; font-weight: 900; text-align: center; padding: 4px 0; transform: skewX(var(--slant)); }
+.pilot { font-family: var(--f-display); font-style: italic; font-weight: 700; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.time { font-family: var(--f-digits); font-style: italic; font-weight: 700; font-variant-numeric: tabular-nums; }
+.gap-best { color: var(--purple); }
+.gap-up { color: var(--green); }
+.gap-down { color: var(--red); }
+.buttons { display: flex; flex-wrap: wrap; gap: 16px; padding-top: 6px; }
+.btn {
+  font-family: var(--f-display); font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 16px;
+  padding: 12px 26px; border: 2px solid var(--ink); border-radius: 2px; cursor: pointer; transform: skewX(var(--slant));
+  box-shadow: var(--shadow) var(--shadow) 0 var(--ink);
+}
+.btn span { display: inline-block; transform: skewX(16deg); }
+.btn.primary { background: var(--sakura); color: #fff; }
+.btn.secondary { background: var(--panel-2); color: var(--text); border-color: rgba(255, 255, 255, 0.3); }
+.btn.hot { background: var(--yellow); color: var(--ink); }
+.btn:focus-visible { outline: 3px solid var(--cyan); outline-offset: 4px; }
+.announce { font-family: var(--f-sfx); font-size: clamp(44px, 8vw, 72px); color: var(--yellow); -webkit-text-stroke: 2px var(--ink); text-shadow: 6px 6px 0 var(--sakura); line-height: 1; transform: rotate(-4deg); justify-self: center; padding-block: 8px; }
+.leds { display: flex; gap: 6px; }
+.leds i { width: 22px; height: 10px; transform: skewX(var(--slant)); background: var(--panel-2); }
+.leds i.on-g { background: var(--green); } .leds i.on-y { background: var(--yellow); } .leds i.on-r { background: var(--red); }
+
+/* Règles */
+.rules { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.rule { border-left: 4px solid var(--sakura); padding: 4px 0 4px 14px; display: grid; gap: 4px; }
+.rule b { font-family: var(--f-display); font-style: italic; font-weight: 900; text-transform: uppercase; font-size: 15px; }
+.rule span { color: var(--dim); font-size: 14px; }
+.rule code { font-family: var(--f-digits); font-style: italic; color: var(--yellow); font-size: 13px; }
+
+/* Lumière du décor */
+.sky { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+.sky figure { margin: 0; background: var(--ink); border: 2px solid var(--line); display: grid; }
+.sky .band { height: 120px; }
+.sky figcaption { padding: 10px 12px 12px; display: grid; gap: 2px; }
+
+.note { background: var(--ink); border: 2px solid var(--yellow); padding: 18px 20px; display: grid; gap: 8px; box-shadow: var(--shadow) var(--shadow) 0 var(--yellow); }
+.note b { font-family: var(--f-display); font-style: italic; font-weight: 900; text-transform: uppercase; color: var(--yellow); }
+.source { font-size: 13px; color: var(--dim); }
+.source code { font-family: var(--f-digits); font-style: italic; color: var(--text); }
+
+@media (prefers-reduced-motion: reduce) { .swatch, .btn { transition: none; } .swatch:hover { transform: none; } }
+</style>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="kana" aria-hidden="true">ラリー</div>
+    <h1>Sim <span>Rallye</span></h1>
+    <div class="stripes" aria-hidden="true"><i></i><i></i><i></i></div>
+    <p>La charte « rallye animé » : la mise en page d'une retransmission WRC (chronos, écarts, étiquettes pleines), dessinée comme un anime de course japonais. Clique sur une couleur pour copier son code.</p>
+  </header>
+
+  <section class="section" aria-labelledby="t-ui">
+    <div class="tag"><h2 id="t-ui">Couleurs de l'interface</h2></div>
+    <p>Une nuit indigo pour les fonds, le rose sakura pour l'action, le jaune pour ce qui doit sauter aux yeux, le cyan en second plan.</p>
+    <div class="grid" id="ui"></div>
+  </section>
+
+  <section class="section" aria-labelledby="t-chrono">
+    <div class="tag"><h2 id="t-chrono">Couleurs des chronos</h2></div>
+    <p>Comme à la télé : vert quand on gagne du temps, rouge quand on en perd, violet pour le meilleur temps absolu.</p>
+    <div class="grid small" id="chrono"></div>
+  </section>
+
+  <section class="section" aria-labelledby="t-type">
+    <div class="tag"><h2 id="t-type">Polices</h2></div>
+    <div class="type">
+      <article><div class="label">Titres</div><div class="sample s-display">Spéciale 3</div><div class="use">Montserrat Heavy italique, en capitales : titres, boutons, noms de pilotes.</div></article>
+      <article><div class="label">Texte</div><div class="sample s-body">Termine 3 rallyes pour débloquer la Cuneo.</div><div class="use">Nunito gras : descriptions, aides, menus.</div></article>
+      <article><div class="label">Chronos</div><div class="sample s-digits">2:41.087</div><div class="use">Roboto Mono gras italique, à chasse fixe : les chiffres ne tremblent pas.</div></article>
+      <article><div class="label">Annonces</div><div class="sample s-sfx">Nouveau record!</div><div class="use">Bangers, lettrage de manga encré : record, départ, combo de style.</div></article>
+      <article><div class="label">Filigrane</div><div class="sample s-kana">ラリー</div><div class="use">Katakanas très gras, en fond de panneau, à peine visibles.</div></article>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="t-demo">
+    <div class="tag"><h2 id="t-demo">En situation</h2></div>
+    <div class="demo">
+      <div class="board" aria-label="Exemple de classement">
+        <div class="row"><div class="pos">1</div><div class="pilot">Maxime</div><div class="time gap-best">2:41.087</div></div>
+        <div class="row"><div class="pos">2</div><div class="pilot">Kitsune_77</div><div class="time gap-down">+0.412</div></div>
+        <div class="row"><div class="pos">3</div><div class="pilot">Sakura.Drift</div><div class="time gap-down">+1.905</div></div>
+        <div class="row"><div class="pos">4</div><div class="pilot">Toi</div><div class="time gap-up">-0.318</div></div>
+        <div class="leds" aria-hidden="true"><i class="on-g"></i><i class="on-g"></i><i class="on-g"></i><i class="on-y"></i><i class="on-y"></i><i class="on-r"></i><i></i><i></i></div>
+      </div>
+      <div class="board">
+        <div class="announce">Départ!</div>
+        <div class="buttons">
+          <button class="btn primary" type="button" id="b1"><span>Rouler</span></button>
+          <button class="btn secondary" type="button" id="b2"><span>Garage</span></button>
+          <button class="btn hot" type="button" id="b3"><span>Revanche</span></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="t-rules">
+    <div class="tag"><h2 id="t-rules">Règles du style</h2></div>
+    <div class="rules">
+      <div class="rule"><b>Cel-shading</b><span>Aplats francs, jamais de dégradé. Une ombre portée pleine, décalée de <code>5 px</code>, rose ou encre.</span></div>
+      <div class="rule"><b>Formes penchées</b><span>Étiquettes et boutons en parallélogramme, inclinés de <code>16°</code>. Titres en capitales italiques.</span></div>
+      <div class="rule"><b>Angles vifs</b><span>Arrondi de <code>2 px</code> seulement. Liseré d'accent de <code>4 px</code>.</span></div>
+      <div class="rule"><b>Bandes de vitesse</b><span>Trois bandes en coin, rose, jaune, cyan, de plus en plus courtes, pour donner l'élan.</span></div>
+      <div class="rule"><b>Encre</b><span>Contours noirs nets autour des voitures et du décor, traits d'encre dans la carrosserie, façon manga.</span></div>
+      <div class="rule"><b>Jamais de tiret long</b><span>Dans les textes du jeu, un point médian « · », deux-points ou une virgule.</span></div>
+    </div>
+  </section>
+
+  <section class="section" aria-labelledby="t-rarity">
+    <div class="tag"><h2 id="t-rarity">Raretés</h2></div>
+    <p>La couleur des objets gagnés aux tirages, de la plus commune à la plus rare.</p>
+    <div class="grid small" id="rarity"></div>
+  </section>
+
+  <section class="section" aria-labelledby="t-paint">
+    <div class="tag"><h2 id="t-paint">Peintures des voitures</h2></div>
+    <p>Les douze teintes libres, puis les huit à débloquer en progressant.</p>
+    <div class="grid small" id="paint"></div>
+  </section>
+
+  <section class="section" aria-labelledby="t-sky">
+    <div class="tag"><h2 id="t-sky">Lumière du décor</h2></div>
+    <p>Le ciel dessiné et les ombres colorées : on ne met jamais de gris neutre, les ombres tirent vers le lilas.</p>
+    <div class="sky">
+      <figure><div class="band" style="background: linear-gradient(#966EC8, #FFC4B4);"></div><figcaption><span class="name">Ciel de fin de journée</span><span class="hex">#966EC8 → #FFC4B4</span><span class="role">Paddock et menus : ombres lilas, ciel orangé.</span></figcaption></figure>
+      <figure><div class="band" style="background: #181028;"></div><figcaption><span class="name">Encre du décor</span><span class="hex">#181028</span><span class="role">Traits autour des voitures, du décor, des panneaux.</span></figcaption></figure>
+      <figure><div class="band" style="background: linear-gradient(90deg, #D4B87D 0 33%, #C8743A 33% 66%, #60AA46 66%);"></div><figcaption><span class="name">Terre, piste et herbe</span><span class="hex">#D4B87D · #C8743A · #60AA46</span><span class="role">Poussière, terre des spéciales, bas-côtés.</span></figcaption></figure>
+    </div>
+  </section>
+
+  <aside class="note">
+    <b>Pour la pub</b>
+    <p>La couverture actuelle mise sur une voiture rouge. Pour qu'on reconnaisse le jeu d'un coup d'œil, garde le trio de la charte dans tes visuels : fond ou titre indigo, accent rose sakura, touche de jaune. Une Hayate rose sakura sur la couverture, avec le titre en jaune et encre, collerait à l'interface que les joueurs verront en jeu.</p>
+  </aside>
+
+  <p class="source">Couleurs relevées dans le code du jeu : <code>src/client/UI/Theme.luau</code> (interface), <code>src/shared/Cosmetics/Livery.luau</code> (peintures), <code>src/shared/Economy/Rarity.luau</code> (raretés), <code>src/client/World/Ambiances.luau</code> (lumière).</p>
+</div>
+
+<script>
+const UI = [
+  ["Encre", "#0C0A1C", "Ombres, contours, cases vides"],
+  ["Nuit indigo", "#181434", "Fond des panneaux"],
+  ["Indigo clair", "#2E285E", "Boutons, cases, pistes de barres"],
+  ["Texte", "#FFFBF6", "Texte principal, blanc chaud"],
+  ["Texte atténué", "#AAA4D4", "Aides, légendes, infos secondaires"],
+  ["Rose sakura", "#FF2E7E", "Action, sélection, ombres portées"],
+  ["Jaune", "#FFDE28", "Position, rampe de LED, à voir tout de suite"],
+  ["Cyan", "#00D6FF", "Second plan, aspiration"],
+  ["Orange", "#FF9628", "Avertissements, objets verrouillés"],
+  ["Bleu", "#46A0FF", "Informations"]
+];
+const CHRONO = [
+  ["Gain de temps", "#3CE882", "Écart en avance"],
+  ["Perte de temps", "#FF4050", "Écart en retard"],
+  ["Meilleur temps", "#B86EFF", "Record absolu"]
+];
+const RARITY = [
+  ["Série", "#AAAEB6"], ["Club", "#50AAFF"], ["Pro", "#AA6EFF"],
+  ["Usine", "#FF8C28"], ["Prototype", "#FF465A"], ["Légende", "#FFCC00"]
+];
+const PAINT = [
+  ["Rouge", "#C81E23"], ["Bleu", "#194BBE"], ["Blanc", "#EBEBEE"], ["Noir", "#1C1C20"],
+  ["Jaune", "#F5C81E"], ["Vert", "#1E8C3C"], ["Orange", "#F57814"], ["Violet", "#6E32AA"],
+  ["Cyan", "#1EAAC8"], ["Rose", "#E65096"], ["Gris", "#787C84"], ["Bordeaux", "#6E1423"],
+  ["Bleu nuit", "#122055", "Niveau 3"], ["Vert pomme", "#7DC828", "Niveau 6"], ["Sable", "#D4B87D", "Niveau 8"],
+  ["Turquoise", "#00A896", "Argent en spéciale"], ["Rouge corsa", "#E10C12", "3 victoires"], ["Chrome", "#C4CAD4", "Niveau 15"],
+  ["Or", "#D6AC32", "Or en spéciale"], ["Glacier", "#A5E4F5", "Platine sur un tracé"]
+];
+function rgb(hex) {
+  const n = parseInt(hex.slice(1), 16);
+  return `${n >> 16}, ${(n >> 8) & 255}, ${n & 255}`;
+}
+function fill(id, list) {
+  const root = document.getElementById(id);
+  list.forEach(([name, hex, extra], i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "swatch";
+    b.id = `${id}-${i}`;
+    b.setAttribute("aria-label", `${name}, ${hex}, copier le code`);
+    const lock = id === "paint" && extra ? `<span class="lock">${extra}</span>` : "";
+    const role = id !== "paint" && extra ? `<span class="role">${extra}</span>` : "";
+    b.innerHTML = `<div class="chip" style="background:${hex}"></div><div class="meta"><span class="name">${name}</span><span class="hex">${hex} · rgb ${rgb(hex)}</span>${role}${lock}</div>`;
+    b.addEventListener("click", () => {
+      const done = () => { b.classList.add("copied"); setTimeout(() => b.classList.remove("copied"), 900); };
+      try {
+        navigator.clipboard.writeText(hex).then(done, () => selectText(b));
+      } catch (e) { selectText(b); }
+    });
+    root.appendChild(b);
+  });
+}
+function selectText(el) {
+  const r = document.createRange();
+  r.selectNodeContents(el.querySelector(".hex"));
+  const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+}
+fill("ui", UI);
+fill("chrono", CHRONO);
+fill("rarity", RARITY);
+fill("paint", PAINT);
+</script>
